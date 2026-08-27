@@ -84,17 +84,22 @@ browser, nessun account, funzioni AI spente. Per attivare account e condivisione
 1. **Supabase** — crea due progetti su [supabase.com](https://supabase.com): uno per la
    produzione e uno per il test. In ciascuno, apri il *SQL Editor* ed esegui
    `supabase/schema.sql`.
-2. **config.js** — copia `Project URL` e `anon public key` di ciascun progetto nei campi
-   corrispondenti (`produzione` e `test`) di `app/config.js`. Sono chiavi pubbliche,
-   pensate per stare nel browser: a proteggere i dati sono le policy del database.
+2. **config.js** — in *Settings → API Keys* di ciascun progetto prendi il **Project URL**
+   e la **Publishable key** (`sb_publishable_…`), e mettili nei campi corrispondenti
+   (`produzione` e `test`) di `app/config.js`. È una chiave pubblica, pensata per stare
+   nel browser: a proteggere i dati sono le policy del database.
+
+   > Nei progetti più vecchi la stessa chiave si chiama `anon public` e sta sotto
+   > *Legacy API Keys*. Funziona ancora, ma Supabase la dismette entro fine 2026:
+   > conviene partire dalle chiavi nuove.
 3. **Cloudflare Pages** — crea un progetto Pages chiamato `comanda`. Disattiva
    l'integrazione Git automatica di Cloudflare: a pubblicare ci pensa GitHub Actions,
    così i test restano il cancello d'ingresso.
 4. **Segreti GitHub** — in *Settings → Secrets and variables → Actions* aggiungi
    `CLOUDFLARE_API_TOKEN` e `CLOUDFLARE_ACCOUNT_ID`.
 5. **Variabili Cloudflare** — nelle impostazioni del progetto Pages, per **Production** e
-   **Preview** separatamente, imposta: `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
-   `SUPABASE_SERVICE_ROLE_KEY` e `ANTHROPIC_API_KEY`. Le ultime due vanno marcate come
+   **Preview** separatamente, imposta: `SUPABASE_URL`, `SUPABASE_PUBLIC_KEY`,
+   `SUPABASE_SECRET_KEY` e `ANTHROPIC_API_KEY`. Le ultime due vanno marcate come
    *secret*. Preview usa i valori del progetto Supabase di test.
 
 Per il test interno conviene disattivare la conferma via email in Supabase

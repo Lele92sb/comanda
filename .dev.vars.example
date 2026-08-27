@@ -8,12 +8,14 @@
 
 SUPABASE_URL="https://xxxxxxxx.supabase.co"
 
-# Pubblica (Settings → API → anon public). Non è un segreto.
-SUPABASE_ANON_KEY="..."
+# Pubblica: Settings → API Keys → "Publishable key" (sb_publishable_...).
+# Nei progetti più vecchi si chiama "anon public". Non è un segreto.
+SUPABASE_PUBLIC_KEY="sb_publishable_..."
 
-# SEGRETA (Settings → API → service_role). Scavalca tutti i permessi: non
-# metterla mai in app/config.js né in nessun file versionato.
-SUPABASE_SERVICE_ROLE_KEY="..."
+# SEGRETA: Settings → API Keys → "Secret keys" (sb_secret_...), oppure la
+# vecchia "service_role". Scavalca tutti i permessi: non metterla mai in
+# app/config.js né in nessun altro file versionato.
+SUPABASE_SECRET_KEY="sb_secret_..."
 
 # SEGRETA (console.anthropic.com → API keys). È quella su cui ti viene addebitato.
 ANTHROPIC_API_KEY="sk-ant-..."

@@ -15,11 +15,13 @@
 // Così una chiamata manipolata non può farsi costare quanto vuole.
 //
 // Variabili d'ambiente da impostare nella dashboard Cloudflare Pages:
-//   SUPABASE_URL              — es. https://xxxx.supabase.co
-//   SUPABASE_ANON_KEY         — chiave pubblica, serve a validare il token utente
-//   SUPABASE_SERVICE_ROLE_KEY — SEGRETA: bypassa le policy, solo lato server
-//   ANTHROPIC_API_KEY         — SEGRETA: la chiave di fatturazione Anthropic
-//   COMANDA_AI_MODEL          — opzionale, per cambiare modello senza toccare il codice
+//   SUPABASE_URL         — es. https://xxxx.supabase.co
+//   SUPABASE_PUBLIC_KEY  — chiave "publishable" (sb_publishable_…) o la vecchia
+//                          "anon": pubblica, serve a validare il token utente
+//   SUPABASE_SECRET_KEY  — SEGRETA: chiave "secret" (sb_secret_…) o la vecchia
+//                          "service_role". Scavalca tutte le policy: solo qui
+//   ANTHROPIC_API_KEY    — SEGRETA: la chiave di fatturazione Anthropic
+//   COMANDA_AI_MODEL     — opzionale, per cambiare modello senza toccare il codice
 // ============================================================================
 
 const DEFAULT_MODEL = 'claude-opus-5';
@@ -38,7 +40,7 @@ const json = (obj, status) => new Response(JSON.stringify(obj), {
 });
 
 export async function onRequestPost({ request, env }) {
-  for(const name of ['SUPABASE_URL','SUPABASE_ANON_KEY','SUPABASE_SERVICE_ROLE_KEY','ANTHROPIC_API_KEY']){
+  for(const name of ['SUPABASE_URL','SUPABASE_PUBLIC_KEY','SUPABASE_SECRET_KEY','ANTHROPIC_API_KEY']){
     if(!env[name]) return json({ error: 'Servizio AI non configurato (' + name + ' mancante).' }, 500);
   }
 
@@ -58,7 +60,7 @@ export async function onRequestPost({ request, env }) {
 
   // 1. Chi sta chiamando: lo dice Supabase, non il client.
   const userRes = await fetch(env.SUPABASE_URL + '/auth/v1/user', {
-    headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + token },
+    headers: { apikey: env.SUPABASE_PUBLIC_KEY, Authorization: 'Bearer ' + token },
   });
   if(!userRes.ok) return json({ error: 'Sessione non valida, rientra con le tue credenziali.' }, 401);
   const user = await userRes.json();
@@ -67,8 +69,8 @@ export async function onRequestPost({ request, env }) {
   const admin = (path, init) => fetch(env.SUPABASE_URL + '/rest/v1' + path, {
     ...init,
     headers: {
-      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: 'Bearer ' + env.SUPABASE_SERVICE_ROLE_KEY,
+      apikey: env.SUPABASE_SECRET_KEY,
+      Authorization: 'Bearer ' + env.SUPABASE_SECRET_KEY,
       'Content-Type': 'application/json',
       ...(init && init.headers),
     },

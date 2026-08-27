@@ -13,21 +13,22 @@
 // che conta davvero: i dati veri della cucina e quelli di prova finiscono in
 // due database distinti, quindi non possono mescolarsi per errore.
 //
-// La "anon key" è pubblica per definizione (è pensata per stare nel browser):
-// non è un segreto e può stare in questo file versionato. A proteggere i dati
-// sono le policy RLS in supabase/schema.sql, non questa chiave. La chiave
-// davvero segreta (service role) sta solo lato server, nelle variabili
-// d'ambiente di Cloudflare — mai qui.
+// SUPABASE_PUBLIC_KEY è la chiave "publishable" (sb_publishable_...), o la
+// vecchia "anon" nei progetti più datati. È pubblica per definizione — è
+// pensata per stare nel browser — quindi può stare in questo file versionato.
+// A proteggere i dati sono le policy RLS in supabase/schema.sql, non questa
+// chiave. La chiave davvero segreta (secret / service_role) sta solo lato
+// server, nelle variabili d'ambiente di Cloudflare — mai qui.
 // ============================================================================
 (function(){
   const AMBIENTI = {
     produzione: {
       SUPABASE_URL: '',
-      SUPABASE_ANON_KEY: '',
+      SUPABASE_PUBLIC_KEY: '',
     },
     test: {
       SUPABASE_URL: '',
-      SUPABASE_ANON_KEY: '',
+      SUPABASE_PUBLIC_KEY: '',
     },
   };
 

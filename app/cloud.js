@@ -16,7 +16,7 @@
 'use strict';
 
 const cfg = window.COMANDA_CONFIG || {};
-const CLOUD_ENABLED = !!(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY);
+const CLOUD_ENABLED = !!(cfg.SUPABASE_URL && cfg.SUPABASE_PUBLIC_KEY);
 
 // Chiavi che restano personali del singolo utente anche in una cucina condivisa:
 // la conversazione con l'assistente è un dialogo privato, non un dato di cucina.
@@ -51,7 +51,7 @@ Cloud.init = async function(){
   if(!window.supabase || !window.supabase.createClient){
     throw new Error('Libreria Supabase non caricata — controlla la connessione.');
   }
-  Cloud.client = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+  Cloud.client = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_PUBLIC_KEY);
   const { data } = await Cloud.client.auth.getSession();
   Cloud.user = data.session ? data.session.user : null;
   return { mode:'cloud', signedIn: !!Cloud.user };
