@@ -4,6 +4,10 @@
   "private": true,
   "description": "App gestionale per chef: ricettario con food cost, brigata, turni, assistente AI.",
   "scripts": {
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "dev": "wrangler pages dev --port 4173"
+  },
+  "devDependencies": {
+    "wrangler": "^4.127.0"
   }
 }

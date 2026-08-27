@@ -3,3 +3,7 @@ node_modules/
 .DS_Store
 .wrangler/
 .claude/settings.local.json
+
+# Chiavi segrete per la prova in locale (chiave Anthropic, service role Supabase).
+# NON deve mai finire in git: chi legge il repo potrebbe spendere sulla tua chiave.
+.dev.vars

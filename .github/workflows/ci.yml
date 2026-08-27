@@ -35,7 +35,7 @@ jobs:
           node-version: '20'
       # main → indirizzo di produzione; staging → staging.<progetto>.pages.dev
       - name: Deploy
-        run: npx --yes wrangler@3 pages deploy --project-name=comanda --branch=${{ github.ref_name }}
+        run: npx --yes wrangler@4 pages deploy --project-name=comanda --branch=${{ github.ref_name }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

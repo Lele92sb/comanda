@@ -1,0 +1,19 @@
+# Modello per la prova in locale (`npm run dev`).
+#
+# Copia questo file come `.dev.vars` — SENZA `.example` — e riempi i valori.
+# `.dev.vars` è escluso da git apposta: contiene due chiavi segrete.
+#
+# Usa i valori del progetto Supabase di TEST, mai quelli di produzione:
+# così anche sbagliando qualcosa non tocchi i dati veri della cucina.
+
+SUPABASE_URL="https://xxxxxxxx.supabase.co"
+
+# Pubblica (Settings → API → anon public). Non è un segreto.
+SUPABASE_ANON_KEY="..."
+
+# SEGRETA (Settings → API → service_role). Scavalca tutti i permessi: non
+# metterla mai in app/config.js né in nessun file versionato.
+SUPABASE_SERVICE_ROLE_KEY="..."
+
+# SEGRETA (console.anthropic.com → API keys). È quella su cui ti viene addebitato.
+ANTHROPIC_API_KEY="sk-ant-..."
