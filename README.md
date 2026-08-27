@@ -12,7 +12,7 @@ persone con ruoli diversi).
 
 ```
 app/
-  comanda-chef-app.html   ← l'app vera e propria
+  index.html              ← l'app vera e propria (si apre alla radice del sito)
   config.js               ← quale ambiente/database usare (produzione o test)
   cloud.js                ← account, cucine, ruoli, salvataggio dati
   logic.js                ← il motore di generazione turni, condiviso con i test
