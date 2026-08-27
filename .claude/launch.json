@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "comanda",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["--yes", "http-server", "app", "-p", "4173", "-c-1"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
       "port": 4173
     }
   ]

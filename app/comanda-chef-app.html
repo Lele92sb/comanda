@@ -1266,6 +1266,22 @@ function resizeImageToDataUrl(file, maxDim, quality){
     reader.readAsDataURL(file);
   });
 }
+// Le unità di una ricetta non sono quelle di una fattura: un appunto di cucina
+// scrive "g" e "ml", una fattura elettronica scrive "KG" e "LT". Usare
+// mapInvoiceUnit qui faceva cadere tutto su "pz", e un ingrediente da 300 g
+// diventava "300 pezzi" — con un food cost senza alcun senso.
+// Ritorna: base = unità di acquisto dell'ingrediente, unit = unità della riga,
+// factor = moltiplicatore per la quantità (i cl vanno portati a ml).
+function mapRecipeUnit(raw){
+  const u = (raw||'').toLowerCase().trim().replace(/\./g,'');
+  if(['g','gr','grammi','gram'].includes(u))        return {base:'kg', unit:'g',  factor:1};
+  if(['kg','chilo','chili','kilo'].includes(u))     return {base:'kg', unit:'kg', factor:1};
+  if(['ml','millilitri','cc'].includes(u))          return {base:'l',  unit:'ml', factor:1};
+  if(['cl','centilitri'].includes(u))               return {base:'l',  unit:'ml', factor:10};
+  if(['l','lt','litro','litri'].includes(u))        return {base:'l',  unit:'l',  factor:1};
+  return {base:'pz', unit:'pz', factor:1};
+}
+
 let ocrTarget = 'dish';
 document.getElementById('btn-photo-dish').addEventListener('click', ()=>{ ocrTarget='dish'; });
 document.getElementById('btn-photo-sub').addEventListener('click', ()=>{ ocrTarget='sub'; });
@@ -1293,17 +1309,20 @@ document.getElementById('dish-photo-input').addEventListener('change', async (e)
     const items = (parsed.ingredients||[]).map(ocrIng=>{
       const name = (ocrIng.name||'').trim();
       if(!name) return null;
-      const unitBase = mapInvoiceUnit(ocrIng.unit||'');
+      const letta = mapRecipeUnit(ocrIng.unit);
       let match = state.ingredients.find(i=> i.name.toLowerCase()===name.toLowerCase());
       if(!match){
-        match = { id:uid(), name, supplier:'', unit:unitBase, price:'', yieldPct:100 };
+        match = { id:uid(), name, supplier:'', unit:letta.base, price:'', yieldPct:100 };
         state.ingredients.push(match);
         createdCount++;
       }
-      const rawUnit = (ocrIng.unit||'').toLowerCase();
+      // Se l'ingrediente esisteva già, comanda l'unità decisa dallo chef in
+      // anagrafica: non è la foto a dover riscrivere il suo ricettario.
       const validUnits = subUnitOptions(match.unit);
-      const itemUnit = validUnits.includes(rawUnit) ? rawUnit : validUnits[0];
-      return {kind:'ingredient', refId:match.id, qty:ocrIng.qty||'', unit:itemUnit};
+      const itemUnit = validUnits.includes(letta.unit) ? letta.unit : validUnits[0];
+      const qty = parseFloat(ocrIng.qty);
+      const qtyFinale = isNaN(qty) ? '' : (itemUnit === letta.unit ? qty * letta.factor : qty);
+      return {kind:'ingredient', refId:match.id, qty:qtyFinale, unit:itemUnit};
     }).filter(Boolean);
     if(createdCount) await save('ingredients');
     statusEl.style.display='none';
