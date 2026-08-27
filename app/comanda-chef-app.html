@@ -481,7 +481,12 @@ async function loadAll(){
 }
 async function save(key){
   const ok = await storageSet(key, state[key]);
-  if(!ok) toast(Cloud.canWrite() ? 'Salvataggio non riuscito' : 'Sei in sola lettura: modifica non salvata');
+  // Il conflitto si spiega da solo (vedi Cloud.onConflict): non coprirlo.
+  if(!ok && Cloud.lastFailure !== 'conflict'){
+    toast(Cloud.lastFailure === 'readonly'
+      ? 'Sei in sola lettura: modifica non salvata'
+      : 'Salvataggio non riuscito');
+  }
   return ok;
 }
 

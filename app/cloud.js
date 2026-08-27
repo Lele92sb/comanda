@@ -257,6 +257,9 @@ async function cloudSet(key, value){
   });
   if(error){
     if((error.message||'').includes('CONFLICT')){
+      // Il conflitto ha già una spiegazione sua, molto più utile di un generico
+      // "non riuscito": segnalo che è stato gestito così non viene coperta.
+      Cloud.lastFailure = 'conflict';
       if(Cloud.onConflict) Cloud.onConflict(key);
       return false;
     }
@@ -273,10 +276,13 @@ window.storageGet = async function(key){
   catch(e){ console.error('lettura dal cloud fallita', key, e); throw e; }
 };
 
-// Ritorna true se salvato, false se rifiutato (conflitto o permessi mancanti).
+// Ritorna true se salvato, false se rifiutato. Quando rifiuta, Cloud.lastFailure
+// dice perché ('conflict' o 'readonly'), così chi chiama non copre con un
+// messaggio generico una spiegazione già data.
 window.storageSet = async function(key, value){
+  Cloud.lastFailure = null;
   if(!CLOUD_ENABLED) return localSet(key, value);
-  if(!Cloud.canWrite()) return false;
+  if(!Cloud.canWrite()){ Cloud.lastFailure = 'readonly'; return false; }
   try{ return await cloudSet(key, value); }
   catch(e){ console.error('scrittura sul cloud fallita', key, e); return false; }
 };
