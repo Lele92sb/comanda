@@ -90,10 +90,15 @@ Cloud.resetPassword = async function(email){
 // --------------------------------------------------------------------------
 // Cucine e ruoli
 // --------------------------------------------------------------------------
+// Il filtro su user_id è obbligatorio, non un'ottimizzazione: un membro può
+// legittimamente vedere i colleghi della sua cucina, quindi senza filtro qui
+// tornerebbero anche le loro righe e si finirebbe per leggere il ruolo di
+// qualcun altro (un invitato in sola lettura si ritroverebbe titolare).
 Cloud.loadMemberships = async function(){
   const { data, error } = await Cloud.client
     .from('kitchen_members')
     .select('role, kitchen:kitchens(id, name, status, trial_ends_at)')
+    .eq('user_id', Cloud.user.id)
     .order('created_at', { ascending: true });
   if(error) throw error;
   Cloud.memberships = (data||[]).filter(m=>m.kitchen);
@@ -138,18 +143,27 @@ Cloud.listMembers = async function(){
   return data||[];
 };
 
+// Nota su tutte le scritture qui sotto: quando le policy RLS non concedono il
+// permesso, la riga semplicemente non risulta visibile all'operazione e
+// Postgres non solleva nessun errore — l'operazione "riesce" senza fare niente.
+// Per questo ogni scrittura chiede indietro le righe toccate con .select() e
+// verifica che ce ne sia almeno una: meglio un errore chiaro di un falso "fatto".
 Cloud.setMemberRole = async function(userId, role){
-  const { error } = await Cloud.client
+  const { data, error } = await Cloud.client
     .from('kitchen_members').update({ role })
-    .eq('kitchen_id', Cloud.kitchen.id).eq('user_id', userId);
+    .eq('kitchen_id', Cloud.kitchen.id).eq('user_id', userId)
+    .select('user_id');
   if(error) throw error;
+  if(!data || !data.length) throw new Error('Non hai i permessi per cambiare i ruoli.');
 };
 
 Cloud.removeMember = async function(userId){
-  const { error } = await Cloud.client
+  const { data, error } = await Cloud.client
     .from('kitchen_members').delete()
-    .eq('kitchen_id', Cloud.kitchen.id).eq('user_id', userId);
+    .eq('kitchen_id', Cloud.kitchen.id).eq('user_id', userId)
+    .select('user_id');
   if(error) throw error;
+  if(!data || !data.length) throw new Error('Non hai i permessi per rimuovere persone.');
 };
 
 function inviteCode(){
@@ -162,10 +176,11 @@ function inviteCode(){
 
 Cloud.createInvite = async function(role){
   const code = inviteCode();
-  const { error } = await Cloud.client.from('kitchen_invites').insert({
+  const { data, error } = await Cloud.client.from('kitchen_invites').insert({
     code, kitchen_id: Cloud.kitchen.id, role, created_by: Cloud.user.id
-  });
+  }).select('code');
   if(error) throw error;
+  if(!data || !data.length) throw new Error('Non hai i permessi per invitare persone.');
   return code;
 };
 
@@ -180,8 +195,10 @@ Cloud.listInvites = async function(){
 };
 
 Cloud.revokeInvite = async function(code){
-  const { error } = await Cloud.client.from('kitchen_invites').delete().eq('code', code);
+  const { data, error } = await Cloud.client
+    .from('kitchen_invites').delete().eq('code', code).select('code');
   if(error) throw error;
+  if(!data || !data.length) throw new Error('Non hai i permessi per annullare questo invito.');
 };
 
 // Blocco d'uso: 'suspended' o trial scaduto. Il controllo vero è comunque lato

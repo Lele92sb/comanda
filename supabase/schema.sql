@@ -234,6 +234,15 @@ set search_path = public
 as $$
 declare v_current bigint;
 begin
+  -- Controllo esplicito, prima di toccare qualsiasi cosa. Senza di questo un
+  -- viewer non farebbe danni (l'RLS filtra comunque le righe), ma la UPDATE
+  -- non troverebbe nessuna riga da aggiornare e Postgres NON lo considera un
+  -- errore: la funzione risponderebbe "salvato" a un salvataggio mai avvenuto,
+  -- e chi scrive perderebbe il lavoro credendolo al sicuro.
+  if not public.can_write(p_kitchen) then
+    raise exception 'FORBIDDEN' using errcode = '42501';
+  end if;
+
   select version into v_current from public.kitchen_data
   where kitchen_id = p_kitchen and key = p_key;
 
@@ -250,6 +259,12 @@ begin
   update public.kitchen_data
   set value = p_value, version = v_current + 1, updated_at = now(), updated_by = auth.uid()
   where kitchen_id = p_kitchen and key = p_key;
+
+  -- Rete di sicurezza: se per qualsiasi motivo la riga non è stata aggiornata,
+  -- meglio un errore che un falso "salvato".
+  if not found then
+    raise exception 'FORBIDDEN' using errcode = '42501';
+  end if;
 
   return v_current + 1;
 end;

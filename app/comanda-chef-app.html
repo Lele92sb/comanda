@@ -1882,7 +1882,9 @@ function humanError(e){
   if(/Email not confirmed/i.test(m))       return 'Devi prima confermare l\'email che ti abbiamo inviato.';
   if(/User already registered/i.test(m))   return 'Esiste già un account con questa email — accedi invece di registrarti.';
   if(/Password should be/i.test(m))        return 'La password deve avere almeno 6 caratteri.';
-  if(/Codice invito/i.test(m))             return m;
+  if(/Codice invito|permessi/i.test(m))    return m;
+  if(/FORBIDDEN|row-level security|permission denied/i.test(m))
+    return 'Non hai i permessi per questa modifica in questa cucina.';
   if(/Failed to fetch|NetworkError/i.test(m)) return 'Nessuna connessione. Controlla la rete e riprova.';
   return m || 'Qualcosa non ha funzionato. Riprova.';
 }
