@@ -1,0 +1,1824 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comanda — L'app dello chef</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap');
+
+:root{
+  --bg:#1d1b18;
+  --bg-elev:#262320;
+  --bg-elev2:#2e2a25;
+  --paper:#f3eee2;
+  --paper-dim:#e7e0cf;
+  --ink:#1d1b18;
+  --copper:#b06b34;
+  --copper-light:#d38f57;
+  --copper-soft:rgba(176,107,52,0.16);
+  --brass:#8c7a4e;
+  --sage:#6b8064;
+  --sage-soft:rgba(107,128,100,0.18);
+  --alert:#a8412f;
+  --alert-soft:rgba(168,65,47,0.18);
+  --line:rgba(243,238,226,0.12);
+  --line-strong:rgba(243,238,226,0.22);
+  --font-display:'Fraunces',serif;
+  --font-mono:'Space Mono',monospace;
+  --font-body:'Inter',sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--paper);font-family:var(--font-body);}
+body{min-height:100vh;-webkit-font-smoothing:antialiased;}
+button{font-family:inherit;cursor:pointer;}
+input,textarea,select{font-family:inherit;}
+::selection{background:var(--copper-soft);}
+
+#app{max-width:900px;margin:0 auto;padding:0 0 90px;}
+
+header.top{
+  padding:22px 20px 14px;border-bottom:1px solid var(--line);
+  position:sticky;top:0;background:rgba(29,27,24,0.92);backdrop-filter:blur(8px);z-index:20;
+}
+header.top .brand{font-family:var(--font-display);font-weight:700;font-size:26px;letter-spacing:0.3px;display:flex;align-items:baseline;gap:10px;}
+header.top .brand .mark{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--copper);transform:translateY(-2px);}
+header.top .sub{font-family:var(--font-mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--brass);margin-top:4px;}
+
+nav.tabs{display:flex;gap:4px;overflow-x:auto;padding:14px 20px 0;border-bottom:1px solid var(--line);scrollbar-width:none;}
+nav.tabs::-webkit-scrollbar{display:none;}
+nav.tabs button{background:none;border:none;color:var(--brass);font-family:var(--font-mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:9px 12px 12px;white-space:nowrap;border-bottom:2px solid transparent;transition:color .15s, border-color .15s;}
+nav.tabs button.active{color:var(--paper);border-bottom-color:var(--copper);}
+nav.tabs button:hover{color:var(--paper);}
+
+nav.subtabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:16px;scrollbar-width:none;}
+nav.subtabs::-webkit-scrollbar{display:none;}
+nav.subtabs button{background:var(--bg-elev);border:1px solid var(--line);color:var(--brass);font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.5px;text-transform:uppercase;padding:7px 12px;border-radius:20px;white-space:nowrap;}
+nav.subtabs button.active{background:var(--copper);border-color:var(--copper);color:#1d1b18;font-weight:700;}
+
+main{padding:22px 20px;}
+.view{display:none;animation:fade .25s ease;}
+.view.active{display:block;}
+@keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+.subview{display:none;}
+.subview.active{display:block;animation:fade .2s ease;}
+
+h2.section-title{font-family:var(--font-display);font-size:22px;font-weight:600;margin:0 0 4px;}
+p.section-sub{font-family:var(--font-mono);font-size:11px;color:var(--brass);letter-spacing:0.5px;margin:0 0 20px;}
+
+.comanda{background:var(--paper);color:var(--ink);border-radius:2px;position:relative;margin-bottom:18px;padding:18px 18px 16px;box-shadow:0 8px 24px rgba(0,0,0,0.35);}
+.comanda::before{content:"";position:absolute;top:-1px;left:0;right:0;height:10px;background:radial-gradient(circle at 10px 0, transparent 6px, var(--paper) 6.5px) top left/20px 10px repeat-x;}
+.comanda-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;border-bottom:1px dashed rgba(29,27,24,0.25);padding-bottom:10px;margin-bottom:10px;}
+.comanda-title{font-family:var(--font-display);font-weight:600;font-size:19px;line-height:1.2;}
+.comanda-cat{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--copper);margin-top:3px;}
+.comanda-num{font-family:var(--font-mono);font-size:11px;color:rgba(29,27,24,0.5);text-align:right;}
+
+.metric-row{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0;}
+.metric{font-family:var(--font-mono);font-size:12px;}
+.metric b{display:block;font-size:16px;font-family:var(--font-mono);}
+.metric.pos b{color:#3f6b3a;}
+.metric.neg b{color:var(--alert);}
+
+.tag{display:inline-block;font-family:var(--font-mono);font-size:10px;letter-spacing:0.3px;padding:3px 7px;border-radius:20px;background:rgba(29,27,24,0.08);margin:2px 4px 0 0;}
+.tag.allergen{background:var(--alert-soft);color:var(--alert);}
+
+.ing-list{margin:8px 0 0;padding:0;list-style:none;font-size:13.5px;}
+.ing-list li{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(29,27,24,0.08);gap:8px;}
+.ing-list li span.q{font-family:var(--font-mono);color:rgba(29,27,24,0.6);white-space:nowrap;}
+.ing-list li span.n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+.steps{font-size:13.5px;line-height:1.55;margin-top:8px;white-space:pre-wrap;}
+
+.card-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+.card-actions button{border:1px solid rgba(29,27,24,0.2);background:transparent;color:var(--ink);font-size:11px;padding:6px 10px;border-radius:4px;font-family:var(--font-mono);}
+.card-actions button:hover{background:rgba(29,27,24,0.06);}
+.card-actions button.danger{color:var(--alert);border-color:rgba(168,65,47,0.4);}
+
+.panel{background:var(--bg-elev);border:1px solid var(--line);border-radius:6px;padding:16px;margin-bottom:14px;}
+.panel h3{margin:0 0 12px;font-family:var(--font-display);font-size:16px;font-weight:600;}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+@media(max-width:560px){.grid2,.grid3{grid-template-columns:1fr;}}
+
+label{display:block;font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.5px;text-transform:uppercase;color:var(--brass);margin:10px 0 5px;}
+input[type=text],input[type=number],input[type=date],input[type=tel],input[type=email],textarea,select{
+  width:100%;background:var(--bg-elev2);border:1px solid var(--line-strong);color:var(--paper);padding:9px 10px;border-radius:4px;font-size:13.5px;
+}
+textarea{resize:vertical;min-height:70px;}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-offset:1px;}
+
+.btn{background:var(--copper);color:#1d1b18;border:none;font-weight:600;padding:10px 16px;border-radius:5px;font-size:13px;letter-spacing:0.2px;}
+.btn:hover{background:var(--copper-light);}
+.btn.ghost{background:transparent;border:1px solid var(--line-strong);color:var(--paper);font-weight:500;}
+.btn.ghost:hover{border-color:var(--copper);}
+.btn.small{padding:6px 10px;font-size:11.5px;}
+.btn.full{width:100%;}
+
+.chip-toggle{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
+.chip-toggle button{border:1px solid var(--line-strong);background:transparent;color:var(--paper);font-family:var(--font-mono);font-size:10.5px;padding:5px 9px;border-radius:20px;}
+.chip-toggle button.on{background:var(--copper);border-color:var(--copper);color:#1d1b18;font-weight:700;}
+
+.item-row{display:grid;grid-template-columns:auto 2fr 1fr 1fr auto;gap:6px;margin-bottom:6px;align-items:center;background:var(--bg-elev2);padding:6px;border-radius:5px;}
+.item-row select,.item-row input{padding:7px 8px;font-size:12px;}
+.item-row .rm{background:none;border:none;color:var(--alert);font-size:16px;padding:0 4px;}
+.item-row-cost{font-family:var(--font-mono);font-size:10px;color:var(--brass);grid-column:1/-1;margin-top:-2px;}
+
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:18px;}
+.stat{background:var(--bg-elev);border:1px solid var(--line);border-radius:6px;padding:14px;}
+.stat .n{font-family:var(--font-display);font-size:28px;font-weight:700;color:var(--copper-light);}
+.stat .l{font-family:var(--font-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:0.5px;color:var(--brass);margin-top:2px;}
+.alert-box{background:var(--alert-soft);border:1px solid rgba(168,65,47,0.4);border-radius:6px;padding:12px 14px;margin-bottom:10px;font-size:13px;}
+.ok-box{background:var(--sage-soft);border:1px solid rgba(107,128,100,0.4);border-radius:6px;padding:12px 14px;margin-bottom:10px;font-size:13px;}
+
+.shift-table{width:100%;border-collapse:collapse;font-size:12px;}
+.shift-table th,.shift-table td{border:1px solid var(--line);padding:4px;text-align:center;}
+.shift-table th{font-family:var(--font-mono);font-weight:400;color:var(--brass);text-transform:uppercase;font-size:9px;}
+.shift-table td.name{text-align:left;font-family:var(--font-mono);font-size:10.5px;padding-left:6px;}
+.shift-select{width:52px;background:var(--bg-elev2);border:1px solid var(--line-strong);color:var(--paper);font-size:10px;padding:4px 2px;border-radius:4px;text-align:center;}
+.shift-select.C{background:#d38f57;color:#1d1b18;font-weight:700;}
+.shift-select.P{background:#b06b34;color:#1d1b18;font-weight:700;}
+.shift-select.S{background:#332c24;color:#f3eee2;font-weight:700;}
+.shift-select.SP{background:#6b8064;color:#1d1b18;font-weight:700;}
+.shift-select.M{background:#a8412f;color:#f3eee2;font-weight:700;}
+.shift-select.F{background:#5a5a5a;color:#f3eee2;font-weight:700;}
+.shift-table td.extra-cell{outline:2px solid var(--copper-light);border-radius:5px;background:rgba(211,143,87,0.12);}
+
+.hours-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.hours-table th,.hours-table td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;}
+.hours-table th{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;color:var(--brass);}
+.hours-table td.num{font-family:var(--font-mono);text-align:right;}
+.hours-table td.num.extra{color:var(--copper-light);font-weight:700;}
+.hours-table td.num.under{color:var(--brass);}
+
+.chat-wrap{display:flex;flex-direction:column;height:56vh;min-height:340px;}
+.chat-log{flex:1;overflow-y:auto;padding:6px 2px;display:flex;flex-direction:column;gap:10px;}
+.msg{max-width:85%;padding:10px 13px;border-radius:10px;font-size:13.5px;line-height:1.5;white-space:pre-wrap;}
+.msg.user{align-self:flex-end;background:var(--copper-soft);border:1px solid rgba(176,107,52,0.4);}
+.msg.ai{align-self:flex-start;background:var(--bg-elev2);border:1px solid var(--line);}
+.msg.ai::before{content:"Sous-chef AI";display:block;font-family:var(--font-mono);font-size:9.5px;color:var(--brass);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;}
+.chat-input-row{display:flex;gap:8px;margin-top:10px;}
+.chat-input-row textarea{flex:1;min-height:44px;max-height:120px;}
+.typing{font-family:var(--font-mono);font-size:11px;color:var(--brass);padding:2px 4px;}
+
+.kb-item{background:var(--bg-elev2);border:1px solid var(--line);border-radius:5px;padding:8px 10px;margin-bottom:6px;font-size:12px;display:flex;justify-content:space-between;gap:8px;}
+.kb-item .t{font-weight:600;}
+.kb-item .rm{background:none;border:none;color:var(--alert);font-size:15px;}
+
+.empty{font-family:var(--font-mono);font-size:12px;color:var(--brass);border:1px dashed var(--line-strong);border-radius:6px;padding:18px;text-align:center;}
+
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--paper);color:var(--ink);padding:9px 16px;border-radius:20px;font-family:var(--font-mono);font-size:12px;box-shadow:0 6px 20px rgba(0,0,0,0.4);opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;z-index:100;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+
+.small-note{font-family:var(--font-mono);font-size:10.5px;color:var(--brass);margin-top:6px;line-height:1.6;}
+.staff-card{background:var(--bg-elev);border:1px solid var(--line);border-radius:6px;padding:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
+.staff-card .contact{font-family:var(--font-mono);font-size:11px;color:var(--brass);margin-top:4px;line-height:1.6;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="brand"><span class="mark"></span>Comanda</div>
+    <div class="sub">Cucina · Brigata · Menu · Testa libera</div>
+    <div id="staging-badge" style="display:none;font-family:var(--font-mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#1d1b18;background:var(--copper-light);padding:3px 8px;border-radius:20px;margin-top:6px;font-weight:700;">⚠ AMBIENTE DI TEST — dati separati da quelli reali</div>
+  </header>
+
+  <nav class="tabs" id="tabs"></nav>
+
+  <main>
+    <section class="view" id="view-dashboard">
+      <h2 class="section-title">Dashboard</h2>
+      <p class="section-sub">Il colpo d'occhio prima del servizio</p>
+      <div id="dash-alerts"></div>
+      <div class="stat-grid" id="dash-stats"></div>
+      <div class="panel"><h3>Turni di oggi</h3><div id="dash-shifts"></div></div>
+      <div class="panel">
+        <h3>Backup dati</h3>
+        <p class="small-note" style="margin-top:0;">I dati restano salvati nel browser che stai usando ora. Se cambi browser, dispositivo, o svuoti la cache, li perdi — esporta un backup ogni tanto per stare tranquillo.</p>
+        <div style="display:flex;gap:10px;">
+          <button class="btn small" id="btn-export" style="flex:1;">⬇ Esporta backup</button>
+          <label class="btn ghost small" id="btn-import" for="import-file-input" style="flex:1;text-align:center;">⬆ Importa backup</label>
+        </div>
+        <input type="file" id="import-file-input" accept=".json" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;">
+      </div>
+    </section>
+
+    <section class="view" id="view-ricette">
+      <h2 class="section-title">Ricettario</h2>
+      <p class="section-sub">Ingredienti → sub-ricette → piatti, con food cost reale</p>
+      <nav class="subtabs" id="ricette-subtabs">
+        <button data-sub="ingredienti" class="active">Ingredienti</button>
+        <button data-sub="subricette">Sub-ricette</button>
+        <button data-sub="piatti">Piatti</button>
+        <button data-sub="fornitori">Fornitori</button>
+        <button data-sub="fatture">Fatture</button>
+      </nav>
+      <input type="file" id="dish-photo-input" accept="image/*" capture="environment" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;">
+      <div id="ocr-status" class="small-note" style="display:none;"></div>
+
+      <div class="subview active" id="sub-ingredienti">
+        <button class="btn full" id="btn-new-ing" style="margin-bottom:14px;">+ Nuovo ingrediente</button>
+        <div id="ing-form-holder"></div>
+        <div id="ing-list"></div>
+      </div>
+
+      <div class="subview" id="sub-subricette">
+        <div style="display:flex;gap:8px;margin-bottom:14px;">
+          <button class="btn" id="btn-new-sub" style="flex:1;">+ Nuova sub-ricetta</button>
+          <label class="btn ghost" id="btn-photo-sub" for="dish-photo-input" style="flex:1;text-align:center;">📷 Da foto ricetta</label>
+        </div>
+        <div id="subr-form-holder"></div>
+        <div id="subr-list"></div>
+      </div>
+
+      <div class="subview" id="sub-piatti">
+        <div style="display:flex;gap:8px;margin-bottom:14px;">
+          <button class="btn" id="btn-new-dish" style="flex:1;">+ Nuovo piatto</button>
+          <label class="btn ghost" id="btn-photo-dish" for="dish-photo-input" style="flex:1;text-align:center;">📷 Da foto ricetta</label>
+        </div>
+        <div id="dish-form-holder"></div>
+        <div id="dish-list"></div>
+      </div>
+
+      <div class="subview" id="sub-fornitori">
+        <button class="btn full" id="btn-new-supplier" style="margin-bottom:14px;">+ Nuovo fornitore</button>
+        <div id="supplier-form-holder"></div>
+        <div id="supplier-list"></div>
+      </div>
+
+      <div class="subview" id="sub-fatture">
+        <div class="panel">
+          <h3>Importa fatture elettroniche</h3>
+          <p class="small-note" style="margin-top:0;">Carica uno o più file XML o XML firmato (.p7m) — formato FatturaPA — scaricati dal cassetto fiscale o dal tuo gestionale. L'app legge fornitore e prodotti (estraendo il contenuto dal file firmato, senza verificarne la firma) e aggiorna anagrafica ingredienti e fornitori da sola.</p>
+          <p class="small-note">Il download giornaliero automatico dal cassetto fiscale richiede un'integrazione con backend proprio (SPID/CNS + servizio schedulato) che questa app, essendo un prototipo lato browser, non può eseguire in sicurezza: qui il passaggio di caricare i file resta manuale, ma la lettura e l'aggiornamento dell'anagrafica sono completamente automatici.</p>
+          <input type="file" id="invoice-input" accept=".xml,.p7m" multiple>
+          <button class="btn small" id="invoice-import-btn" style="margin-top:10px;">Importa fatture</button>
+          <div id="invoice-log" style="margin-top:14px;"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-menu">
+      <h2 class="section-title">Menu Builder</h2>
+      <p class="section-sub">Componi il menu, controlla food cost medio e margine</p>
+      <button class="btn full" id="btn-new-menu" style="margin-bottom:16px;">+ Nuovo menu</button>
+      <div id="menu-form-holder"></div>
+      <div id="menu-list"></div>
+    </section>
+
+    <section class="view" id="view-brigata">
+      <h2 class="section-title">Brigata</h2>
+      <p class="section-sub">Anagrafica dello staff di cucina</p>
+      <button class="btn full" id="btn-new-staff" style="margin-bottom:16px;">+ Aggiungi persona</button>
+      <div id="staff-form-holder"></div>
+      <div id="staff-list"></div>
+    </section>
+
+    <section class="view" id="view-turni">
+      <h2 class="section-title">Turni</h2>
+      <p class="section-sub">Pianificazione, partite, fabbisogno e generazione automatica</p>
+      <nav class="subtabs" id="turni-subtabs">
+        <button data-sub="piano" class="active">Pianificazione</button>
+        <button data-sub="stazioni">Stazioni</button>
+        <button data-sub="fabbisogno">Fabbisogno</button>
+        <button data-sub="quote">Quote per persona</button>
+      </nav>
+
+      <div class="subview active" id="turnisub-piano">
+        <button class="btn full" id="btn-generate-shifts" style="margin-bottom:14px;">🎲 Genera turni della settimana</button>
+        <div id="generate-log" style="margin-bottom:14px;"></div>
+        <div class="panel" id="turni-panel"></div>
+        <p class="small-note" id="turni-legend"></p>
+        <div class="panel">
+          <h3>Ore extra a fine settimana</h3>
+          <p class="small-note" style="margin-top:0;">Calcolate dal planning di questa settimana rispetto alle ore contrattuali di ciascuno.</p>
+          <div id="ore-extra-table"></div>
+        </div>
+      </div>
+
+      <div class="subview" id="turnisub-stazioni">
+        <p class="small-note" style="margin-top:0;">Le partite/reparti di cucina (es. Cucina calda, Pasticceria, Plonge...).</p>
+        <div class="grid2" style="margin-bottom:10px;">
+          <input type="text" id="station-name-input" placeholder="Nome stazione, es. Griglia">
+          <button class="btn" id="station-add-btn">+ Aggiungi stazione</button>
+        </div>
+        <div id="station-list"></div>
+      </div>
+
+      <div class="subview" id="turnisub-fabbisogno">
+        <p class="small-note" style="margin-top:0;">Per ciascun servizio (colazione, pranzo, cena), quante persone servono per ogni stazione. Con quale tipo di turno venga coperto il servizio non conta qui — lo decide il generatore in base a quanti turni di ciascun tipo deve fare ogni persona.</p>
+        <div id="needs-panel"></div>
+      </div>
+
+      <div class="subview" id="turnisub-quote">
+        <p class="small-note" style="margin-top:0;">Per ogni persona: quanti turni di ciascun tipo deve fare a settimana (es. 3 Spezzato, 2 Pranzo-o-Cena, 2 Riposo). La somma dovrebbe fare 7.</p>
+        <div id="quota-panel"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-assistente">
+      <h2 class="section-title">Assistente AI</h2>
+      <p class="section-sub">Il tuo sous-chef digitale — parla, chiedi consigli, valuta insieme</p>
+      <div class="panel">
+        <h3>Base di conoscenza</h3>
+        <p class="small-note" style="margin-top:0;">Carica ricette, appunti o file .txt/.md: l'assistente li userà per darti consigli su misura sul tuo stile.</p>
+        <textarea id="kb-text" placeholder="Incolla qui una ricetta, una nota tecnica, un appunto..."></textarea>
+        <div class="grid2" style="margin-top:8px;">
+          <input type="text" id="kb-title" placeholder="Titolo breve (es. Ragù della casa)">
+          <input type="file" id="kb-file" accept=".txt,.md">
+        </div>
+        <button class="btn small" id="kb-add" style="margin-top:8px;">Aggiungi alla base di conoscenza</button>
+        <div id="kb-list" style="margin-top:12px;"></div>
+      </div>
+      <div class="panel">
+        <h3>Conversazione</h3>
+        <div class="chat-wrap">
+          <div class="chat-log" id="chat-log"></div>
+          <div class="typing" id="chat-typing" style="visibility:hidden;">sta scrivendo…</div>
+          <div class="chat-input-row">
+            <textarea id="chat-input" placeholder="Es. 'Ho seppie, limone e finocchietto, proponimi un piatto per il menu estivo'"></textarea>
+            <button class="btn" id="chat-send">Invia</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-benessere">
+      <h2 class="section-title">Benessere</h2>
+      <p class="section-sub">Le ore in cucina si contano, non solo i coperti</p>
+      <div class="panel">
+        <h3>Registra una giornata (ore effettive)</h3>
+        <div class="grid2">
+          <select id="wb-staff"></select>
+          <input type="date" id="wb-date">
+        </div>
+        <label>Ore lavorate</label>
+        <input type="number" id="wb-ore" min="0" max="20" step="0.5" placeholder="es. 10.5">
+        <button class="btn small" id="wb-add" style="margin-top:10px;">Registra</button>
+      </div>
+      <div class="panel"><h3>Situazione settimanale (ore effettive registrate)</h3><div id="wb-summary"></div></div>
+      <div class="panel"><h3>Promemoria</h3><div class="small-note" id="wb-tips" style="font-size:12px;line-height:1.7;"></div></div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/forge/1.3.1/forge.min.js"></script>
+<script src="logic.js"></script>
+<script>
+/* ============================= FATTURE FIRMATE .p7m ============================= */
+function binaryStringToUtf8(binStr){
+  const bytes = new Uint8Array(binStr.length);
+  for(let i=0;i<binStr.length;i++) bytes[i] = binStr.charCodeAt(i) & 0xFF;
+  return new TextDecoder('utf-8').decode(bytes);
+}
+function p7mArrayBufferToXmlText(arrayBuffer){
+  try{
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for(let i=0;i<bytes.length;i++) binary += String.fromCharCode(bytes[i]);
+    const top = forge.asn1.fromDer(binary);
+    // ContentInfo SEQUENCE [ contentType OID, [0] EXPLICIT { SignedData } ]
+    const signedData = top.value[1].value[0];
+    // SignedData SEQUENCE: version, digestAlgorithms, encapContentInfo, [certificates], [crls], signerInfos
+    const encapContentInfo = signedData.value[2];
+    if(!encapContentInfo || encapContentInfo.value.length<2) return null; // nessun eContent (firma "detached")
+    const eContentWrapper = encapContentInfo.value[1]; // [0] EXPLICIT
+    const octet = eContentWrapper.value[0];
+    let raw;
+    if(!octet.constructed){ raw = octet.value; }
+    else { raw = octet.value.map(v=>v.value).join(''); } // OCTET STRING BER frammentata
+    return binaryStringToUtf8(raw);
+  }catch(e){ return null; }
+}
+
+/* ============================= STATE ============================= */
+const STORE_KEYS = ['ingredients','subrecipes','recipes','menus','staff','shifts','knowledge','chatHistory','wellbeing','suppliers','stations','staffingNeeds'];
+let state = { ingredients:[], subrecipes:[], recipes:[], menus:[], staff:[], shifts:{}, knowledge:[], chatHistory:[], wellbeing:[], suppliers:[], stations:[], staffingNeeds:{colazione:[],pranzo:[],cena:[]} };
+
+const ALLERGENS = ["Glutine","Crostacei","Uova","Pesce","Arachidi","Soia","Latte","Frutta a guscio","Sedano","Senape","Sesamo","Solfiti","Lupini","Molluschi"];
+// DAYS, TURNO_DEF, WORKING_CODES, SERVICES, SERVICE_LABELS, CODE_TO_SERVICES, SERVICE_CODES, MAIN_CODE,
+// shuffleArray, buildStaffPools, computeShifts arrivano da logic.js (condiviso con la test suite).
+const { DAYS, TURNO_DEF, WORKING_CODES, SERVICES, SERVICE_LABELS, CODE_TO_SERVICES, SERVICE_CODES, MAIN_CODE,
+        shuffleArray, buildStaffPools, computeShifts } = window;
+
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+// Salvataggio locale nel browser (localStorage): funziona sempre quando apri il file per conto tuo,
+// a differenza di window.storage che esiste solo dentro l'anteprima di Claude.
+// Rileva se questa è la copia di STAGING (per test) o quella di PRODUZIONE (uso quotidiano reale).
+// Su GitHub Pages, la copia di staging vive sotto /staging/ nell'URL — usiamo un prefisso di
+// storage diverso così i dati di prova non si mescolano mai con quelli veri, anche restando
+// sullo stesso dominio (localStorage è per-dominio, non per-cartella).
+const IS_STAGING = typeof location !== 'undefined' && location.pathname.includes('/staging/');
+const LS_PREFIX = IS_STAGING ? 'comanda_staging_' : 'comanda_';
+async function storageGet(key){
+  try{
+    const raw = localStorage.getItem(LS_PREFIX+key);
+    return raw !== null ? JSON.parse(raw) : null;
+  }catch(e){ console.error('storage get failed', key, e); return null; }
+}
+async function storageSet(key, value){
+  try{ localStorage.setItem(LS_PREFIX+key, JSON.stringify(value)); }
+  catch(e){ console.error('storage set failed', key, e); toast('Salvataggio non riuscito — vedi console'); }
+}
+
+async function loadAll(){
+  for(const k of STORE_KEYS){ const v = await storageGet(k); if(v !== null) state[k] = v; }
+  migrateData();
+}
+async function save(key){ await storageSet(key, state[key]); }
+
+function migrateData(){
+  // vecchie ricette con schema {ingredients:[{name,qty,unit,cost}], price}
+  state.recipes = (state.recipes||[]).map(r=>{
+    if(r.items) return r;
+    return {
+      id: r.id, name: r.name, category: r.category||'',
+      items: (r.ingredients||[]).map(i=>({kind:'custom', name:i.name, qty:i.qty, unit:i.unit, cost:i.cost})),
+      portionG: '', foodCostTargetPct: 30, priceActual: r.price||'',
+      allergens: r.allergens||[], steps: r.steps||''
+    };
+  });
+  // vecchi turni con array multiplo ['m','p'] -> stringa singola
+  Object.keys(state.shifts||{}).forEach(staffId=>{
+    Object.keys(state.shifts[staffId]||{}).forEach(day=>{
+      const v = state.shifts[staffId][day];
+      if(Array.isArray(v)){
+        const map = {m:'C', p:'P', s:'S'};
+        state.shifts[staffId][day] = { code: v.length>1 ? 'SP' : (map[v[0]]||''), stationId:null };
+      } else if(typeof v === 'string'){
+        state.shifts[staffId][day] = { code: v, stationId:null };
+      }
+    });
+  });
+  state.staff.forEach(s=>{ if(!s.stations) s.stations=[]; if(!s.weeklyQuota) s.weeklyQuota=[]; });
+  // vecchio fabbisogno indicizzato per turno (C/P/S/SP) -> nuovo indicizzato per servizio (colazione/pranzo/cena)
+  if(state.staffingNeeds && (state.staffingNeeds.C || state.staffingNeeds.P || state.staffingNeeds.S || state.staffingNeeds.SP)){
+    const old = state.staffingNeeds;
+    state.staffingNeeds = {
+      colazione: old.C || [],
+      pranzo: [...(old.P||[]), ...(old.SP||[])],
+      cena: [...(old.S||[]), ...(old.SP||[])],
+    };
+  }
+  SERVICES.forEach(sv=>{ if(!state.staffingNeeds[sv]) state.staffingNeeds[sv]=[]; });
+}
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._h);
+  toast._h = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+function esc(s){ return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ============================= TABS ============================= */
+const TABS = [
+  {id:'dashboard', label:'Dashboard'},
+  {id:'ricette', label:'Ricettario'},
+  {id:'menu', label:'Menu'},
+  {id:'brigata', label:'Brigata'},
+  {id:'turni', label:'Turni'},
+  {id:'assistente', label:'Assistente AI'},
+  {id:'benessere', label:'Benessere'},
+];
+function initTabs(){
+  const nav = document.getElementById('tabs');
+  nav.innerHTML = TABS.map(t=>`<button data-tab="${t.id}">${t.label}</button>`).join('');
+  nav.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>switchTab(b.dataset.tab)));
+  switchTab('dashboard');
+
+  document.getElementById('ricette-subtabs').querySelectorAll('button').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      document.querySelectorAll('#ricette-subtabs button').forEach(x=>x.classList.toggle('active', x===b));
+      document.querySelectorAll('#view-ricette .subview').forEach(v=>v.classList.toggle('active', v.id==='sub-'+b.dataset.sub));
+      if(b.dataset.sub==='ingredienti') renderIngredients();
+      if(b.dataset.sub==='subricette') renderSubrecipes();
+      if(b.dataset.sub==='piatti') renderDishes();
+      if(b.dataset.sub==='fornitori') renderSuppliers();
+    });
+  });
+  document.getElementById('turni-subtabs').querySelectorAll('button').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      document.querySelectorAll('#turni-subtabs button').forEach(x=>x.classList.toggle('active', x===b));
+      document.querySelectorAll('#view-turni .subview').forEach(v=>v.classList.toggle('active', v.id==='turnisub-'+b.dataset.sub));
+      if(b.dataset.sub==='piano'){ renderTurni(); renderOreExtra(); }
+      if(b.dataset.sub==='stazioni') renderStations();
+      if(b.dataset.sub==='fabbisogno') renderNeeds();
+      if(b.dataset.sub==='quote') renderQuotas();
+    });
+  });
+}
+function switchTab(id){
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===id));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active', v.id==='view-'+id));
+  if(id==='dashboard') renderDashboard();
+  if(id==='ricette'){ renderIngredients(); renderSubrecipes(); renderDishes(); renderSuppliers(); }
+  if(id==='menu') renderMenuList();
+  if(id==='brigata') renderStaffList();
+  if(id==='turni'){ renderTurni(); renderOreExtra(); }
+  if(id==='assistente') { renderKB(); renderChat(); }
+  if(id==='benessere') { renderWbStaffOptions(); renderWbSummary(); renderWbTips(); }
+}
+
+/* ============================= UNIT / COST ENGINE ============================= */
+// unità "base" possibili per ingredienti e sub-ricette: kg, l, pz
+function subUnitOptions(base){
+  if(base==='kg') return ['g','kg'];
+  if(base==='l') return ['ml','l'];
+  return ['pz'];
+}
+function toBaseQty(qty, unit, base){
+  qty = parseFloat(qty)||0;
+  if(base==='kg') return unit==='g' ? qty/1000 : qty;
+  if(base==='l') return unit==='ml' ? qty/1000 : qty;
+  return qty;
+}
+function ingredientById(id){ return state.ingredients.find(i=>i.id===id); }
+function subrecipeById(id){ return state.subrecipes.find(s=>s.id===id); }
+
+function ingredientEffectiveCost(ing){
+  const yieldFrac = (parseFloat(ing.yieldPct)||100)/100;
+  return yieldFrac>0 ? (parseFloat(ing.price)||0)/yieldFrac : 0;
+}
+function subrecipeCost(sub, depth){
+  depth = depth||0;
+  if(depth>6) return {totalCost:0, costPerUnit:0}; // guardia anti-loop
+  let totalCost = 0;
+  (sub.items||[]).forEach(it=>{ totalCost += itemCost(it, depth+1); });
+  const yieldQty = parseFloat(sub.yieldQty)||0;
+  const costPerUnit = yieldQty>0 ? totalCost/yieldQty : 0;
+  return {totalCost, costPerUnit};
+}
+function subrecipeRawWeightKg(sub){
+  if(sub.yieldUnit!=='kg') return null;
+  let kg = 0; let any=false;
+  (sub.items||[]).forEach(it=>{
+    if(it.kind==='ingredient'){ const ing = ingredientById(it.refId); if(ing && ing.unit==='kg'){ kg += toBaseQty(it.qty, it.unit, 'kg'); any=true; } }
+    if(it.kind==='sub'){ const s2 = subrecipeById(it.refId); if(s2 && s2.yieldUnit==='kg'){ kg += toBaseQty(it.qty, it.unit, 'kg'); any=true; } }
+  });
+  return any ? kg : null;
+}
+function itemCost(item, depth){
+  depth = depth||0;
+  if(item.kind==='custom'){ return (parseFloat(item.qty)||0) * (parseFloat(item.cost)||0); }
+  if(item.kind==='ingredient'){
+    const ing = ingredientById(item.refId); if(!ing) return 0;
+    const qtyBase = toBaseQty(item.qty, item.unit, ing.unit);
+    return qtyBase * ingredientEffectiveCost(ing);
+  }
+  if(item.kind==='sub'){
+    const sub = subrecipeById(item.refId); if(!sub) return 0;
+    const qtyBase = toBaseQty(item.qty, item.unit, sub.yieldUnit);
+    return qtyBase * subrecipeCost(sub, depth).costPerUnit;
+  }
+  return 0;
+}
+function itemLabel(item){
+  if(item.kind==='custom') return item.name;
+  if(item.kind==='ingredient'){ const i=ingredientById(item.refId); return i? i.name : '(ingrediente rimosso)'; }
+  if(item.kind==='sub'){ const s=subrecipeById(item.refId); return s? s.name+' (sub)' : '(sub-ricetta rimossa)'; }
+  return '';
+}
+function dishTotalCost(dish){ return (dish.items||[]).reduce((sum,it)=>sum+itemCost(it),0); }
+
+/* ============================= ITEM ROW PICKER (riusato in sub-ricette e piatti) — con ricerca ============================= */
+let datalistCounter = 0;
+function buildSearchDatalist(excludeSubId){
+  datalistCounter++;
+  const idIng = 'dl-ing-'+datalistCounter, idSub = 'dl-sub-'+datalistCounter;
+  const subs = state.subrecipes.filter(s=>s.id!==excludeSubId);
+  const html = `
+    <datalist id="${idIng}">${state.ingredients.map(i=>`<option value="${esc(i.name)}">`).join('')}</datalist>
+    <datalist id="${idSub}">${subs.map(s=>`<option value="${esc(s.name)}">`).join('')}</datalist>
+  `;
+  return {html, idIng, idSub};
+}
+function renderItemRows(container, items, excludeSubId){
+  const {html: datalistHtml, idIng, idSub} = buildSearchDatalist(excludeSubId);
+  const rowsHtml = items.map((it,i)=>{
+    let unitOptions;
+    if(it.kind==='custom'){ unitOptions = ['g','kg','ml','l','pz','cucchiaio']; }
+    else{
+      const base = it.kind==='ingredient' ? (ingredientById(it.refId)||{}).unit : (subrecipeById(it.refId)||{}).yieldUnit;
+      unitOptions = subUnitOptions(base||'pz');
+    }
+    const cost = itemCost(it);
+    const currentName = it.kind==='custom' ? '' : itemLabel(it).replace(' (sub)','');
+    return `
+    <div class="item-row" data-i="${i}">
+      <select class="it-kind">
+        <option value="custom" ${it.kind==='custom'?'selected':''}>Voce libera</option>
+        <option value="ingredient" ${it.kind==='ingredient'?'selected':''}>Ingrediente</option>
+        <option value="sub" ${it.kind==='sub'?'selected':''}>Sub-ricetta</option>
+      </select>
+      ${it.kind==='custom'
+        ? `<input type="text" class="it-name" placeholder="nome voce" value="${esc(it.name||'')}">`
+        : `<input type="text" class="it-search" list="${it.kind==='ingredient'?idIng:idSub}" placeholder="cerca..." value="${esc(currentName)}">`
+      }
+      <input type="number" step="0.001" class="it-qty" placeholder="qta" value="${it.qty||''}">
+      <select class="it-unit">${unitOptions.map(u=>`<option ${it.unit===u?'selected':''}>${u}</option>`).join('')}</select>
+      <button type="button" class="rm" data-rm="${i}">✕</button>
+      ${it.kind==='custom' ? `<input type="number" step="0.01" class="it-cost item-row-cost" placeholder="€/unità" value="${it.cost||''}" style="grid-column:1/-1;">` : `<div class="item-row-cost">costo riga: € ${cost.toFixed(3)}</div>`}
+    </div>`;
+  }).join('');
+  container.innerHTML = datalistHtml + rowsHtml;
+
+  container.querySelectorAll('.rm').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ items.splice(parseInt(btn.dataset.rm),1); renderItemRows(container, items, excludeSubId); });
+  });
+  container.querySelectorAll('.it-kind').forEach((sel,i)=>{
+    sel.addEventListener('change', ()=>{
+      const kind = sel.value;
+      if(kind==='custom'){ items[i] = {kind:'custom', name:'', qty:items[i].qty||'', unit:items[i].unit||'g', cost:''}; }
+      else{ items[i] = {kind, refId:null, qty:items[i].qty||'', unit:'pz'}; }
+      renderItemRows(container, items, excludeSubId);
+    });
+  });
+  container.querySelectorAll('.it-search').forEach((inp,i)=>{
+    inp.addEventListener('change', ()=>{
+      const it = items[i];
+      const list = it.kind==='ingredient' ? state.ingredients : state.subrecipes.filter(s=>s.id!==excludeSubId);
+      const match = list.find(x=>x.name.toLowerCase()===inp.value.trim().toLowerCase());
+      if(match){
+        const base = it.kind==='ingredient' ? match.unit : match.yieldUnit;
+        items[i] = {kind:it.kind, refId:match.id, qty:it.qty||'', unit: subUnitOptions(base||'pz')[0]};
+      } else {
+        items[i].refId = null;
+        toast('Nessuna corrispondenza esatta — seleziona dalla lista');
+      }
+      renderItemRows(container, items, excludeSubId);
+    });
+  });
+}
+function readItemRows(container, items){
+  container.querySelectorAll('.item-row').forEach((row,i)=>{
+    items[i].qty = row.querySelector('.it-qty').value;
+    items[i].unit = row.querySelector('.it-unit').value;
+    if(items[i].kind==='custom'){
+      items[i].name = row.querySelector('.it-name').value.trim();
+      items[i].cost = row.querySelector('.it-cost').value;
+    }
+  });
+}
+
+/* ============================= DASHBOARD ============================= */
+function renderDashboard(){
+  const alertsEl = document.getElementById('dash-alerts');
+  const statsEl = document.getElementById('dash-stats');
+  const shiftsEl = document.getElementById('dash-shifts');
+
+  const highFc = state.recipes.filter(d=>{
+    const cost = dishTotalCost(d); const price = parseFloat(d.priceActual)||0;
+    if(!price) return false;
+    return (cost/price*100) > 35;
+  });
+  let alerts = '';
+  if(highFc.length) alerts += `<div class="alert-box">⚠ ${highFc.length} piatt${highFc.length>1?'i hanno':'o ha'} un food cost reale sopra il 35%: ${highFc.map(r=>r.name).join(', ')}.</div>`;
+  const overworked = weeklyExtraFromTurni().filter(o=>o.extra>0);
+  if(overworked.length) alerts += `<div class="alert-box">⚠ Questa settimana, secondo il planning turni, ${overworked.map(o=>o.name).join(', ')} ${overworked.length>1?'fanno':'fa'} ore extra rispetto al contratto.</div>`;
+  if(!alerts) alerts = `<div class="ok-box">✓ Nessun alert. Cucina in equilibrio.</div>`;
+  alertsEl.innerHTML = alerts;
+
+  statsEl.innerHTML = `
+    <div class="stat"><div class="n">${state.recipes.length}</div><div class="l">Piatti in ricettario</div></div>
+    <div class="stat"><div class="n">${state.subrecipes.length}</div><div class="l">Sub-ricette</div></div>
+    <div class="stat"><div class="n">${state.staff.length}</div><div class="l">Persone in brigata</div></div>
+    <div class="stat"><div class="n">${state.menus.length}</div><div class="l">Menu attivi</div></div>
+  `;
+
+  const todayIdx = (new Date().getDay()+6)%7;
+  const todayKey = DAYS[todayIdx];
+  const todayShifts = state.staff.map(s=>{
+    const cell = (state.shifts[s.id]||{})[todayKey];
+    return {name:s.name, code: cell? cell.code : '', stationId: cell? cell.stationId : null};
+  }).filter(x=>x.code);
+  shiftsEl.innerHTML = todayShifts.length
+    ? todayShifts.map(t=>{
+        const st = state.stations.find(s=>s.id===t.stationId);
+        return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;"><span>${esc(t.name)}</span><span style="font-family:var(--font-mono);color:var(--copper-light);">${TURNO_DEF[t.code].label}${st?' · '+esc(st.name):''}</span></div>`;
+      }).join('')
+    : `<div class="empty">Nessun turno assegnato per oggi (${todayKey})</div>`;
+}
+
+/* ============================= INGREDIENTI ============================= */
+function renderIngredients(){
+  const el = document.getElementById('ing-list');
+  if(!state.ingredients.length){ el.innerHTML = `<div class="empty">Nessun ingrediente in anagrafica. Aggiungi il primo.</div>`; return; }
+  el.innerHTML = state.ingredients.map(ing=>{
+    const eff = ingredientEffectiveCost(ing);
+    const incomplete = !parseFloat(ing.price);
+    return `
+    <div class="staff-card">
+      <div>
+        <div style="font-weight:600;">${esc(ing.name)} ${incomplete?'<span class="tag" style="background:var(--alert-soft);color:var(--alert);">prezzo mancante</span>':''}${ing.yieldEstimated?'<span class="tag" style="background:var(--sage-soft);color:var(--sage);">resa stimata AI</span>':''}</div>
+        <div class="contact">${esc(ing.supplier||'—')} · € ${(parseFloat(ing.price)||0).toFixed(3)}/${esc(ing.unit)} acquisto · resa ${ing.yieldPct||100}% · scarto ${(100-(parseFloat(ing.yieldPct)||100)).toFixed(0)}%</div>
+        <div class="contact" style="color:var(--copper-light);">costo effettivo: € ${eff.toFixed(3)}/${esc(ing.unit)}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button class="btn ghost small" data-edit="${ing.id}">Modifica</button>
+        <button class="btn ghost small" data-del="${ing.id}" style="color:var(--alert);">Elimina</button>
+      </div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=> openIngForm(state.ingredients.find(i=>i.id===b.dataset.edit))));
+  el.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', ()=>{
+    state.ingredients = state.ingredients.filter(i=>i.id!==b.dataset.del);
+    save('ingredients'); renderIngredients(); toast('Ingrediente eliminato');
+  }));
+}
+function openIngForm(existing){
+  const holder = document.getElementById('ing-form-holder');
+  const ing = existing || {id:uid(), name:'', supplier:'', unit:'kg', price:'', yieldPct:100};
+  holder.innerHTML = `
+    <div class="panel">
+      <h3>${existing?'Modifica ingrediente':'Nuovo ingrediente'}</h3>
+      <label>Nome ingrediente</label>
+      <input type="text" id="i-name" value="${esc(ing.name)}" placeholder="es. Asparagi extra">
+      <label>Fornitore</label>
+      <select id="i-supplier">
+        <option value="">— nessuno —</option>
+        ${state.suppliers.map(s=>`<option value="${esc(s.name)}" ${ing.supplier===s.name?'selected':''}>${esc(s.name)}</option>`).join('')}
+        <option value="__new__" ${ing.supplier && !state.suppliers.find(s=>s.name===ing.supplier) ? 'selected':''}>+ Nuovo fornitore…</option>
+      </select>
+      <input type="text" id="i-supplier-new" placeholder="Nome nuovo fornitore" value="${ing.supplier && !state.suppliers.find(s=>s.name===ing.supplier) ? esc(ing.supplier) : ''}" style="margin-top:6px;display:${ing.supplier && !state.suppliers.find(s=>s.name===ing.supplier) ? 'block':'none'};">
+      <div class="grid3">
+        <div><label>Unità d'acquisto</label>
+          <select id="i-unit"><option value="kg" ${ing.unit==='kg'?'selected':''}>kg</option><option value="l" ${ing.unit==='l'?'selected':''}>l</option><option value="pz" ${ing.unit==='pz'?'selected':''}>pz</option></select>
+        </div>
+        <div><label>Prezzo acquisto (€/unità)</label><input type="number" step="0.001" id="i-price" value="${ing.price}"></div>
+        <div><label>Resa / parte edibile (%)</label><input type="number" step="1" min="1" max="100" id="i-yield" value="${ing.yieldPct}"></div>
+      </div>
+      <p class="small-note" id="i-preview">Costo effettivo: —</p>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn" id="i-save">Salva</button>
+        <button class="btn ghost" id="i-cancel">Annulla</button>
+      </div>
+    </div>
+  `;
+  function updatePreview(){
+    const price = parseFloat(document.getElementById('i-price').value)||0;
+    const yieldPct = parseFloat(document.getElementById('i-yield').value)||100;
+    const eff = yieldPct>0 ? price/(yieldPct/100) : 0;
+    document.getElementById('i-preview').textContent = `Costo effettivo: € ${eff.toFixed(3)} per ${document.getElementById('i-unit').value} (scarto ${(100-yieldPct).toFixed(0)}%)`;
+  }
+  ['i-price','i-yield','i-unit'].forEach(id=> document.getElementById(id).addEventListener('input', updatePreview));
+  updatePreview();
+  document.getElementById('i-supplier').addEventListener('change', (e)=>{
+    document.getElementById('i-supplier-new').style.display = e.target.value==='__new__' ? 'block' : 'none';
+  });
+  document.getElementById('i-cancel').addEventListener('click', ()=> holder.innerHTML='');
+  document.getElementById('i-save').addEventListener('click', ()=>{
+    const name = document.getElementById('i-name').value.trim();
+    if(!name){ toast('Serve il nome'); return; }
+    let supplierName = document.getElementById('i-supplier').value;
+    if(supplierName==='__new__'){
+      supplierName = document.getElementById('i-supplier-new').value.trim();
+      if(supplierName && !state.suppliers.find(s=>s.name.toLowerCase()===supplierName.toLowerCase())){
+        state.suppliers.push({id:uid(), name:supplierName, piva:'', phone:'', email:'', address:''});
+        save('suppliers');
+      }
+    }
+    const newIng = { id:ing.id, name, supplier:supplierName,
+      unit:document.getElementById('i-unit').value, price:document.getElementById('i-price').value,
+      yieldPct:document.getElementById('i-yield').value };
+    const idx = state.ingredients.findIndex(x=>x.id===ing.id);
+    if(idx>=0) state.ingredients[idx]=newIng; else state.ingredients.push(newIng);
+    save('ingredients'); holder.innerHTML=''; renderIngredients(); toast('Ingrediente salvato');
+  });
+}
+document.getElementById('btn-new-ing').addEventListener('click', ()=> openIngForm(null));
+
+/* ============================= FORNITORI ============================= */
+function renderSuppliers(){
+  const el = document.getElementById('supplier-list');
+  if(!el) return;
+  if(!state.suppliers.length){ el.innerHTML = `<div class="empty">Nessun fornitore ancora. Si creano da soli importando le fatture, oppure aggiungili qui.</div>`; return; }
+  el.innerHTML = state.suppliers.map(s=>`
+    <div class="staff-card">
+      <div>
+        <div style="font-weight:600;">${esc(s.name)}</div>
+        <div class="contact">${s.piva? 'P.IVA '+esc(s.piva):''}</div>
+        <div class="contact">${s.phone? '📞 '+esc(s.phone):''}${s.phone&&s.email?' · ':''}${s.email? '✉ '+esc(s.email):''}</div>
+        <div class="contact">${esc(s.address||'')}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button class="btn ghost small" data-edit="${s.id}">Modifica</button>
+        <button class="btn ghost small" data-del="${s.id}" style="color:var(--alert);">Elimina</button>
+      </div>
+    </div>`).join('');
+  el.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=> openSupplierForm(state.suppliers.find(s=>s.id===b.dataset.edit))));
+  el.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', ()=>{
+    state.suppliers = state.suppliers.filter(s=>s.id!==b.dataset.del); save('suppliers'); renderSuppliers(); toast('Fornitore eliminato');
+  }));
+}
+function openSupplierForm(existing){
+  const holder = document.getElementById('supplier-form-holder');
+  const s = existing || {id:uid(), name:'', piva:'', phone:'', email:'', address:''};
+  holder.innerHTML = `
+    <div class="panel">
+      <h3>${existing?'Modifica fornitore':'Nuovo fornitore'}</h3>
+      <label>Nome / Ragione sociale</label>
+      <input type="text" id="sup-name" value="${esc(s.name)}">
+      <div class="grid2">
+        <div><label>Partita IVA</label><input type="text" id="sup-piva" value="${esc(s.piva)}"></div>
+        <div><label>Telefono</label><input type="tel" id="sup-phone" value="${esc(s.phone)}"></div>
+      </div>
+      <label>Email</label><input type="email" id="sup-email" value="${esc(s.email)}">
+      <label>Indirizzo</label><input type="text" id="sup-address" value="${esc(s.address)}">
+      <div style="display:flex;gap:10px;margin-top:14px;">
+        <button class="btn" id="sup-save">Salva</button>
+        <button class="btn ghost" id="sup-cancel">Annulla</button>
+      </div>
+    </div>`;
+  document.getElementById('sup-cancel').addEventListener('click', ()=> holder.innerHTML='');
+  document.getElementById('sup-save').addEventListener('click', ()=>{
+    const name = document.getElementById('sup-name').value.trim();
+    if(!name){ toast('Serve il nome del fornitore'); return; }
+    const newSup = { id:s.id, name, piva:document.getElementById('sup-piva').value.trim(),
+      phone:document.getElementById('sup-phone').value.trim(), email:document.getElementById('sup-email').value.trim(),
+      address:document.getElementById('sup-address').value.trim() };
+    const idx = state.suppliers.findIndex(x=>x.id===s.id);
+    if(idx>=0) state.suppliers[idx]=newSup; else state.suppliers.push(newSup);
+    save('suppliers'); holder.innerHTML=''; renderSuppliers(); toast('Fornitore salvato');
+  });
+}
+document.getElementById('btn-new-supplier').addEventListener('click', ()=> openSupplierForm(null));
+
+/* ============================= IMPORT FATTURE ELETTRONICHE (FatturaPA XML) ============================= */
+function xmlText(root, tag){
+  const el = root.getElementsByTagName(tag)[0];
+  return el ? el.textContent.trim() : '';
+}
+function mapInvoiceUnit(um){
+  const u = (um||'').toUpperCase();
+  if(u.indexOf('KG')>=0) return 'kg';
+  if(u.indexOf('LT')>=0 || u==='L') return 'l';
+  return 'pz';
+}
+function parseFatturaXML(text){
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if(doc.getElementsByTagName('parsererror').length) return null;
+  const cedente = doc.getElementsByTagName('CedentePrestatore')[0];
+  if(!cedente) return null;
+  const anagrafica = cedente.getElementsByTagName('Anagrafica')[0];
+  const supplierName = anagrafica ? (xmlText(anagrafica,'Denominazione') || (xmlText(anagrafica,'Nome')+' '+xmlText(anagrafica,'Cognome')).trim()) : '';
+  const idFiscale = cedente.getElementsByTagName('IdFiscaleIVA')[0];
+  const piva = idFiscale ? xmlText(idFiscale,'IdCodice') : '';
+  const contatti = cedente.getElementsByTagName('Contatti')[0];
+  const phone = contatti ? xmlText(contatti,'Telefono') : '';
+  const email = contatti ? xmlText(contatti,'Email') : '';
+  const sede = cedente.getElementsByTagName('Sede')[0];
+  const address = sede ? [xmlText(sede,'Indirizzo'), xmlText(sede,'CAP'), xmlText(sede,'Comune'), xmlText(sede,'Provincia')].filter(Boolean).join(' - ') : '';
+
+  const lines = [];
+  Array.from(doc.getElementsByTagName('DettaglioLinee')).forEach(line=>{
+    const descrizione = xmlText(line,'Descrizione');
+    const qty = parseFloat(xmlText(line,'Quantita')) || 1;
+    const um = xmlText(line,'UnitaMisura');
+    const prezzoUnitario = parseFloat(xmlText(line,'PrezzoUnitario')) || 0;
+    if(descrizione) lines.push({descrizione, qty, um, prezzoUnitario});
+  });
+  return { supplier:{name:supplierName, piva, phone, email, address}, lines };
+}
+document.getElementById('invoice-import-btn').addEventListener('click', async ()=>{
+  const input = document.getElementById('invoice-input');
+  const files = Array.from(input.files||[]);
+  if(!files.length){ toast('Seleziona almeno un file XML'); return; }
+  let newSuppliers=0, newIngredients=0, updatedIngredients=0, skipped=0;
+  const logLines = [];
+  const createdIngredients = [];
+  for(const file of files){
+    let text;
+    const isP7m = /\.p7m$/i.test(file.name);
+    try{
+      if(isP7m){
+        const buf = await file.arrayBuffer();
+        text = p7mArrayBufferToXmlText(buf);
+        if(!text){ skipped++; logLines.push(`⚠ ${file.name}: firma non riconosciuta (struttura .p7m non standard). Prova a esportare l'XML non firmato dal tuo gestionale.`); continue; }
+      } else {
+        text = await file.text();
+      }
+    }catch(e){ skipped++; logLines.push(`⚠ ${file.name}: errore di lettura del file.`); continue; }
+    const parsed = parseFatturaXML(text);
+    if(!parsed || !parsed.supplier.name){ skipped++; logLines.push(`⚠ ${file.name}: non riconosciuto come FatturaPA XML valido.`); continue; }
+    let supplier = state.suppliers.find(s=> (parsed.supplier.piva && s.piva===parsed.supplier.piva) || s.name.toLowerCase()===parsed.supplier.name.toLowerCase());
+    if(!supplier){
+      supplier = {id:uid(), name:parsed.supplier.name, piva:parsed.supplier.piva, phone:parsed.supplier.phone, email:parsed.supplier.email, address:parsed.supplier.address};
+      state.suppliers.push(supplier); newSuppliers++;
+      logLines.push(`+ Nuovo fornitore: ${supplier.name}`);
+    }
+    parsed.lines.forEach(line=>{
+      const unit = mapInvoiceUnit(line.um);
+      let ing = state.ingredients.find(i=> i.name.toLowerCase()===line.descrizione.toLowerCase() && i.supplier===supplier.name);
+      if(ing){
+        ing.price = line.prezzoUnitario; ing.unit = unit; updatedIngredients++;
+        logLines.push(`↻ Aggiornato: ${ing.name} → € ${line.prezzoUnitario.toFixed(3)}/${unit}`);
+      } else {
+        const newIng = { id:uid(), name:line.descrizione, supplier:supplier.name, unit, price:line.prezzoUnitario, yieldPct:100 };
+        state.ingredients.push(newIng);
+        createdIngredients.push(newIng);
+        newIngredients++;
+        logLines.push(`+ Nuovo ingrediente: ${line.descrizione} (€ ${line.prezzoUnitario.toFixed(3)}/${unit})`);
+      }
+    });
+  }
+  await save('suppliers'); await save('ingredients');
+  const logEl = document.getElementById('invoice-log');
+  logEl.innerHTML = `<div class="ok-box">Importazione completata: ${newSuppliers} nuovi fornitori, ${newIngredients} nuovi ingredienti, ${updatedIngredients} aggiornati${skipped?`, ${skipped} file non leggibili`:''}.</div>` +
+    `<div class="small-note" style="white-space:pre-line;">${logLines.map(esc).join('\n')}</div>`;
+  renderIngredients(); renderSuppliers();
+  toast('Fatture importate');
+
+  if(createdIngredients.length){
+    logEl.innerHTML += `<div class="small-note">Sto stimando la resa (parte edibile) per i nuovi ingredienti…</div>`;
+    await estimateYieldsWithAI(createdIngredients);
+    logEl.innerHTML += `<div class="ok-box">Resa stimata per ${createdIngredients.length} ingredienti — controllala in "Ingredienti" (badge "resa stimata AI").</div>`;
+    renderIngredients();
+  }
+});
+async function estimateYieldsWithAI(ingredientsList){
+  const batches = [];
+  for(let i=0;i<ingredientsList.length;i+=40) batches.push(ingredientsList.slice(i,i+40));
+  for(const batch of batches){
+    try{
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          model:"claude-sonnet-4-6", max_tokens:1500,
+          system:"Sei un esperto di cucina professionale italiana. Per ogni ingrediente ricevuto (nome da fattura fornitore, spesso con formato/origine nel testo) stima la resa a parte edibile in percentuale (%) tipica dopo pulizia e scarto: verdure con scarto in base al tipo, carne con osso vs disossata, pesce intero vs filetto, prodotti già puliti/confezionati/secchi/inscatolati = 100%. Rispondi SOLO con un JSON array, senza testo aggiuntivo: [{\"name\":\"...\",\"yieldPct\":numero}]. Usa esattamente i nomi ricevuti.",
+          messages:[{role:"user", content: batch.map(i=>i.name).join('\n')}]
+        })
+      });
+      const data = await response.json();
+      const textBlocks = (data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
+      const clean = textBlocks.replace(/```json|```/g,'').trim();
+      const estimates = JSON.parse(clean);
+      estimates.forEach(est=>{
+        const ing = batch.find(i=>i.name===est.name);
+        if(ing && est.yieldPct){ ing.yieldPct = est.yieldPct; ing.yieldEstimated = true; }
+      });
+    }catch(e){ /* stima non riuscita per questo batch: resta resa 100% di default, nessun blocco */ }
+  }
+  await save('ingredients');
+}
+
+/* ============================= SUB-RICETTE ============================= */
+function renderSubrecipes(){
+  const el = document.getElementById('subr-list');
+  if(!state.subrecipes.length){ el.innerHTML = `<div class="empty">Nessuna sub-ricetta ancora (fondi, salse, basi, composte...).</div>`; return; }
+  el.innerHTML = state.subrecipes.map((sub,idx)=>{
+    const {totalCost, costPerUnit} = subrecipeCost(sub);
+    const rawKg = subrecipeRawWeightKg(sub);
+    const calo = (rawKg && sub.yieldUnit==='kg' && rawKg>0) ? ((rawKg-parseFloat(sub.yieldQty))/rawKg*100) : null;
+    return `
+    <div class="comanda">
+      <div class="comanda-head">
+        <div><div class="comanda-title">${esc(sub.name)}</div><div class="comanda-cat">resa ${sub.yieldQty||'—'} ${esc(sub.yieldUnit)}${calo!==null?` · calo peso ${calo.toFixed(0)}%`:''}</div></div>
+        <div class="comanda-num">SUB${String(idx+1).padStart(3,'0')}</div>
+      </div>
+      <ul class="ing-list">${(sub.items||[]).map(it=>`<li><span class="n">${esc(itemLabel(it))}</span><span class="q">${it.qty}${esc(it.unit)} · €${itemCost(it).toFixed(2)}</span></li>`).join('')}</ul>
+      <div class="metric-row">
+        <div class="metric">Costo totale<b>€ ${totalCost.toFixed(2)}</b></div>
+        <div class="metric">Costo per ${esc(sub.yieldUnit)}<b>€ ${costPerUnit.toFixed(2)}</b></div>
+      </div>
+      ${sub.notes? `<div class="steps">${esc(sub.notes)}</div>`:''}
+      <div class="card-actions">
+        <button data-edit="${sub.id}">Modifica</button>
+        <button class="danger" data-del="${sub.id}">Elimina</button>
+      </div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=> openSubForm(state.subrecipes.find(s=>s.id===b.dataset.edit))));
+  el.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', ()=>{
+    state.subrecipes = state.subrecipes.filter(s=>s.id!==b.dataset.del);
+    save('subrecipes'); renderSubrecipes(); toast('Sub-ricetta eliminata');
+  }));
+}
+function openSubForm(existing, prefill){
+  const holder = document.getElementById('subr-form-holder');
+  const base = {id:uid(), name:'', items:[], yieldQty:'', yieldUnit:'kg', notes:''};
+  const sub = existing || Object.assign(base, prefill||{});
+  let items = JSON.parse(JSON.stringify(sub.items));
+  holder.innerHTML = `
+    <div class="panel">
+      <h3>${existing?'Modifica sub-ricetta':'Nuova sub-ricetta'}</h3>
+      ${prefill&&!existing? `<div class="ok-box">Campi precompilati dalla foto — controlla componenti e quantità, e imposta tu la resa finale (non deducibile dalla foto).</div>`:''}
+      <label>Nome (es. Ragù di carne, Fondo di vitello)</label>
+      <input type="text" id="sb-name" value="${esc(sub.name)}">
+      <label>Componenti</label>
+      <div id="sb-items"></div>
+      <button class="btn ghost small" id="sb-add-item" type="button" style="margin-top:4px;">+ Componente</button>
+      <div class="grid2" style="margin-top:10px;">
+        <div><label>Resa finale (quantità ottenuta dopo cottura/lavorazione)</label><input type="number" step="0.001" id="sb-yieldqty" value="${sub.yieldQty}"></div>
+        <div><label>Unità resa</label><select id="sb-yieldunit"><option value="kg" ${sub.yieldUnit==='kg'?'selected':''}>kg</option><option value="l" ${sub.yieldUnit==='l'?'selected':''}>l</option><option value="pz" ${sub.yieldUnit==='pz'?'selected':''}>pz</option></select></div>
+      </div>
+      <label>Note (procedimento, calo peso previsto, ecc.)</label>
+      <textarea id="sb-notes">${esc(sub.notes)}</textarea>
+      <p class="small-note" id="sb-preview">—</p>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn" id="sb-save">Salva sub-ricetta</button>
+        <button class="btn ghost" id="sb-cancel">Annulla</button>
+      </div>
+    </div>
+  `;
+  const itemsContainer = document.getElementById('sb-items');
+  renderItemRows(itemsContainer, items, sub.id);
+  document.getElementById('sb-add-item').addEventListener('click', ()=>{ items.push({kind:'custom', name:'', qty:'', unit:'g', cost:''}); renderItemRows(itemsContainer, items, sub.id); updateSbPreview(); });
+  function updateSbPreview(){
+    readItemRows(itemsContainer, items);
+    const totalCost = items.reduce((s,it)=>s+itemCost(it),0);
+    const yq = parseFloat(document.getElementById('sb-yieldqty').value)||0;
+    const cpu = yq>0? totalCost/yq : 0;
+    document.getElementById('sb-preview').textContent = `Costo totale componenti: € ${totalCost.toFixed(2)} · Costo per ${document.getElementById('sb-yieldunit').value}: € ${cpu.toFixed(2)}`;
+  }
+  itemsContainer.addEventListener('input', updateSbPreview);
+  itemsContainer.addEventListener('change', ()=> setTimeout(updateSbPreview,0));
+  document.getElementById('sb-yieldqty').addEventListener('input', updateSbPreview);
+  document.getElementById('sb-yieldunit').addEventListener('change', updateSbPreview);
+  updateSbPreview();
+  document.getElementById('sb-cancel').addEventListener('click', ()=> holder.innerHTML='');
+  document.getElementById('sb-save').addEventListener('click', ()=>{
+    readItemRows(itemsContainer, items);
+    const name = document.getElementById('sb-name').value.trim();
+    if(!name){ toast('Serve il nome della sub-ricetta'); return; }
+    const newSub = { id:sub.id, name, items: items.filter(it=> it.kind!=='custom' || it.name),
+      yieldQty:document.getElementById('sb-yieldqty').value, yieldUnit:document.getElementById('sb-yieldunit').value,
+      notes:document.getElementById('sb-notes').value.trim() };
+    const idx = state.subrecipes.findIndex(x=>x.id===sub.id);
+    if(idx>=0) state.subrecipes[idx]=newSub; else state.subrecipes.push(newSub);
+    save('subrecipes'); holder.innerHTML=''; renderSubrecipes(); toast('Sub-ricetta salvata');
+  });
+}
+document.getElementById('btn-new-sub').addEventListener('click', ()=> openSubForm(null));
+
+/* ============================= PIATTI (dishes) ============================= */
+function renderDishes(){
+  const el = document.getElementById('dish-list');
+  if(!state.recipes.length){ el.innerHTML = `<div class="empty">Ancora nessun piatto. Crea la prima scheda tecnica.</div>`; return; }
+  el.innerHTML = state.recipes.map((d,idx)=>{
+    const cost = dishTotalCost(d);
+    const target = parseFloat(d.foodCostTargetPct)||30;
+    const suggPrice = target>0 ? cost/(target/100) : 0;
+    const priceActual = parseFloat(d.priceActual)||0;
+    const realFc = priceActual>0 ? (cost/priceActual*100) : null;
+    const marginActual = priceActual - cost;
+    return `
+    <div class="comanda">
+      <div class="comanda-head">
+        <div><div class="comanda-title">${esc(d.name)}</div><div class="comanda-cat">${esc(d.category||'—')}${d.portionG?` · ${d.portionG}g/ml porzione`:''}${d.prepMin?` · ${d.prepMin} min`:''}</div></div>
+        <div class="comanda-num">P${String(idx+1).padStart(3,'0')}</div>
+      </div>
+      ${d.photo? `<img src="${d.photo}" style="max-width:100%;border-radius:6px;margin-bottom:10px;">`:''}
+      <div class="metric-row">
+        <div class="metric">Costo materia prima<b>€ ${cost.toFixed(2)}</b></div>
+        <div class="metric">Prezzo suggerito (target ${target}%)<b>€ ${suggPrice.toFixed(2)}</b></div>
+        <div class="metric">Prezzo effettivo<b>€ ${priceActual.toFixed(2)}</b></div>
+        <div class="metric ${realFc!==null && realFc>35?'neg':'pos'}">Food cost reale<b>${realFc!==null?realFc.toFixed(1)+'%':'—'}</b></div>
+        <div class="metric ${marginActual<0?'neg':'pos'}">Margine effettivo<b>€ ${marginActual.toFixed(2)}</b></div>
+      </div>
+      <div>${(d.allergens||[]).map(a=>`<span class="tag allergen">${esc(a)}</span>`).join('')}</div>
+      <ul class="ing-list">${(d.items||[]).map(it=>`<li><span class="n">${esc(itemLabel(it))}</span><span class="q">${it.qty}${esc(it.unit)} · €${itemCost(it).toFixed(2)}</span></li>`).join('')}</ul>
+      ${d.steps? `<div class="steps">${esc(d.steps)}</div>`:''}
+      ${d.notes? `<div class="steps" style="color:var(--copper);font-style:italic;">${esc(d.notes)}</div>`:''}
+      <div class="card-actions">
+        <button data-act="edit" data-id="${d.id}">Modifica</button>
+        <button data-act="dup" data-id="${d.id}">Duplica</button>
+        <button class="danger" data-act="del" data-id="${d.id}">Elimina</button>
+      </div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('button[data-act]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const id = b.dataset.id, act = b.dataset.act;
+      if(act==='del'){ state.recipes = state.recipes.filter(r=>r.id!==id); save('recipes'); renderDishes(); toast('Piatto eliminato'); }
+      if(act==='edit'){ openDishForm(state.recipes.find(r=>r.id===id)); }
+      if(act==='dup'){
+        const orig = state.recipes.find(r=>r.id===id);
+        const copy = JSON.parse(JSON.stringify(orig)); copy.id = uid(); copy.name = orig.name+' (copia)';
+        state.recipes.push(copy); save('recipes'); renderDishes(); toast('Piatto duplicato');
+      }
+    });
+  });
+}
+function openDishForm(existing, prefill){
+  const holder = document.getElementById('dish-form-holder');
+  const base = {id:uid(), name:'', category:'', items:[], portionG:'', foodCostTargetPct:30, priceActual:'', allergens:[], steps:'', prepMin:'', notes:'', photo:''};
+  const d = existing || Object.assign(base, prefill||{});
+  let items = JSON.parse(JSON.stringify(d.items));
+  holder.innerHTML = `
+    <div class="panel">
+      <h3>${existing?'Modifica piatto':'Nuovo piatto'}</h3>
+      ${prefill&&!existing? `<div class="ok-box">Campi precompilati dalla foto — controlla e correggi prima di salvare, specialmente quantità e costi.</div>`:''}
+      <label>Nome piatto</label>
+      <input type="text" id="d-name" value="${esc(d.name)}" placeholder="es. Tagliatelle al ragù">
+      <div class="grid3">
+        <div><label>Categoria</label><input type="text" id="d-cat" value="${esc(d.category)}" placeholder="Primi, antipasti..."></div>
+        <div><label>Porzione finale (g/ml)</label><input type="number" id="d-portion" value="${d.portionG}"></div>
+        <div><label>Tempo di preparazione (min)</label><input type="number" id="d-prep" value="${d.prepMin||''}"></div>
+      </div>
+      <label>Food cost target (%)</label>
+      <input type="number" id="d-target" value="${d.foodCostTargetPct}">
+      <label>Allergeni</label>
+      <div class="chip-toggle" id="d-allergens">${ALLERGENS.map(a=>`<button type="button" data-a="${a}" class="${(d.allergens||[]).includes(a)?'on':''}">${a}</button>`).join('')}</div>
+      <label>Componenti (ingredienti e/o sub-ricette — digita per cercare)</label>
+      <div id="d-items"></div>
+      <button class="btn ghost small" id="d-add-item" type="button" style="margin-top:4px;">+ Componente</button>
+      <label>Prezzo di vendita effettivo (€)</label>
+      <input type="number" step="0.01" id="d-price" value="${d.priceActual}">
+      <p class="small-note" id="d-preview">—</p>
+      <label>Procedimento</label>
+      <textarea id="d-steps">${esc(d.steps)}</textarea>
+      <label>Note (impiattamento, varianti...)</label>
+      <textarea id="d-notes">${esc(d.notes||'')}</textarea>
+      <label>Foto del piatto (opzionale)</label>
+      <input type="file" id="d-photo-input" accept="image/*">
+      <div id="d-photo-preview">${d.photo? `<img src="${d.photo}" style="max-width:140px;border-radius:6px;margin-top:8px;display:block;">`:''}</div>
+      <div style="display:flex;gap:10px;margin-top:14px;">
+        <button class="btn" id="d-save">Salva piatto</button>
+        <button class="btn ghost" id="d-cancel">Annulla</button>
+      </div>
+    </div>
+  `;
+  let photoData = d.photo || '';
+  document.getElementById('d-photo-input').addEventListener('change', async (e)=>{
+    const file = e.target.files[0]; if(!file) return;
+    photoData = await resizeImageToDataUrl(file, 500, 0.7);
+    document.getElementById('d-photo-preview').innerHTML = `<img src="${photoData}" style="max-width:140px;border-radius:6px;margin-top:8px;display:block;">`;
+  });
+  const itemsContainer = document.getElementById('d-items');
+  renderItemRows(itemsContainer, items, null);
+  document.getElementById('d-add-item').addEventListener('click', ()=>{ items.push({kind:'custom', name:'', qty:'', unit:'g', cost:''}); renderItemRows(itemsContainer, items, null); updateDPreview(); });
+  document.querySelectorAll('#d-allergens button').forEach(b=> b.addEventListener('click', ()=> b.classList.toggle('on')));
+  function updateDPreview(){
+    readItemRows(itemsContainer, items);
+    const cost = items.reduce((s,it)=>s+itemCost(it),0);
+    const target = parseFloat(document.getElementById('d-target').value)||30;
+    const sugg = target>0? cost/(target/100) : 0;
+    const priceActual = parseFloat(document.getElementById('d-price').value)||0;
+    const realFc = priceActual>0 ? (cost/priceActual*100) : null;
+    document.getElementById('d-preview').textContent = `Costo materia prima: € ${cost.toFixed(2)} · Prezzo suggerito: € ${sugg.toFixed(2)}${realFc!==null?` · Food cost reale: ${realFc.toFixed(1)}%`:''}`;
+  }
+  itemsContainer.addEventListener('input', updateDPreview);
+  itemsContainer.addEventListener('change', ()=> setTimeout(updateDPreview,0));
+  ['d-target','d-price'].forEach(id=> document.getElementById(id).addEventListener('input', updateDPreview));
+  updateDPreview();
+  document.getElementById('d-cancel').addEventListener('click', ()=> holder.innerHTML='');
+  document.getElementById('d-save').addEventListener('click', ()=>{
+    readItemRows(itemsContainer, items);
+    const name = document.getElementById('d-name').value.trim();
+    if(!name){ toast('Serve almeno il nome del piatto'); return; }
+    const newDish = {
+      id:d.id, name, category:document.getElementById('d-cat').value.trim(),
+      items: items.filter(it=> it.kind!=='custom' || it.name),
+      portionG:document.getElementById('d-portion').value, foodCostTargetPct:document.getElementById('d-target').value,
+      priceActual:document.getElementById('d-price').value,
+      allergens: Array.from(document.querySelectorAll('#d-allergens button.on')).map(b=>b.dataset.a),
+      steps:document.getElementById('d-steps').value.trim(),
+      prepMin:document.getElementById('d-prep').value,
+      notes:document.getElementById('d-notes').value.trim(),
+      photo: photoData,
+    };
+    const idx = state.recipes.findIndex(x=>x.id===d.id);
+    if(idx>=0) state.recipes[idx]=newDish; else state.recipes.push(newDish);
+    save('recipes'); holder.innerHTML=''; renderDishes(); toast('Piatto salvato');
+  });
+}
+document.getElementById('btn-new-dish').addEventListener('click', ()=> openDishForm(null));
+
+/* ============================= FOTO → RICETTA (OCR via AI) ============================= */
+function resizeImageToDataUrl(file, maxDim, quality){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (e)=>{
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = ()=>{
+        let w = img.width, h = img.height;
+        if(w>h){ if(w>maxDim){ h = Math.round(h*maxDim/w); w = maxDim; } }
+        else { if(h>maxDim){ w = Math.round(w*maxDim/h); h = maxDim; } }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality||0.8));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+let ocrTarget = 'dish';
+document.getElementById('btn-photo-dish').addEventListener('click', ()=>{ ocrTarget='dish'; });
+document.getElementById('btn-photo-sub').addEventListener('click', ()=>{ ocrTarget='sub'; });
+document.getElementById('dish-photo-input').addEventListener('change', async (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  const statusEl = document.getElementById('ocr-status');
+  statusEl.style.display='block';
+  statusEl.textContent = 'Sto leggendo la ricetta dalla foto…';
+  try{
+    const dataUrl = await resizeImageToDataUrl(file, 1500, 0.85);
+    const base64 = dataUrl.split(',')[1];
+    const mediaType = dataUrl.substring(5, dataUrl.indexOf(';'));
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6", max_tokens: 1500,
+        system: "Sei un assistente che trascrive ricette scritte a mano o su appunti di cucina fotografati, in JSON strutturato. Rispondi SOLO con JSON valido, senza testo aggiuntivo e senza blocchi di codice markdown. Schema esatto: {\"name\":string, \"category\":string, \"portionG\": number|null, \"prepMin\": number|null, \"ingredients\":[{\"name\":string,\"qty\":number|null,\"unit\":string}], \"steps\": string}. Se un campo non è leggibile lascialo vuoto/null, non inventare valori.",
+        messages: [{ role:"user", content:[
+          {type:"image", source:{type:"base64", media_type:mediaType, data:base64}},
+          {type:"text", text:"Trascrivi questa ricetta nel formato JSON richiesto."}
+        ]}]
+      })
+    });
+    const data = await response.json();
+    const textBlocks = (data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
+    const clean = textBlocks.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+    let createdCount = 0;
+    const items = (parsed.ingredients||[]).map(ocrIng=>{
+      const name = (ocrIng.name||'').trim();
+      if(!name) return null;
+      const unitBase = mapInvoiceUnit(ocrIng.unit||'');
+      let match = state.ingredients.find(i=> i.name.toLowerCase()===name.toLowerCase());
+      if(!match){
+        match = { id:uid(), name, supplier:'', unit:unitBase, price:'', yieldPct:100 };
+        state.ingredients.push(match);
+        createdCount++;
+      }
+      const rawUnit = (ocrIng.unit||'').toLowerCase();
+      const validUnits = subUnitOptions(match.unit);
+      const itemUnit = validUnits.includes(rawUnit) ? rawUnit : validUnits[0];
+      return {kind:'ingredient', refId:match.id, qty:ocrIng.qty||'', unit:itemUnit};
+    }).filter(Boolean);
+    if(createdCount) await save('ingredients');
+    statusEl.style.display='none';
+    const subTarget = ocrTarget === 'sub';
+    switchTab('ricette');
+    document.querySelectorAll('#ricette-subtabs button').forEach(x=>x.classList.toggle('active', x.dataset.sub===(subTarget?'subricette':'piatti')));
+    document.querySelectorAll('#view-ricette .subview').forEach(v=>v.classList.toggle('active', v.id===(subTarget?'sub-subricette':'sub-piatti')));
+    if(subTarget){
+      openSubForm(null, { name: parsed.name || '', items, notes: parsed.steps || '' });
+    } else {
+      const prefill = {
+        name: parsed.name || '', category: parsed.category || '', portionG: parsed.portionG || '',
+        prepMin: parsed.prepMin || '', steps: parsed.steps || '', items,
+      };
+      openDishForm(null, prefill);
+    }
+    toast(createdCount ? `Ricetta letta — ${createdCount} nuovi ingredienti censiti da completare` : 'Ricetta letta dalla foto — controlla i campi');
+  }catch(err){
+    statusEl.textContent = 'Non sono riuscito a leggere la ricetta dalla foto. Riprova con una foto più a fuoco.';
+    setTimeout(()=> statusEl.style.display='none', 4000);
+  }
+  e.target.value = '';
+});
+
+/* ============================= MENU ============================= */
+function renderMenuList(){
+  const el = document.getElementById('menu-list');
+  if(!state.menus.length){ el.innerHTML = `<div class="empty">Nessun menu ancora. Componine uno dal ricettario.</div>`; return; }
+  el.innerHTML = state.menus.map((m,idx)=>{
+    const items = m.recipeIds.map(id=>state.recipes.find(r=>r.id===id)).filter(Boolean);
+    const totalCost = items.reduce((s,r)=>s+dishTotalCost(r),0);
+    const totalPrice = items.reduce((s,r)=>s+(parseFloat(r.priceActual)||0),0);
+    const avgFc = totalPrice? (totalCost/totalPrice*100) : null;
+    return `
+    <div class="comanda">
+      <div class="comanda-head">
+        <div><div class="comanda-title">${esc(m.name)}</div><div class="comanda-cat">${items.length} portate</div></div>
+        <div class="comanda-num">#${String(idx+1).padStart(3,'0')}</div>
+      </div>
+      <ul class="ing-list">${items.map(r=>`<li><span class="n">${esc(r.name)}</span><span class="q">€${(parseFloat(r.priceActual)||0).toFixed(2)}</span></li>`).join('')}</ul>
+      <div class="metric-row">
+        <div class="metric">Costo totale<b>€ ${totalCost.toFixed(2)}</b></div>
+        <div class="metric">Prezzo totale<b>€ ${totalPrice.toFixed(2)}</b></div>
+        <div class="metric ${avgFc!==null && avgFc>35?'neg':'pos'}">Food cost medio<b>${avgFc!==null?avgFc.toFixed(1)+'%':'—'}</b></div>
+      </div>
+      <div class="card-actions"><button class="danger" data-del="${m.id}">Elimina</button></div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', ()=>{ state.menus = state.menus.filter(m=>m.id!==b.dataset.del); save('menus'); renderMenuList(); toast('Menu eliminato'); }));
+}
+document.getElementById('btn-new-menu').addEventListener('click', ()=>{
+  const holder = document.getElementById('menu-form-holder');
+  if(!state.recipes.length){ toast('Crea prima qualche piatto'); return; }
+  holder.innerHTML = `
+    <div class="panel">
+      <h3>Nuovo menu</h3>
+      <label>Nome menu</label>
+      <input type="text" id="m-name" placeholder="es. Menu degustazione estivo">
+      <label>Seleziona le portate</label>
+      <div class="chip-toggle" id="m-recipes">${state.recipes.map(r=>`<button type="button" data-id="${r.id}">${esc(r.name)}</button>`).join('')}</div>
+      <div style="display:flex;gap:10px;margin-top:14px;">
+        <button class="btn" id="m-save">Salva menu</button>
+        <button class="btn ghost" id="m-cancel">Annulla</button>
+      </div>
+    </div>
+  `;
+  document.querySelectorAll('#m-recipes button').forEach(b=> b.addEventListener('click', ()=> b.classList.toggle('on')));
+  document.getElementById('m-cancel').addEventListener('click', ()=> holder.innerHTML='');
+  document.getElementById('m-save').addEventListener('click', ()=>{
+    const name = document.getElementById('m-name').value.trim();
+    const ids = Array.from(document.querySelectorAll('#m-recipes button.on')).map(b=>b.dataset.id);
+    if(!name || !ids.length){ toast('Serve un nome e almeno una portata'); return; }
+    state.menus.push({id:uid(), name, recipeIds:ids});
+    save('menus'); holder.innerHTML=''; renderMenuList(); toast('Menu creato');
+  });
+});
+
+/* ============================= BRIGATA ============================= */
+function renderStaffList(){
+  const el = document.getElementById('staff-list');
+  if(!state.staff.length){ el.innerHTML = `<div class="empty">Nessuna persona in brigata ancora.</div>`; return; }
+  el.innerHTML = state.staff.map(s=>`
+    <div class="staff-card">
+      <div>
+        <div style="font-weight:600;">${esc(s.name)}</div>
+        <div class="contact">${esc(s.role)} · ${s.hours||'—'}h/sett contrattuali</div>
+        <div class="contact">${s.phone? '📞 '+esc(s.phone):''}${s.phone&&s.email?' · ':''}${s.email? '✉ '+esc(s.email):''}</div>
+        <div class="contact">🍳 ${(s.stations&&s.stations.length) ? s.stations.map(id=>{ const st=state.stations.find(x=>x.id===id); return st?esc(st.name):null; }).filter(Boolean).join(', ') : 'nessuna stazione assegnata'}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button class="btn ghost small" data-edit="${s.id}">Modifica</button>
+        <button class="btn ghost small" data-del="${s.id}" style="color:var(--alert);">Rimuovi</button>
+      </div>
+    </div>
+  `).join('');
+  el.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=> openStaffForm(state.staff.find(s=>s.id===b.dataset.edit))));
+  el.querySelectorAll('[data-del]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      state.staff = state.staff.filter(s=>s.id!==b.dataset.del);
+      delete state.shifts[b.dataset.del];
+      save('staff'); save('shifts'); renderStaffList(); toast('Rimosso dalla brigata');
+    });
+  });
+}
+function openStaffForm(existing){
+  const holder = document.getElementById('staff-form-holder');
+  const s = existing || {id:uid(), name:'', role:'Cuoco', hours:'', phone:'', email:'', stations:[], weeklyQuota:[]};
+  holder.innerHTML = `
+    <div class="panel">
+      <h3>${existing?'Modifica persona':'Aggiungi persona'}</h3>
+      <label>Nome</label>
+      <input type="text" id="s-name" value="${esc(s.name)}" placeholder="es. Marco">
+      <div class="grid2">
+        <div><label>Ruolo</label>
+          <select id="s-role">
+            ${['Chef','Sous Chef','Chef de partie','Cuoco','Commis','Pasticcere','Plongeur'].map(r=>`<option ${s.role===r?'selected':''}>${r}</option>`).join('')}
+          </select>
+        </div>
+        <div><label>Ore contrattuali/sett.</label><input type="number" id="s-hours" value="${s.hours}" placeholder="es. 40"></div>
+      </div>
+      <div class="grid2">
+        <div><label>Numero di cellulare</label><input type="tel" id="s-phone" value="${esc(s.phone)}" placeholder="es. 333 1234567"></div>
+        <div><label>Email</label><input type="email" id="s-email" value="${esc(s.email)}" placeholder="es. nome@email.it"></div>
+      </div>
+      <label>Stazioni che può coprire</label>
+      <div class="chip-toggle" id="s-stations">
+        ${state.stations.length ? state.stations.map(st=>`<button type="button" data-st="${st.id}" class="${(s.stations||[]).includes(st.id)?'on':''}">${esc(st.name)}</button>`).join('') : '<span class="small-note">Nessuna stazione creata ancora — puoi crearle in Turni → Stazioni, poi torna qui.</span>'}
+      </div>
+      <p class="small-note">Usata dal generatore di turni per non mettere in una postazione qualcuno che non la sa coprire.</p>
+      <div style="display:flex;gap:10px;margin-top:14px;">
+        <button class="btn" id="s-save">Salva</button>
+        <button class="btn ghost" id="s-cancel">Annulla</button>
+      </div>
+    </div>
+  `;
+  document.querySelectorAll('#s-stations button').forEach(b=> b.addEventListener('click', ()=> b.classList.toggle('on')));
+  document.getElementById('s-cancel').addEventListener('click', ()=> holder.innerHTML='');
+  document.getElementById('s-save').addEventListener('click', ()=>{
+    const name = document.getElementById('s-name').value.trim();
+    if(!name){ toast('Serve un nome'); return; }
+    const stations = Array.from(document.querySelectorAll('#s-stations button.on')).map(b=>b.dataset.st);
+    const newStaff = { id:s.id, name, role:document.getElementById('s-role').value, hours:document.getElementById('s-hours').value,
+      phone:document.getElementById('s-phone').value.trim(), email:document.getElementById('s-email').value.trim(),
+      stations, weeklyQuota: s.weeklyQuota||[] };
+    const idx = state.staff.findIndex(x=>x.id===s.id);
+    if(idx>=0) state.staff[idx]=newStaff; else state.staff.push(newStaff);
+    save('staff'); holder.innerHTML=''; renderStaffList(); toast('Salvato');
+  });
+}
+document.getElementById('btn-new-staff').addEventListener('click', ()=> openStaffForm(null));
+
+/* ============================= TURNI: griglia ============================= */
+function renderTurni(){
+  const el = document.getElementById('turni-panel');
+  if(!state.staff.length){ el.innerHTML = `<div class="empty">Aggiungi prima persone alla brigata.</div>`; return; }
+  el.innerHTML = `
+    <div style="overflow-x:auto;">
+    <table class="shift-table">
+      <thead><tr><th style="text-align:left;">Persona</th>${DAYS.map(d=>`<th>${d}</th>`).join('')}</tr></thead>
+      <tbody>
+        ${state.staff.map(s=>`
+          <tr>
+            <td class="name">${esc(s.name)}</td>
+            ${DAYS.map(d=>{
+              const cell = (state.shifts[s.id]||{})[d] || {code:'', stationId:null};
+              const qualified = (s.stations&&s.stations.length) ? state.stations.filter(st=>s.stations.includes(st.id)) : state.stations;
+              const showStation = WORKING_CODES.includes(cell.code) && qualified.length>0;
+              return `<td class="${cell.extra?'extra-cell':''}" ${cell.extra?'title="Turno extra: assegnato oltre la quota di questa persona per coprire il fabbisogno"':''}>
+                <select class="shift-select ${cell.code}" data-staff="${s.id}" data-day="${d}">
+                  ${Object.keys(TURNO_DEF).map(code=>`<option value="${code}" ${cell.code===code?'selected':''}>${code||'—'}</option>`).join('')}
+                </select>
+                ${showStation ? `<select class="shift-station" data-staff="${s.id}" data-day="${d}" style="margin-top:3px;">
+                  <option value="">stazione</option>
+                  ${qualified.map(st=>`<option value="${st.id}" ${cell.stationId===st.id?'selected':''}>${esc(st.name)}</option>`).join('')}
+                </select>`:''}
+                ${cell.extra ? `<div style="font-family:var(--font-mono);font-size:8px;color:var(--copper-light);margin-top:2px;">extra</div>`:''}
+              </td>`;
+            }).join('')}
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    </div>
+  `;
+  el.querySelectorAll('.shift-select').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      const staffId = sel.dataset.staff, day = sel.dataset.day, val = sel.value;
+      state.shifts[staffId] = state.shifts[staffId] || {};
+      const prev = state.shifts[staffId][day] || {code:'', stationId:null};
+      state.shifts[staffId][day] = { code:val, stationId: WORKING_CODES.includes(val) ? prev.stationId : null };
+      save('shifts');
+      renderTurni(); renderOreExtra(); renderDashboard();
+    });
+  });
+  el.querySelectorAll('.shift-station').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      const staffId = sel.dataset.staff, day = sel.dataset.day;
+      state.shifts[staffId][day].stationId = sel.value || null;
+      save('shifts');
+      renderDashboard();
+    });
+  });
+  document.getElementById('turni-legend').innerHTML = Object.entries(TURNO_DEF).filter(([c])=>c).map(([c,v])=>`${v.label}`).join(' · ');
+}
+function weeklyExtraFromTurni(){
+  return state.staff.map(s=>{
+    const days = state.shifts[s.id] || {};
+    const totalHours = DAYS.reduce((sum,d)=> sum + (TURNO_DEF[(days[d]||{}).code||''].hours||0), 0);
+    const contracted = parseFloat(s.hours)||0;
+    const extra = Math.max(0, totalHours - contracted);
+    const under = contracted>0 ? Math.max(0, contracted-totalHours) : 0;
+    return {id:s.id, name:s.name, totalHours, contracted, extra, under};
+  });
+}
+function renderOreExtra(){
+  const el = document.getElementById('ore-extra-table');
+  if(!state.staff.length){ el.innerHTML = `<div class="empty">Nessuna persona in brigata.</div>`; return; }
+  const rows = weeklyExtraFromTurni();
+  el.innerHTML = `
+    <table class="hours-table">
+      <thead><tr><th>Persona</th><th>Ore pianificate</th><th>Contrattuali</th><th>Extra</th></tr></thead>
+      <tbody>
+        ${rows.map(r=>`<tr>
+          <td>${esc(r.name)}</td>
+          <td class="num">${r.totalHours.toFixed(1)}h</td>
+          <td class="num">${r.contracted? r.contracted.toFixed(1)+'h':'—'}</td>
+          <td class="num ${r.extra>0?'extra':(r.under>0?'under':'')}">${r.extra>0? '+'+r.extra.toFixed(1)+'h' : (r.under>0? '−'+r.under.toFixed(1)+'h sotto':'in linea')}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+/* ============================= TURNI: stazioni ============================= */
+function renderStations(){
+  const el = document.getElementById('station-list');
+  if(!state.stations.length){ el.innerHTML = `<div class="empty">Nessuna stazione ancora.</div>`; return; }
+  el.innerHTML = state.stations.map(st=>`
+    <div class="staff-card">
+      <div style="font-weight:600;">${esc(st.name)}</div>
+      <button class="btn ghost small" data-del="${st.id}" style="color:var(--alert);">Elimina</button>
+    </div>`).join('');
+  el.querySelectorAll('[data-del]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const id = b.dataset.del;
+      state.stations = state.stations.filter(s=>s.id!==id);
+      Object.values(state.staffingNeeds).forEach(list=>{ const i=list.findIndex(n=>n.stationId===id); if(i>=0) list.splice(i,1); });
+      state.staff.forEach(s=>{ s.stations = (s.stations||[]).filter(x=>x!==id); });
+      save('stations'); save('staffingNeeds'); save('staff');
+      renderStations(); toast('Stazione eliminata');
+    });
+  });
+}
+document.getElementById('station-add-btn').addEventListener('click', ()=>{
+  const inp = document.getElementById('station-name-input');
+  const name = inp.value.trim();
+  if(!name){ toast('Serve un nome'); return; }
+  state.stations.push({id:uid(), name});
+  save('stations'); inp.value=''; renderStations(); toast('Stazione aggiunta');
+});
+
+/* ============================= TURNI: fabbisogno per turno/stazione ============================= */
+function renderNeeds(){
+  const el = document.getElementById('needs-panel');
+  if(!state.stations.length){ el.innerHTML = `<div class="empty">Crea prima le stazioni.</div>`; return; }
+  el.innerHTML = SERVICES.map(sv=>{
+    const rows = state.staffingNeeds[sv]||[];
+    return `
+    <div class="panel">
+      <h3>${SERVICE_LABELS[sv]}</h3>
+      <div id="needs-rows-${sv}">
+        ${rows.map((r,i)=>`
+          <div class="ing-row" data-i="${i}" style="grid-template-columns:2fr 1fr auto;">
+            <select class="need-station" data-sv="${sv}" data-i="${i}">
+              ${state.stations.map(st=>`<option value="${st.id}" ${r.stationId===st.id?'selected':''}>${esc(st.name)}</option>`).join('')}
+            </select>
+            <input type="number" class="need-count" data-sv="${sv}" data-i="${i}" value="${r.count}" min="0">
+            <button type="button" class="need-rm" data-sv="${sv}" data-i="${i}">✕</button>
+          </div>`).join('')}
+      </div>
+      <button class="btn ghost small" data-addneed="${sv}" type="button" style="margin-top:4px;">+ Riga</button>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-addneed]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      state.staffingNeeds[b.dataset.addneed].push({stationId: state.stations[0].id, count:1});
+      save('staffingNeeds'); renderNeeds();
+    });
+  });
+  el.querySelectorAll('.need-station').forEach(sel=>{
+    sel.addEventListener('change', ()=>{ state.staffingNeeds[sel.dataset.sv][sel.dataset.i].stationId = sel.value; save('staffingNeeds'); });
+  });
+  el.querySelectorAll('.need-count').forEach(inp=>{
+    inp.addEventListener('input', ()=>{ state.staffingNeeds[inp.dataset.sv][inp.dataset.i].count = parseInt(inp.value)||0; save('staffingNeeds'); });
+  });
+  el.querySelectorAll('.need-rm').forEach(b=>{
+    b.addEventListener('click', ()=>{ state.staffingNeeds[b.dataset.sv].splice(parseInt(b.dataset.i),1); save('staffingNeeds'); renderNeeds(); });
+  });
+}
+
+/* ============================= TURNI: quote settimanali per persona ============================= */
+const QUOTA_CODES = ['C','P','S','SP','R'];
+function renderQuotas(){
+  const el = document.getElementById('quota-panel');
+  if(!state.staff.length){ el.innerHTML = `<div class="empty">Aggiungi prima persone alla brigata.</div>`; return; }
+  el.innerHTML = state.staff.map(s=>{
+    const quota = s.weeklyQuota||[];
+    const total = quota.reduce((sum,g)=>sum+(parseInt(g.count)||0),0);
+    return `
+    <div class="panel">
+      <h3>${esc(s.name)} <span class="small-note" style="display:inline;">— totale ${total}/7</span></h3>
+      <label>Stazioni qualificate</label>
+      <div class="chip-toggle staff-station-chips" data-staff="${s.id}">
+        ${state.stations.map(st=>`<button type="button" data-st="${st.id}" class="${(s.stations||[]).includes(st.id)?'on':''}">${esc(st.name)}</button>`).join('') || '<span class="small-note">Nessuna stazione creata</span>'}
+      </div>
+      <label>Gruppi di turni</label>
+      <div id="quota-groups-${s.id}">
+        ${quota.map((g,i)=>`
+          <div class="panel" style="background:var(--bg-elev2);padding:10px;">
+            <div class="grid2">
+              <input type="number" class="q-count" data-staff="${s.id}" data-i="${i}" value="${g.count}" min="0" placeholder="n. turni">
+              <button type="button" class="q-rm" data-staff="${s.id}" data-i="${i}">✕ Rimuovi gruppo</button>
+            </div>
+            <div class="chip-toggle q-codes" data-staff="${s.id}" data-i="${i}">
+              ${QUOTA_CODES.map(c=>`<button type="button" data-c="${c}" class="${(g.codes||[]).includes(c)?'on':''}">${c}</button>`).join('')}
+            </div>
+            <p class="small-note" style="margin-top:4px;">Se selezioni più codici (es. P e S), ad ogni turno di questo gruppo verrà scelto casualmente uno dei due.</p>
+          </div>`).join('')}
+      </div>
+      <button class="btn ghost small" data-addgroup="${s.id}" type="button" style="margin-top:6px;">+ Gruppo di turni</button>
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.staff-station-chips button').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const staffId = b.closest('.staff-station-chips').dataset.staff;
+      const s = state.staff.find(x=>x.id===staffId);
+      s.stations = s.stations||[];
+      const stId = b.dataset.st;
+      if(s.stations.includes(stId)) s.stations = s.stations.filter(x=>x!==stId); else s.stations.push(stId);
+      save('staff'); b.classList.toggle('on');
+    });
+  });
+  el.querySelectorAll('[data-addgroup]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const s = state.staff.find(x=>x.id===b.dataset.addgroup);
+      s.weeklyQuota = s.weeklyQuota||[]; s.weeklyQuota.push({count:1, codes:['R']});
+      save('staff'); renderQuotas();
+    });
+  });
+  el.querySelectorAll('.q-count').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const s = state.staff.find(x=>x.id===inp.dataset.staff);
+      s.weeklyQuota[inp.dataset.i].count = parseInt(inp.value)||0;
+      save('staff');
+    });
+  });
+  el.querySelectorAll('.q-rm').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const s = state.staff.find(x=>x.id===b.dataset.staff);
+      s.weeklyQuota.splice(parseInt(b.dataset.i),1);
+      save('staff'); renderQuotas();
+    });
+  });
+  el.querySelectorAll('.q-codes button').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const group = b.closest('.q-codes');
+      const s = state.staff.find(x=>x.id===group.dataset.staff);
+      const g = s.weeklyQuota[group.dataset.i];
+      g.codes = g.codes||[];
+      const c = b.dataset.c;
+      if(g.codes.includes(c)) g.codes = g.codes.filter(x=>x!==c); else g.codes.push(c);
+      save('staff'); b.classList.toggle('on');
+    });
+  });
+}
+
+/* ============================= TURNI: generatore casuale (motore in logic.js, need-driven, testato) ============================= */
+function generateRandomShifts(){
+  if(!state.staff.length){ toast('Aggiungi prima la brigata'); return; }
+  const missingQuota = state.staff.filter(s=> !(s.weeklyQuota&&s.weeklyQuota.length));
+  if(missingQuota.length){ toast('Imposta prima le quote per: '+missingQuota.map(s=>s.name).join(', ')); return; }
+  const unqualified = state.staff.filter(s=> !(s.stations&&s.stations.length));
+  if(unqualified.length){ toast('Attenzione: senza stazioni assegnate, '+unqualified.map(s=>s.name).join(', ')+' non potranno coprire nessun fabbisogno'); }
+
+  const { newShifts, shortfalls, extras } = computeShifts(state.staff, state.staffingNeeds);
+  state.shifts = newShifts;
+  save('shifts');
+  renderTurni(); renderOreExtra(); renderDashboard();
+
+  const logEl = document.getElementById('generate-log');
+  let html = '';
+  if(extras.length){
+    const byPerson = {};
+    extras.forEach(ex=>{ byPerson[ex.staffName] = (byPerson[ex.staffName]||0)+1; });
+    html += `<div class="alert-box">Il fabbisogno impostato supera le quote della brigata: ${extras.length} turni EXTRA (oltre quota) sono stati assegnati per coprire comunque le postazioni — ` +
+      Object.entries(byPerson).map(([name,n])=>`${esc(name)} (+${n})`).join(', ') +
+      `. Sono segnati con "extra" nella griglia qui sotto.</div>`;
+  }
+  if(shortfalls.length){
+    const byDay = {};
+    shortfalls.forEach(sf=>{
+      const st = state.stations.find(x=>x.id===sf.stationId);
+      const key = sf.day;
+      byDay[key] = byDay[key] || [];
+      byDay[key].push(`${SERVICE_LABELS[sf.service]} · ${st?st.name:'—'} (mancano ${sf.missing})`);
+    });
+    html += `<div class="alert-box">⚠ Anche assegnando turni extra, restano postazioni scoperte perché nessun qualificato è libero quel giorno:<br>` +
+      Object.entries(byDay).map(([day,lines])=>`<b>${day}</b>: ${lines.join(' · ')}`).join('<br>') +
+      `</div><p class="small-note">Per risolvere: aggiungi personale qualificato per quella stazione, o abbassa il fabbisogno richiesto.</p>`;
+  }
+  if(!extras.length && !shortfalls.length){
+    html = `<div class="ok-box">✓ Fabbisogno coperto per tutti i servizi, tutti i giorni, senza bisogno di turni extra.</div>`;
+  }
+  logEl.innerHTML = html;
+  toast(shortfalls.length ? 'Turni generati — alcune postazioni restano scoperte, vedi dettagli' : (extras.length ? 'Turni generati — con alcuni turni extra' : 'Turni generati — fabbisogno coperto'));
+}
+document.getElementById('btn-generate-shifts').addEventListener('click', generateRandomShifts);
+
+/* ============================= BENESSERE ============================= */
+function renderWbStaffOptions(){
+  const sel = document.getElementById('wb-staff');
+  sel.innerHTML = state.staff.length ? state.staff.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('') : `<option value="">Aggiungi prima la brigata</option>`;
+  document.getElementById('wb-date').valueAsDate = new Date();
+}
+document.getElementById('wb-add').addEventListener('click', ()=>{
+  const staffId = document.getElementById('wb-staff').value;
+  const date = document.getElementById('wb-date').value;
+  const ore = parseFloat(document.getElementById('wb-ore').value);
+  if(!staffId || !date || !ore){ toast('Compila tutti i campi'); return; }
+  state.wellbeing.push({id:uid(), staffId, date, ore});
+  save('wellbeing');
+  document.getElementById('wb-ore').value='';
+  renderWbSummary(); renderWbTips();
+  toast('Ore registrate');
+});
+function weekBounds(d=new Date()){
+  const day = (d.getDay()+6)%7;
+  const monday = new Date(d); monday.setDate(d.getDate()-day); monday.setHours(0,0,0,0);
+  const sunday = new Date(monday); sunday.setDate(monday.getDate()+6); sunday.setHours(23,59,59,999);
+  return [monday, sunday];
+}
+function renderWbSummary(){
+  const el = document.getElementById('wb-summary');
+  const [mon,sun] = weekBounds();
+  const byStaff = {};
+  state.wellbeing.forEach(w=>{ const dt = new Date(w.date); if(dt>=mon && dt<=sun){ byStaff[w.staffId] = (byStaff[w.staffId]||0) + parseFloat(w.ore); } });
+  if(!Object.keys(byStaff).length){ el.innerHTML = `<div class="empty">Nessuna ora registrata questa settimana.</div>`; return; }
+  el.innerHTML = Object.entries(byStaff).map(([id,tot])=>{
+    const name = (state.staff.find(s=>s.id===id)||{}).name || '—';
+    const over = tot>48;
+    return `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;"><span>${esc(name)}</span><span style="font-family:var(--font-mono);color:${over?'var(--alert)':'var(--sage)'};">${tot.toFixed(1)}h ${over?'⚠':'✓'}</span></div>`;
+  }).join('');
+}
+function renderWbTips(){
+  const tips = [
+    "La direttiva UE sull'orario di lavoro indica 48h settimanali come soglia massima media — usala come riferimento, non come obiettivo.",
+    "Un giorno di riposo consecutivo dopo un servizio doppio pesante aiuta il recupero più di due giorni sparsi.",
+    "Ruota chi apre e chi chiude: chi fa sempre il turno più lungo si esaurisce prima, anche se non lo dice.",
+    "Un briefing di 5 minuti prima del servizio riduce lo stress operativo più di qualunque software.",
+  ];
+  document.getElementById('wb-tips').innerHTML = tips.map(t=>`— ${t}`).join('<br><br>');
+}
+
+/* ============================= KNOWLEDGE BASE ============================= */
+function renderKB(){
+  const el = document.getElementById('kb-list');
+  if(!state.knowledge.length){ el.innerHTML = `<div class="empty">Base di conoscenza vuota. Aggiungi ricette o appunti sopra.</div>`; return; }
+  el.innerHTML = state.knowledge.map(k=>`<div class="kb-item"><span class="t">${esc(k.title)}</span><button class="rm" data-id="${k.id}">✕</button></div>`).join('');
+  el.querySelectorAll('.rm').forEach(b=> b.addEventListener('click', ()=>{ state.knowledge = state.knowledge.filter(k=>k.id!==b.dataset.id); save('knowledge'); renderKB(); toast('Nota rimossa'); }));
+}
+document.getElementById('kb-add').addEventListener('click', async ()=>{
+  const title = document.getElementById('kb-title').value.trim();
+  const text = document.getElementById('kb-text').value.trim();
+  const fileInput = document.getElementById('kb-file');
+  let content = text;
+  if(fileInput.files[0]){ content = await fileInput.files[0].text(); }
+  if(!content){ toast('Aggiungi del testo o un file'); return; }
+  state.knowledge.push({id:uid(), title: title || 'Nota senza titolo', content, addedAt: new Date().toISOString()});
+  save('knowledge');
+  document.getElementById('kb-title').value=''; document.getElementById('kb-text').value=''; fileInput.value='';
+  renderKB(); toast('Aggiunto alla base di conoscenza');
+});
+
+/* ============================= CHAT / AI AGENT ============================= */
+function renderChat(){
+  const log = document.getElementById('chat-log');
+  if(!state.chatHistory.length){
+    log.innerHTML = `<div class="msg ai">Ciao chef. Sono qui per pensare i piatti con te, rivedere un menu, o solo confrontarci su un'idea. Se carichi qualche ricetta nella base di conoscenza qui sopra, terrò conto del tuo stile.</div>`;
+    return;
+  }
+  log.innerHTML = state.chatHistory.map(m=>`<div class="msg ${m.role==='user'?'user':'ai'}">${esc(m.content)}</div>`).join('');
+  log.scrollTop = log.scrollHeight;
+}
+function buildSystemPrompt(){
+  let kb = '';
+  if(state.knowledge.length){
+    const recent = state.knowledge.slice(-10);
+    kb = '\n\nBase di conoscenza dello chef (ricette e appunti personali, usali per capire il suo stile e dare consigli coerenti):\n' + recent.map(k=>`### ${k.title}\n${k.content}`).join('\n\n').slice(0, 6000);
+  }
+  const dishSummary = state.recipes.length ? '\n\nPiatti attuali in ricettario: ' + state.recipes.map(r=>r.name).join(', ') : '';
+  return `Sei il sous-chef personale e assistente di fiducia di uno chef professionista. Parli italiano, in modo diretto, concreto e da collega di cucina — non da assistente generico. Aiuti a: ideare nuovi piatti, bilanciare menu, valutare food cost, gestire la brigata e i turni, e a prenderti cura del benessere dello chef. Dai consigli pratici, con quantità e tecniche quando utile, e fai domande solo se davvero necessario per procedere.${kb}${dishSummary}`;
+}
+async function sendChat(){
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if(!text) return;
+  state.chatHistory.push({role:'user', content:text});
+  save('chatHistory');
+  input.value='';
+  renderChat();
+  document.getElementById('chat-typing').style.visibility='visible';
+  try{
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, system: buildSystemPrompt(),
+        messages: state.chatHistory.map(m=>({role:m.role, content:m.content})) })
+    });
+    const data = await response.json();
+    const textBlocks = (data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
+    state.chatHistory.push({role:'assistant', content: textBlocks || 'Non sono riuscito a rispondere, riprova.'});
+  }catch(e){
+    state.chatHistory.push({role:'assistant', content:'C\'è stato un problema di connessione. Riprova tra poco.'});
+  }
+  document.getElementById('chat-typing').style.visibility='hidden';
+  save('chatHistory');
+  renderChat();
+}
+document.getElementById('chat-send').addEventListener('click', sendChat);
+document.getElementById('chat-input').addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendChat(); } });
+
+/* ============================= BACKUP ============================= */
+document.getElementById('btn-export').addEventListener('click', ()=>{
+  const backup = {};
+  STORE_KEYS.forEach(k=> backup[k]=state[k]);
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,10);
+  a.href = url; a.download = `comanda-backup-${stamp}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Backup scaricato');
+});
+
+document.getElementById('import-file-input').addEventListener('change', async (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  try{
+    const text = await file.text();
+    const backup = JSON.parse(text);
+    for(const k of STORE_KEYS){
+      if(backup[k] !== undefined){ state[k] = backup[k]; await save(k); }
+    }
+    migrateData();
+    renderDashboard();
+    toast('Backup importato — dati ripristinati');
+  }catch(err){
+    toast('File di backup non valido');
+  }
+  e.target.value = '';
+});
+
+/* ============================= INIT ============================= */
+(async function init(){
+  if(IS_STAGING) document.getElementById('staging-badge').style.display = 'inline-block';
+  await loadAll();
+  initTabs();
+})();
+</script>
+</body>
+</html>

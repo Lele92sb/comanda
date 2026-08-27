@@ -1,0 +1,68 @@
+name: Test e Rilascio
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main, staging]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Esegui i test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm test
+
+  build-site:
+    name: Prepara il sito (produzione in root, staging in /staging/)
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout main (produzione)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main-checkout
+      - name: Checkout staging (se esiste)
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+          path: staging-checkout
+        continue-on-error: true
+      - name: Compone la cartella del sito
+        run: |
+          mkdir -p site
+          cp -r main-checkout/app/* site/
+          if [ -d staging-checkout/app ]; then
+            mkdir -p site/staging
+            cp -r staging-checkout/app/* site/staging/
+          fi
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    name: Pubblica su GitHub Pages
+    runs-on: ubuntu-latest
+    needs: build-site
+    if: github.event_name == 'push'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
