@@ -27,8 +27,8 @@
       SUPABASE_PUBLIC_KEY: '',
     },
     test: {
-      SUPABASE_URL: '',
-      SUPABASE_PUBLIC_KEY: '',
+      SUPABASE_URL: 'https://wkgmrklhxarnmtjysnws.supabase.co',
+      SUPABASE_PUBLIC_KEY: 'sb_publishable_0X9X9YsH5PKfrq_mtXQl7w_j_2oKfjH',
     },
   };
 
