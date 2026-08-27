@@ -1,0 +1,7 @@
+name = "comanda"
+compatibility_date = "2025-11-01"
+
+# La cartella servita come sito. Le funzioni server (/api/*) vengono invece
+# lette da ./functions nella radice del progetto — è la convenzione di
+# Cloudflare Pages, non un'omissione.
+pages_build_output_dir = "app"
