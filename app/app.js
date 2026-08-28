@@ -1,0 +1,2326 @@
+/* ============================= FATTURE FIRMATE .p7m ============================= */
+function binaryStringToUtf8(binStr){
+  const bytes = new Uint8Array(binStr.length);
+  for(let i=0;i<binStr.length;i++) bytes[i] = binStr.charCodeAt(i) & 0xFF;
+  return new TextDecoder('utf-8').decode(bytes);
+}
+function p7mArrayBufferToXmlText(arrayBuffer){
+  try{
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for(let i=0;i<bytes.length;i++) binary += String.fromCharCode(bytes[i]);
+    const top = forge.asn1.fromDer(binary);
+    // ContentInfo SEQUENCE [ contentType OID, [0] EXPLICIT { SignedData } ]
+    const signedData = top.value[1].value[0];
+    // SignedData SEQUENCE: version, digestAlgorithms, encapContentInfo, [certificates], [crls], signerInfos
+    const encapContentInfo = signedData.value[2];
+    if(!encapContentInfo || encapContentInfo.value.length<2) return null; // nessun eContent (firma "detached")
+    const eContentWrapper = encapContentInfo.value[1]; // [0] EXPLICIT
+    const octet = eContentWrapper.value[0];
+    let raw;
+    if(!octet.constructed){ raw = octet.value; }
+    else { raw = octet.value.map(v=>v.value).join(''); } // OCTET STRING BER frammentata
+    return binaryStringToUtf8(raw);
+  }catch(e){ return null; }
+}
+
+/* ============================= STATE ============================= */
+const STORE_KEYS = ['ingredients','subrecipes','recipes','menus','staff','shifts','knowledge','chatHistory','wellbeing','suppliers','stations','staffingNeeds','services','shiftTypes'];
+let state = { ingredients:[], subrecipes:[], recipes:[], menus:[], staff:[], shifts:{}, knowledge:[], chatHistory:[], wellbeing:[], suppliers:[], stations:[], staffingNeeds:{}, services:[], shiftTypes:[] };
+
+const ALLERGENS = ["Glutine","Crostacei","Uova","Pesce","Arachidi","Soia","Latte","Frutta a guscio","Sedano","Senape","Sesamo","Solfiti","Lupini","Molluschi"];
+// DAYS, SPECIAL_CODES, buildShiftConfig, computeShifts... arrivano da logic.js
+// (condiviso con la test suite).
+const { DAYS, SPECIAL_CODES, REST_CODE, DEFAULT_SERVICES, DEFAULT_SHIFT_TYPES,
+        buildShiftConfig, shuffleArray, buildStaffPools, computeShifts,
+        isoDate, parseISO, startOfWeek, weekDates, monthDates, dayName, groupByWeek,
+        computeShiftsForDates } = window;
+
+// Periodo mostrato nella pianificazione: una settimana o un mese, ancorato a una
+// data. I turni sono salvati per data, quindi spostarsi nel tempo non perde nulla.
+let periodMode = 'settimana';
+let periodAnchor = new Date();
+function periodDates(){
+  return periodMode === 'mese' ? monthDates(periodAnchor) : weekDates(periodAnchor);
+}
+function periodLabel(){
+  const d = periodDates();
+  if(periodMode === 'mese'){
+    return periodAnchor.toLocaleDateString('it-IT', {month:'long', year:'numeric'});
+  }
+  const fmt = iso => parseISO(iso).toLocaleDateString('it-IT', {day:'numeric', month:'short'});
+  return fmt(d[0]) + ' – ' + fmt(d[6]);
+}
+function shiftPeriod(delta){
+  const d = new Date(periodAnchor);
+  if(periodMode === 'mese') d.setMonth(d.getMonth() + delta);
+  else d.setDate(d.getDate() + 7*delta);
+  periodAnchor = d;
+}
+
+// I servizi e i turni non sono più fissi: ogni cucina ha i suoi. Questa funzione
+// ricalcola le tabelle di consultazione a partire dalla configurazione salvata,
+// e va richiamata ogni volta che servizi o tipi di turno cambiano.
+let SHIFT_CFG = buildShiftConfig(null, null);
+function refreshShiftConfig(){
+  SHIFT_CFG = buildShiftConfig(state.services, state.shiftTypes);
+  return SHIFT_CFG;
+}
+// Scorciatoie leggibili nel resto dell'app. Sono funzioni, non costanti, perché
+// il loro contenuto cambia quando lo chef modifica la configurazione.
+const SERVICES       = () => SHIFT_CFG.serviceIds;
+const SERVICE_LABEL  = id => SHIFT_CFG.serviceLabels[id] || id;
+const TURNO_DEF      = () => SHIFT_CFG.turnoDef;
+const WORKING_CODES  = () => SHIFT_CFG.workingCodes;
+const CODE_LABEL     = code => (SHIFT_CFG.turnoDef[code] || {label: code||'—'}).label;
+const CODE_HOURS     = code => (SHIFT_CFG.turnoDef[code] || {hours:0}).hours || 0;
+
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+// storageGet / storageSet arrivano da cloud.js: a seconda della configurazione
+// parlano con localStorage (modalità locale) o con il database della cucina
+// (modalità cloud). Il resto dell'app non deve sapere quale delle due.
+
+async function loadAll(){
+  for(const k of STORE_KEYS){ const v = await storageGet(k); if(v !== null) state[k] = v; }
+  migrateData();
+}
+async function save(key){
+  const ok = await storageSet(key, state[key]);
+  // Il conflitto si spiega da solo (vedi Cloud.onConflict): non coprirlo.
+  if(!ok && Cloud.lastFailure !== 'conflict'){
+    toast(Cloud.lastFailure === 'readonly'
+      ? 'Sei in sola lettura: modifica non salvata'
+      : 'Salvataggio non riuscito');
+  }
+  return ok;
+}
+
+function migrateData(){
+  // vecchie ricette con schema {ingredients:[{name,qty,unit,cost}], price}
+  state.recipes = (state.recipes||[]).map(r=>{
+    if(r.items) return r;
+    return {
+      id: r.id, name: r.name, category: r.category||'',
+      items: (r.ingredients||[]).map(i=>({kind:'custom', name:i.name, qty:i.qty, unit:i.unit, cost:i.cost})),
+      portionG: '', foodCostTargetPct: 30, priceActual: r.price||'',
+      allergens: r.allergens||[], steps: r.steps||''
+    };
+  });
+  // vecchi turni con array multiplo ['m','p'] -> stringa singola
+  Object.keys(state.shifts||{}).forEach(staffId=>{
+    Object.keys(state.shifts[staffId]||{}).forEach(day=>{
+      const v = state.shifts[staffId][day];
+      if(Array.isArray(v)){
+        const map = {m:'C', p:'P', s:'S'};
+        state.shifts[staffId][day] = { code: v.length>1 ? 'SP' : (map[v[0]]||''), stationId:null };
+      } else if(typeof v === 'string'){
+        state.shifts[staffId][day] = { code: v, stationId:null };
+      }
+    });
+  });
+  state.staff.forEach(s=>{ if(!s.stations) s.stations=[]; if(!s.weeklyQuota) s.weeklyQuota=[]; });
+  // vecchio fabbisogno indicizzato per turno (C/P/S/SP) -> nuovo indicizzato per servizio (colazione/pranzo/cena)
+  if(state.staffingNeeds && (state.staffingNeeds.C || state.staffingNeeds.P || state.staffingNeeds.S || state.staffingNeeds.SP)){
+    const old = state.staffingNeeds;
+    state.staffingNeeds = {
+      colazione: old.C || [],
+      pranzo: [...(old.P||[]), ...(old.SP||[])],
+      cena: [...(old.S||[]), ...(old.SP||[])],
+    };
+  }
+  // I turni erano indicizzati per nome del giorno ("Lun"), quindi esisteva una
+  // sola settimana senza sapere quale. Ora sono indicizzati per data: i dati
+  // esistenti vengono riportati sulla settimana corrente, che è l'unica
+  // interpretazione possibile di una griglia che non porta con sé una data.
+  const settimanaCorrente = weekDates(new Date());
+  Object.keys(state.shifts||{}).forEach(staffId=>{
+    const giorni = state.shifts[staffId] || {};
+    const vecchie = Object.keys(giorni).filter(k=> DAYS.includes(k));
+    if(!vecchie.length) return;
+    vecchie.forEach(nomeGiorno=>{
+      const iso = settimanaCorrente[DAYS.indexOf(nomeGiorno)];
+      giorni[iso] = giorni[nomeGiorno];
+      delete giorni[nomeGiorno];
+    });
+  });
+
+  // Servizi e tipi di turno erano cablati nel codice: chi ha già dati si
+  // ritroverebbe la configurazione vuota, quindi gli si ricrea quella di prima.
+  // Da qui in poi sono modificabili come qualsiasi altro dato della cucina.
+  if(!state.services || !state.services.length){
+    state.services = DEFAULT_SERVICES.map(s=>({...s}));
+  }
+  if(!state.shiftTypes || !state.shiftTypes.length){
+    state.shiftTypes = DEFAULT_SHIFT_TYPES.map(t=>({id:uid(), ...t}));
+  }
+  state.shiftTypes.forEach(t=>{ if(!t.id) t.id = uid(); });
+  refreshShiftConfig();
+
+  if(!state.staffingNeeds) state.staffingNeeds = {};
+  SERVICES().forEach(sv=>{ if(!state.staffingNeeds[sv]) state.staffingNeeds[sv]=[]; });
+}
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._h);
+  toast._h = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+function esc(s){ return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ============================= TABS ============================= */
+const TABS = [
+  {id:'dashboard', label:'Dashboard'},
+  {id:'ricette', label:'Ricettario'},
+  {id:'menu', label:'Menu'},
+  {id:'brigata', label:'Brigata'},
+  {id:'turni', label:'Turni'},
+  {id:'richieste', label:'Richieste'},
+  {id:'assistente', label:'Assistente AI'},
+  {id:'benessere', label:'Benessere'},
+];
+function initTabs(){
+  const nav = document.getElementById('tabs');
+  nav.innerHTML = TABS.map(t=>`<button data-tab="${t.id}">${t.label}</button>`).join('');
+  nav.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>switchTab(b.dataset.tab)));
+  switchTab('dashboard');
+
+  document.getElementById('ricette-subtabs').querySelectorAll('button').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      document.querySelectorAll('#ricette-subtabs button').forEach(x=>x.classList.toggle('active', x===b));
+      document.querySelectorAll('#view-ricette .subview').forEach(v=>v.classList.toggle('active', v.id==='sub-'+b.dataset.sub));
+      if(b.dataset.sub==='ingredienti') renderIngredients();
+      if(b.dataset.sub==='subricette') renderSubrecipes();
+      if(b.dataset.sub==='piatti') renderDishes();
+      if(b.dataset.sub==='fornitori') renderSuppliers();
+    });
+  });
+  document.getElementById('turni-subtabs').querySelectorAll('button').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      document.querySelectorAll('#turni-subtabs button').forEach(x=>x.classList.toggle('active', x===b));
+      document.querySelectorAll('#view-turni .subview').forEach(v=>v.classList.toggle('active', v.id==='turnisub-'+b.dataset.sub));
+      if(b.dataset.sub==='piano'){ renderTurni(); renderOreExtra(); }
+      if(b.dataset.sub==='servizi'){ renderServices(); renderShiftTypes(); renderCopiaConfig(); }
+      if(b.dataset.sub==='stazioni') renderStations();
+      if(b.dataset.sub==='fabbisogno') renderNeeds();
+      if(b.dataset.sub==='quote') renderQuotas();
+    });
+  });
+}
+function switchTab(id){
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===id));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active', v.id==='view-'+id));
+  if(id==='dashboard') renderDashboard();
+  if(id==='ricette'){ renderIngredients(); renderSubrecipes(); renderDishes(); renderSuppliers(); }
+  if(id==='menu') renderMenuList();
+  if(id==='brigata') renderStaffList();
+  if(id==='turni'){ renderTurni(); renderOreExtra(); }
+  if(id==='richieste') renderRichieste();
+  if(id==='assistente') { renderKB(); renderChat(); }
+  if(id==='benessere') { renderWbStaffOptions(); renderWbSummary(); renderWbTips(); }
+}
+
+/* ============================= UNIT / COST ENGINE ============================= */
+// unità "base" possibili per ingredienti e sub-ricette: kg, l, pz
+function subUnitOptions(base){
+  if(base==='kg') return ['g','kg'];
+  if(base==='l') return ['ml','l'];
+  return ['pz'];
+}
+function toBaseQty(qty, unit, base){
+  qty = parseFloat(qty)||0;
+  if(base==='kg') return unit==='g' ? qty/1000 : qty;
+  if(base==='l') return unit==='ml' ? qty/1000 : qty;
+  return qty;
+}
+function ingredientById(id){ return state.ingredients.find(i=>i.id===id); }
+function subrecipeById(id){ return state.subrecipes.find(s=>s.id===id); }
+
+function ingredientEffectiveCost(ing){
+  const yieldFrac = (parseFloat(ing.yieldPct)||100)/100;
+  return yieldFrac>0 ? (parseFloat(ing.price)||0)/yieldFrac : 0;
+}
+function subrecipeCost(sub, depth){
+  depth = depth||0;
+  if(depth>6) return {totalCost:0, costPerUnit:0}; // guardia anti-loop
+  let totalCost = 0;
+  (sub.items||[]).forEach(it=>{ totalCost += itemCost(it, depth+1); });
+  const yieldQty = parseFloat(sub.yieldQty)||0;
+  const costPerUnit = yieldQty>0 ? totalCost/yieldQty : 0;
+  return {totalCost, costPerUnit};
+}
+function subrecipeRawWeightKg(sub){
+  if(sub.yieldUnit!=='kg') return null;
+  let kg = 0; let any=false;
+  (sub.items||[]).forEach(it=>{
+    if(it.kind==='ingredient'){ const ing = ingredientById(it.refId); if(ing && ing.unit==='kg'){ kg += toBaseQty(it.qty, it.unit, 'kg'); any=true; } }
+    if(it.kind==='sub'){ const s2 = subrecipeById(it.refId); if(s2 && s2.yieldUnit==='kg'){ kg += toBaseQty(it.qty, it.unit, 'kg'); any=true; } }
+  });
+  return any ? kg : null;
+}
+function itemCost(item, depth){
+  depth = depth||0;
+  if(item.kind==='custom'){ return (parseFloat(item.qty)||0) * (parseFloat(item.cost)||0); }
+  if(item.kind==='ingredient'){
+    const ing = ingredientById(item.refId); if(!ing) return 0;
+    const qtyBase = toBaseQty(item.qty, item.unit, ing.unit);
+    return qtyBase * ingredientEffectiveCost(ing);
+  }
+  if(item.kind==='sub'){
+    const sub = subrecipeById(item.refId); if(!sub) return 0;
+    const qtyBase = toBaseQty(item.qty, item.unit, sub.yieldUnit);
+    return qtyBase * subrecipeCost(sub, depth).costPerUnit;
+  }
+  return 0;
+}
+function itemLabel(item){
+  if(item.kind==='custom') return item.name;
+  if(item.kind==='ingredient'){ const i=ingredientById(item.refId); return i? i.name : '(ingrediente rimosso)'; }
+  if(item.kind==='sub'){ const s=subrecipeById(item.refId); return s? s.name+' (sub)' : '(sub-ricetta rimossa)'; }
+  return '';
+}
+function dishTotalCost(dish){ return (dish.items||[]).reduce((sum,it)=>sum+itemCost(it),0); }
+
+/* ============================= ITEM ROW PICKER (riusato in sub-ricette e piatti) — con ricerca ============================= */
+let datalistCounter = 0;
+function buildSearchDatalist(excludeSubId){
+  datalistCounter++;
+  const idIng = 'dl-ing-'+datalistCounter, idSub = 'dl-sub-'+datalistCounter;
+  const subs = state.subrecipes.filter(s=>s.id!==excludeSubId);
+  const html = `
+    <datalist id="${idIng}">${state.ingredients.map(i=>`<option value="${esc(i.name)}">`).join('')}</datalist>
+    <datalist id="${idSub}">${subs.map(s=>`<option value="${esc(s.name)}">`).join('')}</datalist>
+  `;
+  return {html, idIng, idSub};
+}
+function renderItemRows(container, items, excludeSubId){
+  const {html: datalistHtml, idIng, idSub} = buildSearchDatalist(excludeSubId);
+  const rowsHtml = items.map((it,i)=>{
+    let unitOptions;
+    if(it.kind==='custom'){ unitOptions = ['g','kg','ml','l','pz','cucchiaio']; }
+    else{
+      const base = it.kind==='ingredient' ? (ingredientById(it.refId)||{}).unit : (subrecipeById(it.refId)||{}).yieldUnit;
+      unitOptions = subUnitOptions(base||'pz');
+    }
+    const cost = itemCost(it);
+    const currentName = it.kind==='custom' ? '' : itemLabel(it).replace(' (sub)','');
+    return `
+    <div class="item-row" data-i="${i}">
+      <select class="it-kind">
+        <option value="custom" ${it.kind==='custom'?'selected':''}>Voce libera</option>
+        <option value="ingredient" ${it.kind==='ingredient'?'selected':''}>Ingrediente</option>
+        <option value="sub" ${it.kind==='sub'?'selected':''}>Sub-ricetta</option>
+      </select>
+      ${it.kind==='custom'
+        ? `<input type="text" class="it-name" placeholder="nome voce" value="${esc(it.name||'')}">`
+        : `<input type="text" class="it-search" list="${it.kind==='ingredient'?idIng:idSub}" placeholder="cerca..." value="${esc(currentName)}">`
+      }
+      <input type="number" step="0.001" class="it-qty" placeholder="qta" value="${it.qty||''}">
+      <select class="it-unit">${unitOptions.map(u=>`<option ${it.unit===u?'selected':''}>${u}</option>`).join('')}</select>
+      <button type="button" class="rm" data-rm="${i}">✕</button>
+      ${it.kind==='custom' ? `<input type="number" step="0.01" class="it-cost item-row-cost" placeholder="€/unità" value="${it.cost||''}" style="grid-column:1/-1;">` : `<div class="item-row-cost">costo riga: € ${cost.toFixed(3)}</div>`}
+    </div>`;
+  }).join('');
+  container.innerHTML = datalistHtml + rowsHtml;
+
+  container.querySelectorAll('.rm').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ items.splice(parseInt(btn.dataset.rm),1); renderItemRows(container, items, excludeSubId); });
+  });
+  container.querySelectorAll('.it-kind').forEach((sel,i)=>{
+    sel.addEventListener('change', ()=>{
+      const kind = sel.value;
+      if(kind==='custom'){ items[i] = {kind:'custom', name:'', qty:items[i].qty||'', unit:items[i].unit||'g', cost:''}; }
+      else{ items[i] = {kind, refId:null, qty:items[i].qty||'', unit:'pz'}; }
+      renderItemRows(container, items, excludeSubId);
+    });
+  });
+  container.querySelectorAll('.it-search').forEach((inp,i)=>{
+    inp.addEventListener('change', ()=>{
+      const it = items[i];
+      const list = it.kind==='ingredient' ? state.ingredients : state.subrecipes.filter(s=>s.id!==excludeSubId);
+      const match = list.find(x=>x.name.toLowerCase()===inp.value.trim().toLowerCase());
+      if(match){
+        const base = it.kind==='ingredient' ? match.unit : match.yieldUnit;
+        items[i] = {kind:it.kind, refId:match.id, qty:it.qty||'', unit: subUnitOptions(base||'pz')[0]};
+      } else {
+        items[i].refId = null;
+        toast('Nessuna corrispondenza esatta — seleziona dalla lista');
+      }
+      renderItemRows(container, items, excludeSubId);
+    });
+  });
+}
+function readItemRows(container, items){
+  container.querySelectorAll('.item-row').forEach((row,i)=>{
+    items[i].qty = row.querySelector('.it-qty').value;
+    items[i].unit = row.querySelector('.it-unit').value;
+    if(items[i].kind==='custom'){
+      items[i].name = row.querySelector('.it-name').value.trim();
+      items[i].cost = row.querySelector('.it-cost').value;
+    }
+  });
+}
+
+/* ============================= DASHBOARD ============================= */
+function renderDashboard(){
+  const alertsEl = document.getElementById('dash-alerts');
+  const statsEl = document.getElementById('dash-stats');
+  const shiftsEl = document.getElementById('dash-shifts');
+
+  const highFc = state.recipes.filter(d=>{
+    const cost = dishTotalCost(d); const price = parseFloat(d.priceActual)||0;
+    if(!price) return false;
+    return (cost/price*100) > 35;
+  });
+  let alerts = '';
+  if(highFc.length) alerts += `<div class="alert-box">⚠ ${highFc.length} piatt${highFc.length>1?'i hanno':'o ha'} un food cost reale sopra il 35%: ${highFc.map(r=>r.name).join(', ')}.</div>`;
+  const overworked = weeklyExtraFromTurni().filter(o=>o.extra>0);
+  if(overworked.length) alerts += `<div class="alert-box">⚠ Questa settimana, secondo il planning turni, ${overworked.map(o=>o.name).join(', ')} ${overworked.length>1?'fanno':'fa'} ore extra rispetto al contratto.</div>`;
+  if(!alerts) alerts = `<div class="ok-box">✓ Nessun alert. Cucina in equilibrio.</div>`;
+  alertsEl.innerHTML = alerts;
+
+  statsEl.innerHTML = `
+    <div class="stat"><div class="n">${state.recipes.length}</div><div class="l">Piatti in ricettario</div></div>
+    <div class="stat"><div class="n">${state.subrecipes.length}</div><div class="l">Sub-ricette</div></div>
+    <div class="stat"><div class="n">${state.staff.length}</div><div class="l">Persone in brigata</div></div>
+    <div class="stat"><div class="n">${state.menus.length}</div><div class="l">Menu attivi</div></div>
+  `;
+
+  const todayKey = isoDate(new Date());
+  const todayShifts = state.staff.map(s=>{
+    const cell = (state.shifts[s.id]||{})[todayKey];
+    return {name:s.name, code: cell? cell.code : '', stationId: cell? cell.stationId : null};
+  }).filter(x=>x.code);
+  shiftsEl.innerHTML = todayShifts.length
+    ? todayShifts.map(t=>{
+        const st = state.stations.find(s=>s.id===t.stationId);
+        return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;"><span>${esc(t.name)}</span><span style="font-family:var(--font-mono);color:var(--copper-light);">${esc(CODE_LABEL(t.code))}${st?' · '+esc(st.name):''}</span></div>`;
+      }).join('')
+    : `<div class="empty">Nessun turno assegnato per oggi (${parseISO(todayKey).toLocaleDateString('it-IT',{weekday:'long', day:'numeric', month:'long'})})</div>`;
+}
+
+/* ============================= INGREDIENTI ============================= */
+function renderIngredients(){
+  const el = document.getElementById('ing-list');
+  if(!state.ingredients.length){ el.innerHTML = `<div class="empty">Nessun ingrediente in anagrafica. Aggiungi il primo.</div>`; return; }
+  el.innerHTML = state.ingredients.map(ing=>{
+    const eff = ingredientEffectiveCost(ing);
+    const incomplete = !parseFloat(ing.price);
+    return `
+    <div class="staff-card">
+      <div>
+        <div style="font-weight:600;">${esc(ing.name)} ${incomplete?'<span class="tag" style="background:var(--alert-soft);color:var(--alert);">prezzo mancante</span>':''}${ing.yieldEstimated?'<span class="tag" style="background:var(--sage-soft);color:var(--sage);">resa stimata AI</span>':''}</div>
+        <div class="contact">${esc(ing.supplier||'—')} · € ${(parseFloat(ing.price)||0).toFixed(3)}/${esc(ing.unit)} acquisto · resa ${ing.yieldPct||100}% · scarto ${(100-(parseFloat(ing.yieldPct)||100)).toFixed(0)}%</div>
+        <div class="contact" style="color:var(--copper-light);">costo effettivo: € ${eff.toFixed(3)}/${esc(ing.unit)}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button class="btn ghost small" data-edit="${ing.id}">Modifica</button>
+        <button class="btn ghost small" data-del="${ing.id}" style="color:var(--alert);">Elimina</button>
+      </div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=> openIngForm(state.ingredients.find(i=>i.id===b.dataset.edit))));
+  el.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', ()=>{
+    state.ingredients = state.ingredients.filter(i=>i.id!==b.dataset.del);
+    save('ingredients'); renderIngredients(); toast('Ingrediente eliminato');
+  }));
+}
+function openIngForm(existing){
+  const holder = document.getElementById('ing-form-holder');
+  const ing = existing || {id:uid(), name:'', supplier:'', unit:'kg', price:'', yieldPct:100};
+  holder.innerHTML = `
+    <div class="panel">
+      <h3>${existing?'Modifica ingrediente':'Nuovo ingrediente'}</h3>
+      <label>Nome ingrediente</label>
+      <input type="text" id="i-name" value="${esc(ing.name)}" placeholder="es. Asparagi extra">
+      <label>Fornitore</label>
+      <select id="i-supplier">
+        <option value="">— nessuno —</option>
+        ${state.suppliers.map(s=>`<option value="${esc(s.name)}" ${ing.supplier===s.name?'selected':''}>${esc(s.name)}</option>`).join('')}
+        <option value="__new__" ${ing.supplier && !state.suppliers.find(s=>s.name===ing.supplier) ? 'selected':''}>+ Nuovo fornitore…</option>
+      </select>
+      <input type="text" id="i-supplier-new" placeholder="Nome nuovo fornitore" value="${ing.supplier && !state.suppliers.find(s=>s.name===ing.supplier) ? esc(ing.supplier) : ''}" style="margin-top:6px;display:${ing.supplier && !state.suppliers.find(s=>s.name===ing.supplier) ? 'block':'none'};">
+      <div class="grid3">
+        <div><label>Unità d'acquisto</label>
+          <select id="i-unit"><option value="kg" ${ing.unit==='kg'?'selected':''}>kg</option><option value="l" ${ing.unit==='l'?'selected':''}>l</option><option value="pz" ${ing.unit==='pz'?'selected':''}>pz</option></select>
+        </div>
+        <div><label>Prezzo acquisto (€/unità)</label><input type="number" step="0.001" id="i-price" value="${ing.price}"></div>
+        <div><label>Resa / parte edibile (%)</label><input type="number" step="1" min="1" max="100" id="i-yield" value="${ing.yieldPct}"></div>
+      </div>
+      <p class="small-note" id="i-preview">Costo effettivo: —</p>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn" id="i-save">Salva</button>
+        <button class="btn ghost" id="i-cancel">Annulla</button>
+      </div>
+    </div>
+  `;
+  function updatePreview(){
+    const price = parseFloat(document.getElementById('i-price').value)||0;
+    const yieldPct = parseFloat(document.getElementById('i-yield').value)||100;
+    const eff = yieldPct>0 ? price/(yieldPct/100) : 0;
+    document.getElementById('i-preview').textContent = `Costo effettivo: € ${eff.toFixed(3)} per ${document.getElementById('i-unit').value} (scarto ${(100-yieldPct).toFixed(0)}%)`;
+  }
+  ['i-price','i-yield','i-unit'].forEach(id=> document.getElementById(id).addEventListener('input', updatePreview));
+  updatePreview();
+  document.getElementById('i-supplier').addEventListener('change', (e)=>{
+    document.getElementById('i-supplier-new').style.display = e.target.value==='__new__' ? 'block' : 'none';
+  });
+  document.getElementById('i-cancel').addEventListener('click', ()=> holder.innerHTML='');
+  document.getElementById('i-save').addEventListener('click', ()=>{
+    const name = document.getElementById('i-name').value.trim();
+    if(!name){ toast('Serve il nome'); return; }
+    let supplierName = document.getElementById('i-supplier').value;
+    if(supplierName==='__new__'){
+      supplierName = document.getElementById('i-supplier-new').value.trim();
+      if(supplierName && !state.suppliers.find(s=>s.name.toLowerCase()===supplierName.toLowerCase())){
+        state.suppliers.push({id:uid(), name:supplierName, piva:'', phone:'', email:'', address:''});
+        save('suppliers');
+      }
+    }
+    const newIng = { id:ing.id, name, supplier:supplierName,
+      unit:document.getElementById('i-unit').value, price:document.getElementById('i-price').value,
+      yieldPct:document.getElementById('i-yield').value };
+    const idx = state.ingredients.findIndex(x=>x.id===ing.id);
+    if(idx>=0) state.ingredients[idx]=newIng; else state.ingredients.push(newIng);
+    save('ingredients'); holder.innerHTML=''; renderIngredients(); toast('Ingrediente salvato');
+  });
+}
+document.getElementById('btn-new-ing').addEventListener('click', ()=> openIngForm(null));
+
+/* ============================= FORNITORI ============================= */
+function renderSuppliers(){
+  const el = document.getElementById('supplier-list');
+  if(!el) return;
+  if(!state.suppliers.length){ el.innerHTML = `<div class="empty">Nessun fornitore ancora. Si creano da soli importando le fatture, oppure aggiungili qui.</div>`; return; }
+  el.innerHTML = state.suppliers.map(s=>`
+    <div class="staff-card">
+      <div>
+        <div style="font-weight:600;">${esc(s.name)}</div>
+        <div class="contact">${s.piva? 'P.IVA '+esc(s.piva):''}</div>
+        <div class="contact">${s.phone? '📞 '+esc(s.phone):''}${s.phone&&s.email?' · ':''}${s.email? '✉ '+esc(s.email):''}</div>
+        <div class="contact">${esc(s.address||'')}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button class="btn ghost small" data-edit="${s.id}">Modifica</button>
+        <button class="btn ghost small" data-del="${s.id}" style="color:var(--alert);">Elimina</button>
+      </div>
+    </div>`).join('');
+  el.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=> openSupplierForm(state.suppliers.find(s=>s.id===b.dataset.edit))));
+  el.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', ()=>{
+    state.suppliers = state.suppliers.filter(s=>s.id!==b.dataset.del); save('suppliers'); renderSuppliers(); toast('Fornitore eliminato');
+  }));
+}
+function openSupplierForm(existing){
+  const holder = document.getElementById('supplier-form-holder');
+  const s = existing || {id:uid(), name:'', piva:'', phone:'', email:'', address:''};
+  holder.innerHTML = `
+    <div class="panel">
+      <h3>${existing?'Modifica fornitore':'Nuovo fornitore'}</h3>
+      <label>Nome / Ragione sociale</label>
+      <input type="text" id="sup-name" value="${esc(s.name)}">
+      <div class="grid2">
+        <div><label>Partita IVA</label><input type="text" id="sup-piva" value="${esc(s.piva)}"></div>
+        <div><label>Telefono</label><input type="tel" id="sup-phone" value="${esc(s.phone)}"></div>
+      </div>
+      <label>Email</label><input type="email" id="sup-email" value="${esc(s.email)}">
+      <label>Indirizzo</label><input type="text" id="sup-address" value="${esc(s.address)}">
+      <div style="display:flex;gap:10px;margin-top:14px;">
+        <button class="btn" id="sup-save">Salva</button>
+        <button class="btn ghost" id="sup-cancel">Annulla</button>
+      </div>
+    </div>`;
+  document.getElementById('sup-cancel').addEventListener('click', ()=> holder.innerHTML='');
+  document.getElementById('sup-save').addEventListener('click', ()=>{
+    const name = document.getElementById('sup-name').value.trim();
+    if(!name){ toast('Serve il nome del fornitore'); return; }
+    const newSup = { id:s.id, name, piva:document.getElementById('sup-piva').value.trim(),
+      phone:document.getElementById('sup-phone').value.trim(), email:document.getElementById('sup-email').value.trim(),
+      address:document.getElementById('sup-address').value.trim() };
+    const idx = state.suppliers.findIndex(x=>x.id===s.id);
+    if(idx>=0) state.suppliers[idx]=newSup; else state.suppliers.push(newSup);
+    save('suppliers'); holder.innerHTML=''; renderSuppliers(); toast('Fornitore salvato');
+  });
+}
+document.getElementById('btn-new-supplier').addEventListener('click', ()=> openSupplierForm(null));
+
+/* ============================= IMPORT FATTURE ELETTRONICHE (FatturaPA XML) ============================= */
+function xmlText(root, tag){
+  const el = root.getElementsByTagName(tag)[0];
+  return el ? el.textContent.trim() : '';
+}
+function mapInvoiceUnit(um){
+  const u = (um||'').toUpperCase();
+  if(u.indexOf('KG')>=0) return 'kg';
+  if(u.indexOf('LT')>=0 || u==='L') return 'l';
+  return 'pz';
+}
+function parseFatturaXML(text){
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if(doc.getElementsByTagName('parsererror').length) return null;
+  const cedente = doc.getElementsByTagName('CedentePrestatore')[0];
+  if(!cedente) return null;
+  const anagrafica = cedente.getElementsByTagName('Anagrafica')[0];
+  const supplierName = anagrafica ? (xmlText(anagrafica,'Denominazione') || (xmlText(anagrafica,'Nome')+' '+xmlText(anagrafica,'Cognome')).trim()) : '';
+  const idFiscale = cedente.getElementsByTagName('IdFiscaleIVA')[0];
+  const piva = idFiscale ? xmlText(idFiscale,'IdCodice') : '';
+  const contatti = cedente.getElementsByTagName('Contatti')[0];
+  const phone = contatti ? xmlText(contatti,'Telefono') : '';
+  const email = contatti ? xmlText(contatti,'Email') : '';
+  const sede = cedente.getElementsByTagName('Sede')[0];
+  const address = sede ? [xmlText(sede,'Indirizzo'), xmlText(sede,'CAP'), xmlText(sede,'Comune'), xmlText(sede,'Provincia')].filter(Boolean).join(' - ') : '';
+
+  const lines = [];
+  Array.from(doc.getElementsByTagName('DettaglioLinee')).forEach(line=>{
+    const descrizione = xmlText(line,'Descrizione');
+    const qty = parseFloat(xmlText(line,'Quantita')) || 1;
+    const um = xmlText(line,'UnitaMisura');
+    const prezzoUnitario = parseFloat(xmlText(line,'PrezzoUnitario')) || 0;
+    if(descrizione) lines.push({descrizione, qty, um, prezzoUnitario});
+  });
+  return { supplier:{name:supplierName, piva, phone, email, address}, lines };
+}
+document.getElementById('invoice-import-btn').addEventListener('click', async ()=>{
+  const input = document.getElementById('invoice-input');
+  const files = Array.from(input.files||[]);
+  if(!files.length){ toast('Seleziona almeno un file XML'); return; }
+  let newSuppliers=0, newIngredients=0, updatedIngredients=0, skipped=0;
+  const logLines = [];
+  const createdIngredients = [];
+  for(const file of files){
+    let text;
+    const isP7m = /\.p7m$/i.test(file.name);
+    try{
+      if(isP7m){
+        const buf = await file.arrayBuffer();
+        text = p7mArrayBufferToXmlText(buf);
+        if(!text){ skipped++; logLines.push(`⚠ ${file.name}: firma non riconosciuta (struttura .p7m non standard). Prova a esportare l'XML non firmato dal tuo gestionale.`); continue; }
+      } else {
+        text = await file.text();
+      }
+    }catch(e){ skipped++; logLines.push(`⚠ ${file.name}: errore di lettura del file.`); continue; }
+    const parsed = parseFatturaXML(text);
+    if(!parsed || !parsed.supplier.name){ skipped++; logLines.push(`⚠ ${file.name}: non riconosciuto come FatturaPA XML valido.`); continue; }
+    let supplier = state.suppliers.find(s=> (parsed.supplier.piva && s.piva===parsed.supplier.piva) || s.name.toLowerCase()===parsed.supplier.name.toLowerCase());
+    if(!supplier){
+      supplier = {id:uid(), name:parsed.supplier.name, piva:parsed.supplier.piva, phone:parsed.supplier.phone, email:parsed.supplier.email, address:parsed.supplier.address};
+      state.suppliers.push(supplier); newSuppliers++;
+      logLines.push(`+ Nuovo fornitore: ${supplier.name}`);
+    }
+    parsed.lines.forEach(line=>{
+      const unit = mapInvoiceUnit(line.um);
+      let ing = state.ingredients.find(i=> i.name.toLowerCase()===line.descrizione.toLowerCase() && i.supplier===supplier.name);
+      if(ing){
+        ing.price = line.prezzoUnitario; ing.unit = unit; updatedIngredients++;
+        logLines.push(`↻ Aggiornato: ${ing.name} → € ${line.prezzoUnitario.toFixed(3)}/${unit}`);
+      } else {
+        const newIng = { id:uid(), name:line.descrizione, supplier:supplier.name, unit, price:line.prezzoUnitario, yieldPct:100 };
+        state.ingredients.push(newIng);
+        createdIngredients.push(newIng);
+        newIngredients++;
+        logLines.push(`+ Nuovo ingrediente: ${line.descrizione} (€ ${line.prezzoUnitario.toFixed(3)}/${unit})`);
+      }
+    });
+  }
+  await save('suppliers'); await save('ingredients');
+  const logEl = document.getElementById('invoice-log');
+  logEl.innerHTML = `<div class="ok-box">Importazione completata: ${newSuppliers} nuovi fornitori, ${newIngredients} nuovi ingredienti, ${updatedIngredients} aggiornati${skipped?`, ${skipped} file non leggibili`:''}.</div>` +
+    `<div class="small-note" style="white-space:pre-line;">${logLines.map(esc).join('\n')}</div>`;
+  renderIngredients(); renderSuppliers();
+  toast('Fatture importate');
+
+  if(createdIngredients.length){
+    logEl.innerHTML += `<div class="small-note">Sto stimando la resa (parte edibile) per i nuovi ingredienti…</div>`;
+    await estimateYieldsWithAI(createdIngredients);
+    logEl.innerHTML += `<div class="ok-box">Resa stimata per ${createdIngredients.length} ingredienti — controllala in "Ingredienti" (badge "resa stimata AI").</div>`;
+    renderIngredients();
+  }
+});
+async function estimateYieldsWithAI(ingredientsList){
+  const batches = [];
+  for(let i=0;i<ingredientsList.length;i+=40) batches.push(ingredientsList.slice(i,i+40));
+  for(const batch of batches){
+    try{
+      const data = await Cloud.ai({
+        task: 'yield',
+        system:"Sei un esperto di cucina professionale italiana. Per ogni ingrediente ricevuto (nome da fattura fornitore, spesso con formato/origine nel testo) stima la resa a parte edibile in percentuale (%) tipica dopo pulizia e scarto: verdure con scarto in base al tipo, carne con osso vs disossata, pesce intero vs filetto, prodotti già puliti/confezionati/secchi/inscatolati = 100%. Rispondi SOLO con un JSON array, senza testo aggiuntivo: [{\"name\":\"...\",\"yieldPct\":numero}]. Usa esattamente i nomi ricevuti.",
+        messages:[{role:"user", content: batch.map(i=>i.name).join('\n')}]
+      });
+      const textBlocks = (data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
+      const clean = textBlocks.replace(/```json|```/g,'').trim();
+      const estimates = JSON.parse(clean);
+      estimates.forEach(est=>{
+        const ing = batch.find(i=>i.name===est.name);
+        if(ing && est.yieldPct){ ing.yieldPct = est.yieldPct; ing.yieldEstimated = true; }
+      });
+    }catch(e){ /* stima non riuscita per questo batch: resta resa 100% di default, nessun blocco */ }
+  }
+  await save('ingredients');
+}
+
+/* ============================= SUB-RICETTE ============================= */
+function renderSubrecipes(){
+  const el = document.getElementById('subr-list');
+  if(!state.subrecipes.length){ el.innerHTML = `<div class="empty">Nessuna sub-ricetta ancora (fondi, salse, basi, composte...).</div>`; return; }
+  el.innerHTML = state.subrecipes.map((sub,idx)=>{
+    const {totalCost, costPerUnit} = subrecipeCost(sub);
+    const rawKg = subrecipeRawWeightKg(sub);
+    const calo = (rawKg && sub.yieldUnit==='kg' && rawKg>0) ? ((rawKg-parseFloat(sub.yieldQty))/rawKg*100) : null;
+    return `
+    <div class="comanda">
+      <div class="comanda-head">
+        <div><div class="comanda-title">${esc(sub.name)}</div><div class="comanda-cat">resa ${sub.yieldQty||'—'} ${esc(sub.yieldUnit)}${calo!==null?` · calo peso ${calo.toFixed(0)}%`:''}</div></div>
+        <div class="comanda-num">SUB${String(idx+1).padStart(3,'0')}</div>
+      </div>
+      <ul class="ing-list">${(sub.items||[]).map(it=>`<li><span class="n">${esc(itemLabel(it))}</span><span class="q">${it.qty}${esc(it.unit)} · €${itemCost(it).toFixed(2)}</span></li>`).join('')}</ul>
+      <div class="metric-row">
+        <div class="metric">Costo totale<b>€ ${totalCost.toFixed(2)}</b></div>
+        <div class="metric">Costo per ${esc(sub.yieldUnit)}<b>€ ${costPerUnit.toFixed(2)}</b></div>
+      </div>
+      ${sub.notes? `<div class="steps">${esc(sub.notes)}</div>`:''}
+      <div class="card-actions">
+        <button data-edit="${sub.id}">Modifica</button>
+        <button class="danger" data-del="${sub.id}">Elimina</button>
+      </div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=> openSubForm(state.subrecipes.find(s=>s.id===b.dataset.edit))));
+  el.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', ()=>{
+    state.subrecipes = state.subrecipes.filter(s=>s.id!==b.dataset.del);
+    save('subrecipes'); renderSubrecipes(); toast('Sub-ricetta eliminata');
+  }));
+}
+function openSubForm(existing, prefill){
+  const holder = document.getElementById('subr-form-holder');
+  const base = {id:uid(), name:'', items:[], yieldQty:'', yieldUnit:'kg', notes:''};
+  const sub = existing || Object.assign(base, prefill||{});
+  let items = JSON.parse(JSON.stringify(sub.items));
+  holder.innerHTML = `
+    <div class="panel">
+      <h3>${existing?'Modifica sub-ricetta':'Nuova sub-ricetta'}</h3>
+      ${prefill&&!existing? `<div class="ok-box">Campi precompilati dalla foto — controlla componenti e quantità, e imposta tu la resa finale (non deducibile dalla foto).</div>`:''}
+      <label>Nome (es. Ragù di carne, Fondo di vitello)</label>
+      <input type="text" id="sb-name" value="${esc(sub.name)}">
+      <label>Componenti</label>
+      <div id="sb-items"></div>
+      <button class="btn ghost small" id="sb-add-item" type="button" style="margin-top:4px;">+ Componente</button>
+      <div class="grid2" style="margin-top:10px;">
+        <div><label>Resa finale (quantità ottenuta dopo cottura/lavorazione)</label><input type="number" step="0.001" id="sb-yieldqty" value="${sub.yieldQty}"></div>
+        <div><label>Unità resa</label><select id="sb-yieldunit"><option value="kg" ${sub.yieldUnit==='kg'?'selected':''}>kg</option><option value="l" ${sub.yieldUnit==='l'?'selected':''}>l</option><option value="pz" ${sub.yieldUnit==='pz'?'selected':''}>pz</option></select></div>
+      </div>
+      <label>Note (procedimento, calo peso previsto, ecc.)</label>
+      <textarea id="sb-notes">${esc(sub.notes)}</textarea>
+      <p class="small-note" id="sb-preview">—</p>
+      <div style="display:flex;gap:10px;margin-top:10px;">
+        <button class="btn" id="sb-save">Salva sub-ricetta</button>
+        <button class="btn ghost" id="sb-cancel">Annulla</button>
+      </div>
+    </div>
+  `;
+  const itemsContainer = document.getElementById('sb-items');
+  renderItemRows(itemsContainer, items, sub.id);
+  document.getElementById('sb-add-item').addEventListener('click', ()=>{ items.push({kind:'custom', name:'', qty:'', unit:'g', cost:''}); renderItemRows(itemsContainer, items, sub.id); updateSbPreview(); });
+  function updateSbPreview(){
+    readItemRows(itemsContainer, items);
+    const totalCost = items.reduce((s,it)=>s+itemCost(it),0);
+    const yq = parseFloat(document.getElementById('sb-yieldqty').value)||0;
+    const cpu = yq>0? totalCost/yq : 0;
+    document.getElementById('sb-preview').textContent = `Costo totale componenti: € ${totalCost.toFixed(2)} · Costo per ${document.getElementById('sb-yieldunit').value}: € ${cpu.toFixed(2)}`;
+  }
+  itemsContainer.addEventListener('input', updateSbPreview);
+  itemsContainer.addEventListener('change', ()=> setTimeout(updateSbPreview,0));
+  document.getElementById('sb-yieldqty').addEventListener('input', updateSbPreview);
+  document.getElementById('sb-yieldunit').addEventListener('change', updateSbPreview);
+  updateSbPreview();
+  document.getElementById('sb-cancel').addEventListener('click', ()=> holder.innerHTML='');
+  document.getElementById('sb-save').addEventListener('click', ()=>{
+    readItemRows(itemsContainer, items);
+    const name = document.getElementById('sb-name').value.trim();
+    if(!name){ toast('Serve il nome della sub-ricetta'); return; }
+    const newSub = { id:sub.id, name, items: items.filter(it=> it.kind!=='custom' || it.name),
+      yieldQty:document.getElementById('sb-yieldqty').value, yieldUnit:document.getElementById('sb-yieldunit').value,
+      notes:document.getElementById('sb-notes').value.trim() };
+    const idx = state.subrecipes.findIndex(x=>x.id===sub.id);
+    if(idx>=0) state.subrecipes[idx]=newSub; else state.subrecipes.push(newSub);
+    save('subrecipes'); holder.innerHTML=''; renderSubrecipes(); toast('Sub-ricetta salvata');
+  });
+}
+document.getElementById('btn-new-sub').addEventListener('click', ()=> openSubForm(null));
+
+/* ============================= PIATTI (dishes) ============================= */
+function renderDishes(){
+  const el = document.getElementById('dish-list');
+  if(!state.recipes.length){ el.innerHTML = `<div class="empty">Ancora nessun piatto. Crea la prima scheda tecnica.</div>`; return; }
+  el.innerHTML = state.recipes.map((d,idx)=>{
+    const cost = dishTotalCost(d);
+    const target = parseFloat(d.foodCostTargetPct)||30;
+    const suggPrice = target>0 ? cost/(target/100) : 0;
+    const priceActual = parseFloat(d.priceActual)||0;
+    const realFc = priceActual>0 ? (cost/priceActual*100) : null;
+    const marginActual = priceActual - cost;
+    return `
+    <div class="comanda">
+      <div class="comanda-head">
+        <div><div class="comanda-title">${esc(d.name)}</div><div class="comanda-cat">${esc(d.category||'—')}${d.portionG?` · ${d.portionG}g/ml porzione`:''}${d.prepMin?` · ${d.prepMin} min`:''}</div></div>
+        <div class="comanda-num">P${String(idx+1).padStart(3,'0')}</div>
+      </div>
+      ${d.photo? `<img src="${d.photo}" style="max-width:100%;border-radius:6px;margin-bottom:10px;">`:''}
+      <div class="metric-row">
+        <div class="metric">Costo materia prima<b>€ ${cost.toFixed(2)}</b></div>
+        <div class="metric">Prezzo suggerito (target ${target}%)<b>€ ${suggPrice.toFixed(2)}</b></div>
+        <div class="metric">Prezzo effettivo<b>€ ${priceActual.toFixed(2)}</b></div>
+        <div class="metric ${realFc!==null && realFc>35?'neg':'pos'}">Food cost reale<b>${realFc!==null?realFc.toFixed(1)+'%':'—'}</b></div>
+        <div class="metric ${marginActual<0?'neg':'pos'}">Margine effettivo<b>€ ${marginActual.toFixed(2)}</b></div>
+      </div>
+      <div>${(d.allergens||[]).map(a=>`<span class="tag allergen">${esc(a)}</span>`).join('')}</div>
+      <ul class="ing-list">${(d.items||[]).map(it=>`<li><span class="n">${esc(itemLabel(it))}</span><span class="q">${it.qty}${esc(it.unit)} · €${itemCost(it).toFixed(2)}</span></li>`).join('')}</ul>
+      ${d.steps? `<div class="steps">${esc(d.steps)}</div>`:''}
+      ${d.notes? `<div class="steps" style="color:var(--copper);font-style:italic;">${esc(d.notes)}</div>`:''}
+      <div class="card-actions">
+        <button data-act="edit" data-id="${d.id}">Modifica</button>
+        <button data-act="dup" data-id="${d.id}">Duplica</button>
+        <button class="danger" data-act="del" data-id="${d.id}">Elimina</button>
+      </div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('button[data-act]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const id = b.dataset.id, act = b.dataset.act;
+      if(act==='del'){ state.recipes = state.recipes.filter(r=>r.id!==id); save('recipes'); renderDishes(); toast('Piatto eliminato'); }
+      if(act==='edit'){ openDishForm(state.recipes.find(r=>r.id===id)); }
+      if(act==='dup'){
+        const orig = state.recipes.find(r=>r.id===id);
+        const copy = JSON.parse(JSON.stringify(orig)); copy.id = uid(); copy.name = orig.name+' (copia)';
+        state.recipes.push(copy); save('recipes'); renderDishes(); toast('Piatto duplicato');
+      }
+    });
+  });
+}
+function openDishForm(existing, prefill){
+  const holder = document.getElementById('dish-form-holder');
+  const base = {id:uid(), name:'', category:'', items:[], portionG:'', foodCostTargetPct:30, priceActual:'', allergens:[], steps:'', prepMin:'', notes:'', photo:''};
+  const d = existing || Object.assign(base, prefill||{});
+  let items = JSON.parse(JSON.stringify(d.items));
+  holder.innerHTML = `
+    <div class="panel">
+      <h3>${existing?'Modifica piatto':'Nuovo piatto'}</h3>
+      ${prefill&&!existing? `<div class="ok-box">Campi precompilati dalla foto — controlla e correggi prima di salvare, specialmente quantità e costi.</div>`:''}
+      <label>Nome piatto</label>
+      <input type="text" id="d-name" value="${esc(d.name)}" placeholder="es. Tagliatelle al ragù">
+      <div class="grid3">
+        <div><label>Categoria</label><input type="text" id="d-cat" value="${esc(d.category)}" placeholder="Primi, antipasti..."></div>
+        <div><label>Porzione finale (g/ml)</label><input type="number" id="d-portion" value="${d.portionG}"></div>
+        <div><label>Tempo di preparazione (min)</label><input type="number" id="d-prep" value="${d.prepMin||''}"></div>
+      </div>
+      <label>Food cost target (%)</label>
+      <input type="number" id="d-target" value="${d.foodCostTargetPct}">
+      <label>Allergeni</label>
+      <div class="chip-toggle" id="d-allergens">${ALLERGENS.map(a=>`<button type="button" data-a="${a}" class="${(d.allergens||[]).includes(a)?'on':''}">${a}</button>`).join('')}</div>
+      <label>Componenti (ingredienti e/o sub-ricette — digita per cercare)</label>
+      <div id="d-items"></div>
+      <button class="btn ghost small" id="d-add-item" type="button" style="margin-top:4px;">+ Componente</button>
+      <label>Prezzo di vendita effettivo (€)</label>
+      <input type="number" step="0.01" id="d-price" value="${d.priceActual}">
+      <p class="small-note" id="d-preview">—</p>
+      <label>Procedimento</label>
+      <textarea id="d-steps">${esc(d.steps)}</textarea>
+      <label>Note (impiattamento, varianti...)</label>
+      <textarea id="d-notes">${esc(d.notes||'')}</textarea>
+      <label>Foto del piatto (opzionale)</label>
+      <input type="file" id="d-photo-input" accept="image/*">
+      <div id="d-photo-preview">${d.photo? `<img src="${d.photo}" style="max-width:140px;border-radius:6px;margin-top:8px;display:block;">`:''}</div>
+      <div style="display:flex;gap:10px;margin-top:14px;">
+        <button class="btn" id="d-save">Salva piatto</button>
+        <button class="btn ghost" id="d-cancel">Annulla</button>
+      </div>
+    </div>
+  `;
+  let photoData = d.photo || '';
+  document.getElementById('d-photo-input').addEventListener('change', async (e)=>{
+    const file = e.target.files[0]; if(!file) return;
+    photoData = await resizeImageToDataUrl(file, 500, 0.7);
+    document.getElementById('d-photo-preview').innerHTML = `<img src="${photoData}" style="max-width:140px;border-radius:6px;margin-top:8px;display:block;">`;
+  });
+  const itemsContainer = document.getElementById('d-items');
+  renderItemRows(itemsContainer, items, null);
+  document.getElementById('d-add-item').addEventListener('click', ()=>{ items.push({kind:'custom', name:'', qty:'', unit:'g', cost:''}); renderItemRows(itemsContainer, items, null); updateDPreview(); });
+  document.querySelectorAll('#d-allergens button').forEach(b=> b.addEventListener('click', ()=> b.classList.toggle('on')));
+  function updateDPreview(){
+    readItemRows(itemsContainer, items);
+    const cost = items.reduce((s,it)=>s+itemCost(it),0);
+    const target = parseFloat(document.getElementById('d-target').value)||30;
+    const sugg = target>0? cost/(target/100) : 0;
+    const priceActual = parseFloat(document.getElementById('d-price').value)||0;
+    const realFc = priceActual>0 ? (cost/priceActual*100) : null;
+    document.getElementById('d-preview').textContent = `Costo materia prima: € ${cost.toFixed(2)} · Prezzo suggerito: € ${sugg.toFixed(2)}${realFc!==null?` · Food cost reale: ${realFc.toFixed(1)}%`:''}`;
+  }
+  itemsContainer.addEventListener('input', updateDPreview);
+  itemsContainer.addEventListener('change', ()=> setTimeout(updateDPreview,0));
+  ['d-target','d-price'].forEach(id=> document.getElementById(id).addEventListener('input', updateDPreview));
+  updateDPreview();
+  document.getElementById('d-cancel').addEventListener('click', ()=> holder.innerHTML='');
+  document.getElementById('d-save').addEventListener('click', ()=>{
+    readItemRows(itemsContainer, items);
+    const name = document.getElementById('d-name').value.trim();
+    if(!name){ toast('Serve almeno il nome del piatto'); return; }
+    const newDish = {
+      id:d.id, name, category:document.getElementById('d-cat').value.trim(),
+      items: items.filter(it=> it.kind!=='custom' || it.name),
+      portionG:document.getElementById('d-portion').value, foodCostTargetPct:document.getElementById('d-target').value,
+      priceActual:document.getElementById('d-price').value,
+      allergens: Array.from(document.querySelectorAll('#d-allergens button.on')).map(b=>b.dataset.a),
+      steps:document.getElementById('d-steps').value.trim(),
+      prepMin:document.getElementById('d-prep').value,
+      notes:document.getElementById('d-notes').value.trim(),
+      photo: photoData,
+    };
+    const idx = state.recipes.findIndex(x=>x.id===d.id);
+    if(idx>=0) state.recipes[idx]=newDish; else state.recipes.push(newDish);
+    save('recipes'); holder.innerHTML=''; renderDishes(); toast('Piatto salvato');
+  });
+}
+document.getElementById('btn-new-dish').addEventListener('click', ()=> openDishForm(null));
+
+/* ============================= FOTO → RICETTA (OCR via AI) ============================= */
+function resizeImageToDataUrl(file, maxDim, quality){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (e)=>{
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = ()=>{
+        let w = img.width, h = img.height;
+        if(w>h){ if(w>maxDim){ h = Math.round(h*maxDim/w); w = maxDim; } }
+        else { if(h>maxDim){ w = Math.round(w*maxDim/h); h = maxDim; } }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality||0.8));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+// Le unità di una ricetta non sono quelle di una fattura: un appunto di cucina
+// scrive "g" e "ml", una fattura elettronica scrive "KG" e "LT". Usare
+// mapInvoiceUnit qui faceva cadere tutto su "pz", e un ingrediente da 300 g
+// diventava "300 pezzi" — con un food cost senza alcun senso.
+// Ritorna: base = unità di acquisto dell'ingrediente, unit = unità della riga,
+// factor = moltiplicatore per la quantità (i cl vanno portati a ml).
+function mapRecipeUnit(raw){
+  const u = (raw||'').toLowerCase().trim().replace(/\./g,'');
+  if(['g','gr','grammi','gram'].includes(u))        return {base:'kg', unit:'g',  factor:1};
+  if(['kg','chilo','chili','kilo'].includes(u))     return {base:'kg', unit:'kg', factor:1};
+  if(['ml','millilitri','cc'].includes(u))          return {base:'l',  unit:'ml', factor:1};
+  if(['cl','centilitri'].includes(u))               return {base:'l',  unit:'ml', factor:10};
+  if(['l','lt','litro','litri'].includes(u))        return {base:'l',  unit:'l',  factor:1};
+  return {base:'pz', unit:'pz', factor:1};
+}
+
+let ocrTarget = 'dish';
+document.getElementById('btn-photo-dish').addEventListener('click', ()=>{ ocrTarget='dish'; });
+document.getElementById('btn-photo-sub').addEventListener('click', ()=>{ ocrTarget='sub'; });
+document.getElementById('dish-photo-input').addEventListener('change', async (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  const statusEl = document.getElementById('ocr-status');
+  statusEl.style.display='block';
+  statusEl.textContent = 'Sto leggendo la ricetta dalla foto…';
+  try{
+    const dataUrl = await resizeImageToDataUrl(file, 1500, 0.85);
+    const base64 = dataUrl.split(',')[1];
+    const mediaType = dataUrl.substring(5, dataUrl.indexOf(';'));
+    const data = await Cloud.ai({
+      task: 'ocr',
+      system: "Sei un assistente che trascrive ricette scritte a mano o su appunti di cucina fotografati, in JSON strutturato. Rispondi SOLO con JSON valido, senza testo aggiuntivo e senza blocchi di codice markdown. Schema esatto: {\"name\":string, \"category\":string, \"portionG\": number|null, \"prepMin\": number|null, \"ingredients\":[{\"name\":string,\"qty\":number|null,\"unit\":string}], \"steps\": string}. Se un campo non è leggibile lascialo vuoto/null, non inventare valori.",
+      messages: [{ role:"user", content:[
+        {type:"image", source:{type:"base64", media_type:mediaType, data:base64}},
+        {type:"text", text:"Trascrivi questa ricetta nel formato JSON richiesto."}
+      ]}]
+    });
+    const textBlocks = (data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
+    const clean = textBlocks.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+    let createdCount = 0;
+    const items = (parsed.ingredients||[]).map(ocrIng=>{
+      const name = (ocrIng.name||'').trim();
+      if(!name) return null;
+      const letta = mapRecipeUnit(ocrIng.unit);
+      let match = state.ingredients.find(i=> i.name.toLowerCase()===name.toLowerCase());
+      if(!match){
+        match = { id:uid(), name, supplier:'', unit:letta.base, price:'', yieldPct:100 };
+        state.ingredients.push(match);
+        createdCount++;
+      }
+      // Se l'ingrediente esisteva già, comanda l'unità decisa dallo chef in
+      // anagrafica: non è la foto a dover riscrivere il suo ricettario.
+      const validUnits = subUnitOptions(match.unit);
+      const itemUnit = validUnits.includes(letta.unit) ? letta.unit : validUnits[0];
+      const qty = parseFloat(ocrIng.qty);
+      const qtyFinale = isNaN(qty) ? '' : (itemUnit === letta.unit ? qty * letta.factor : qty);
+      return {kind:'ingredient', refId:match.id, qty:qtyFinale, unit:itemUnit};
+    }).filter(Boolean);
+    if(createdCount) await save('ingredients');
+    statusEl.style.display='none';
+    const subTarget = ocrTarget === 'sub';
+    switchTab('ricette');
+    document.querySelectorAll('#ricette-subtabs button').forEach(x=>x.classList.toggle('active', x.dataset.sub===(subTarget?'subricette':'piatti')));
+    document.querySelectorAll('#view-ricette .subview').forEach(v=>v.classList.toggle('active', v.id===(subTarget?'sub-subricette':'sub-piatti')));
+    if(subTarget){
+      openSubForm(null, { name: parsed.name || '', items, notes: parsed.steps || '' });
+    } else {
+      const prefill = {
+        name: parsed.name || '', category: parsed.category || '', portionG: parsed.portionG || '',
+        prepMin: parsed.prepMin || '', steps: parsed.steps || '', items,
+      };
+      openDishForm(null, prefill);
+    }
+    toast(createdCount ? `Ricetta letta — ${createdCount} nuovi ingredienti censiti da completare` : 'Ricetta letta dalla foto — controlla i campi');
+  }catch(err){
+    statusEl.textContent = err.userFacing ? err.message
+      : 'Non sono riuscito a leggere la ricetta dalla foto. Riprova con una foto più a fuoco.';
+    setTimeout(()=> statusEl.style.display='none', 6000);
+  }
+  e.target.value = '';
+});
+
+/* ============================= MENU ============================= */
+function renderMenuList(){
+  const el = document.getElementById('menu-list');
+  if(!state.menus.length){ el.innerHTML = `<div class="empty">Nessun menu ancora. Componine uno dal ricettario.</div>`; return; }
+  el.innerHTML = state.menus.map((m,idx)=>{
+    const items = m.recipeIds.map(id=>state.recipes.find(r=>r.id===id)).filter(Boolean);
+    const totalCost = items.reduce((s,r)=>s+dishTotalCost(r),0);
+    const totalPrice = items.reduce((s,r)=>s+(parseFloat(r.priceActual)||0),0);
+    const avgFc = totalPrice? (totalCost/totalPrice*100) : null;
+    return `
+    <div class="comanda">
+      <div class="comanda-head">
+        <div><div class="comanda-title">${esc(m.name)}</div><div class="comanda-cat">${items.length} portate</div></div>
+        <div class="comanda-num">#${String(idx+1).padStart(3,'0')}</div>
+      </div>
+      <ul class="ing-list">${items.map(r=>`<li><span class="n">${esc(r.name)}</span><span class="q">€${(parseFloat(r.priceActual)||0).toFixed(2)}</span></li>`).join('')}</ul>
+      <div class="metric-row">
+        <div class="metric">Costo totale<b>€ ${totalCost.toFixed(2)}</b></div>
+        <div class="metric">Prezzo totale<b>€ ${totalPrice.toFixed(2)}</b></div>
+        <div class="metric ${avgFc!==null && avgFc>35?'neg':'pos'}">Food cost medio<b>${avgFc!==null?avgFc.toFixed(1)+'%':'—'}</b></div>
+      </div>
+      <div class="card-actions"><button class="danger" data-del="${m.id}">Elimina</button></div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', ()=>{ state.menus = state.menus.filter(m=>m.id!==b.dataset.del); save('menus'); renderMenuList(); toast('Menu eliminato'); }));
+}
+document.getElementById('btn-new-menu').addEventListener('click', ()=>{
+  const holder = document.getElementById('menu-form-holder');
+  if(!state.recipes.length){ toast('Crea prima qualche piatto'); return; }
+  holder.innerHTML = `
+    <div class="panel">
+      <h3>Nuovo menu</h3>
+      <label>Nome menu</label>
+      <input type="text" id="m-name" placeholder="es. Menu degustazione estivo">
+      <label>Seleziona le portate</label>
+      <div class="chip-toggle" id="m-recipes">${state.recipes.map(r=>`<button type="button" data-id="${r.id}">${esc(r.name)}</button>`).join('')}</div>
+      <div style="display:flex;gap:10px;margin-top:14px;">
+        <button class="btn" id="m-save">Salva menu</button>
+        <button class="btn ghost" id="m-cancel">Annulla</button>
+      </div>
+    </div>
+  `;
+  document.querySelectorAll('#m-recipes button').forEach(b=> b.addEventListener('click', ()=> b.classList.toggle('on')));
+  document.getElementById('m-cancel').addEventListener('click', ()=> holder.innerHTML='');
+  document.getElementById('m-save').addEventListener('click', ()=>{
+    const name = document.getElementById('m-name').value.trim();
+    const ids = Array.from(document.querySelectorAll('#m-recipes button.on')).map(b=>b.dataset.id);
+    if(!name || !ids.length){ toast('Serve un nome e almeno una portata'); return; }
+    state.menus.push({id:uid(), name, recipeIds:ids});
+    save('menus'); holder.innerHTML=''; renderMenuList(); toast('Menu creato');
+  });
+});
+
+/* ============================= BRIGATA ============================= */
+function renderStaffList(){
+  const el = document.getElementById('staff-list');
+  if(!state.staff.length){ el.innerHTML = `<div class="empty">Nessuna persona in brigata ancora.</div>`; return; }
+  el.innerHTML = state.staff.map(s=>`
+    <div class="staff-card">
+      <div>
+        <div style="font-weight:600;">${esc(s.name)}</div>
+        <div class="contact">${esc(s.role)} · ${s.hours||'—'}h/sett contrattuali</div>
+        <div class="contact">${s.phone? '📞 '+esc(s.phone):''}${s.phone&&s.email?' · ':''}${s.email? '✉ '+esc(s.email):''}</div>
+        <div class="contact">🍳 ${(s.stations&&s.stations.length) ? s.stations.map(id=>{ const st=state.stations.find(x=>x.id===id); return st?esc(st.name):null; }).filter(Boolean).join(', ') : 'nessuna stazione assegnata'}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button class="btn ghost small" data-edit="${s.id}">Modifica</button>
+        <button class="btn ghost small" data-del="${s.id}" style="color:var(--alert);">Rimuovi</button>
+      </div>
+    </div>
+  `).join('');
+  el.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=> openStaffForm(state.staff.find(s=>s.id===b.dataset.edit))));
+  el.querySelectorAll('[data-del]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      state.staff = state.staff.filter(s=>s.id!==b.dataset.del);
+      delete state.shifts[b.dataset.del];
+      save('staff'); save('shifts'); renderStaffList(); toast('Rimosso dalla brigata');
+    });
+  });
+}
+async function openStaffForm(existing){
+  const holder = document.getElementById('staff-form-holder');
+  const s = existing || {id:uid(), name:'', role:'Cuoco', hours:'', phone:'', email:'', stations:[], weeklyQuota:[], userId:null};
+  // Chi ha un account nella cucina, per poter collegare la persona al suo
+  // accesso: senza il collegamento non può inviare le proprie richieste.
+  let membri = [];
+  if(Cloud.enabled && Cloud.isOwner()){
+    try{ membri = await Cloud.listMembers(); }catch(e){ console.error('membri non caricati', e); }
+  }
+  holder.innerHTML = `
+    <div class="panel">
+      <h3>${existing?'Modifica persona':'Aggiungi persona'}</h3>
+      <label>Nome</label>
+      <input type="text" id="s-name" value="${esc(s.name)}" placeholder="es. Marco">
+      <div class="grid2">
+        <div><label>Ruolo</label>
+          <select id="s-role">
+            ${['Chef','Sous Chef','Chef de partie','Cuoco','Commis','Pasticcere','Plongeur'].map(r=>`<option ${s.role===r?'selected':''}>${r}</option>`).join('')}
+          </select>
+        </div>
+        <div><label>Ore contrattuali/sett.</label><input type="number" id="s-hours" value="${s.hours}" placeholder="es. 40"></div>
+      </div>
+      <div class="grid2">
+        <div><label>Numero di cellulare</label><input type="tel" id="s-phone" value="${esc(s.phone)}" placeholder="es. 333 1234567"></div>
+        <div><label>Email</label><input type="email" id="s-email" value="${esc(s.email)}" placeholder="es. nome@email.it"></div>
+      </div>
+      <label>Stazioni che può coprire</label>
+      <div class="chip-toggle" id="s-stations">
+        ${state.stations.length ? state.stations.map(st=>`<button type="button" data-st="${st.id}" class="${(s.stations||[]).includes(st.id)?'on':''}">${esc(st.name)}</button>`).join('') : '<span class="small-note">Nessuna stazione creata ancora — puoi crearle in Turni → Stazioni, poi torna qui.</span>'}
+      </div>
+      <p class="small-note">Usata dal generatore di turni per non mettere in una postazione qualcuno che non la sa coprire.</p>
+      ${membri.length ? `
+      <label>Account collegato</label>
+      <select id="s-user">
+        <option value="">— nessuno: le richieste le inserisci tu per lui —</option>
+        ${membri.map(m=>`<option value="${esc(m.user_id)}" ${s.userId===m.user_id?'selected':''}>${esc(m.display_name||m.email||'membro')}</option>`).join('')}
+      </select>
+      <p class="small-note">Collegando la persona al suo account potrà inviare da sola ferie e richieste di riposo.</p>` : ''}
+      <div style="display:flex;gap:10px;margin-top:14px;">
+        <button class="btn" id="s-save">Salva</button>
+        <button class="btn ghost" id="s-cancel">Annulla</button>
+      </div>
+    </div>
+  `;
+  document.querySelectorAll('#s-stations button').forEach(b=> b.addEventListener('click', ()=> b.classList.toggle('on')));
+  document.getElementById('s-cancel').addEventListener('click', ()=> holder.innerHTML='');
+  document.getElementById('s-save').addEventListener('click', ()=>{
+    const name = document.getElementById('s-name').value.trim();
+    if(!name){ toast('Serve un nome'); return; }
+    const stations = Array.from(document.querySelectorAll('#s-stations button.on')).map(b=>b.dataset.st);
+    const userSel = document.getElementById('s-user');
+    const newStaff = { id:s.id, name, role:document.getElementById('s-role').value, hours:document.getElementById('s-hours').value,
+      phone:document.getElementById('s-phone').value.trim(), email:document.getElementById('s-email').value.trim(),
+      stations, weeklyQuota: s.weeklyQuota||[],
+      userId: userSel ? (userSel.value || null) : (s.userId||null) };
+    const idx = state.staff.findIndex(x=>x.id===s.id);
+    if(idx>=0) state.staff[idx]=newStaff; else state.staff.push(newStaff);
+    save('staff'); holder.innerHTML=''; renderStaffList(); toast('Salvato');
+  });
+}
+document.getElementById('btn-new-staff').addEventListener('click', ()=> openStaffForm(null));
+
+/* ============================= TURNI: griglia ============================= */
+function renderTurni(){
+  const el = document.getElementById('turni-panel');
+  document.getElementById('period-label').textContent = periodLabel();
+  document.querySelectorAll('.period-modes button').forEach(b=>
+    b.classList.toggle('active', b.dataset.period === periodMode));
+  if(!state.staff.length){ el.innerHTML = `<div class="empty">Aggiungi prima persone alla brigata.</div>`; return; }
+  const dates = periodDates();
+  const oggi = isoDate(new Date());
+  el.innerHTML = `
+    <div class="shift-scroll">
+    <table class="shift-table">
+      <thead><tr><th class="name-col" style="text-align:left;">Persona</th>${dates.map(d=>{
+        const g = dayName(d), weekend = (g==='Sab'||g==='Dom');
+        return `<th class="${d===oggi?'today':''} ${weekend?'weekend':''}">${g}<br>${parseISO(d).getDate()}</th>`;
+      }).join('')}</tr></thead>
+      <tbody>
+        ${state.staff.map(s=>`
+          <tr>
+            <td class="name">${esc(s.name)}</td>
+            ${dates.map(d=>{
+              const cell = (state.shifts[s.id]||{})[d] || {code:'', stationId:null};
+              const qualified = (s.stations&&s.stations.length) ? state.stations.filter(st=>s.stations.includes(st.id)) : state.stations;
+              const showStation = WORKING_CODES().includes(cell.code) && qualified.length>0;
+              return `<td class="${cell.extra?'extra-cell':''} ${d===oggi?'today-col':''}" ${cell.extra?'title="Turno extra: assegnato oltre la quota di questa persona per coprire il fabbisogno"':''}>
+                <select class="shift-select ${cell.code}" data-staff="${s.id}" data-day="${d}">
+                  ${Object.keys(TURNO_DEF()).map(code=>`<option value="${code}" ${cell.code===code?'selected':''}>${code||'—'}</option>`).join('')}
+                </select>
+                ${showStation ? `<select class="shift-station" data-staff="${s.id}" data-day="${d}" style="margin-top:3px;">
+                  <option value="">stazione</option>
+                  ${qualified.map(st=>`<option value="${st.id}" ${cell.stationId===st.id?'selected':''}>${esc(st.name)}</option>`).join('')}
+                </select>`:''}
+                ${cell.extra ? `<div style="font-family:var(--font-mono);font-size:8px;color:var(--copper-light);margin-top:2px;">extra</div>`:''}
+              </td>`;
+            }).join('')}
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    </div>
+  `;
+  el.querySelectorAll('.shift-select').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      const staffId = sel.dataset.staff, day = sel.dataset.day, val = sel.value;
+      state.shifts[staffId] = state.shifts[staffId] || {};
+      const prev = state.shifts[staffId][day] || {code:'', stationId:null};
+      state.shifts[staffId][day] = { code:val, stationId: WORKING_CODES().includes(val) ? prev.stationId : null };
+      save('shifts');
+      renderTurni(); renderOreExtra(); renderDashboard();
+    });
+  });
+  el.querySelectorAll('.shift-station').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      const staffId = sel.dataset.staff, day = sel.dataset.day;
+      state.shifts[staffId][day].stationId = sel.value || null;
+      save('shifts');
+      renderDashboard();
+    });
+  });
+  document.getElementById('turni-legend').innerHTML = Object.entries(TURNO_DEF()).filter(([c])=>c).map(([c,v])=>esc(v.label)).join(' · ');
+}
+function weeklyExtraFromTurni(){
+  const dates = periodDates();
+  // Le ore contrattuali sono settimanali: su un mese vanno rapportate alla
+  // durata del periodo, altrimenti chiunque risulterebbe in fortissimo extra.
+  const settimane = dates.length / 7;
+  return state.staff.map(s=>{
+    const days = state.shifts[s.id] || {};
+    const totalHours = dates.reduce((sum,d)=> sum + CODE_HOURS((days[d]||{}).code||''), 0);
+    const contracted = (parseFloat(s.hours)||0) * settimane;
+    const extra = Math.max(0, totalHours - contracted);
+    const under = contracted>0 ? Math.max(0, contracted-totalHours) : 0;
+    return {id:s.id, name:s.name, totalHours, contracted, extra, under};
+  });
+}
+function renderOreExtra(){
+  const el = document.getElementById('ore-extra-table');
+  if(!state.staff.length){ el.innerHTML = `<div class="empty">Nessuna persona in brigata.</div>`; return; }
+  const rows = weeklyExtraFromTurni();
+  el.innerHTML = `
+    <table class="hours-table">
+      <thead><tr><th>Persona</th><th>Ore pianificate</th><th>Contrattuali</th><th>Extra</th></tr></thead>
+      <tbody>
+        ${rows.map(r=>`<tr>
+          <td>${esc(r.name)}</td>
+          <td class="num">${r.totalHours.toFixed(1)}h</td>
+          <td class="num">${r.contracted? r.contracted.toFixed(1)+'h':'—'}</td>
+          <td class="num ${r.extra>0?'extra':(r.under>0?'under':'')}">${r.extra>0? '+'+r.extra.toFixed(1)+'h' : (r.under>0? '−'+r.under.toFixed(1)+'h sotto':'in linea')}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+/* ============================= TURNI: servizi e tipi di turno ============================= */
+// Ricalcola le tabelle derivate e ridisegna tutto ciò che dipende dai servizi:
+// una sigla cambiata qui si vede subito nella griglia, nel fabbisogno e nelle quote.
+function afterShiftConfigChange(){
+  refreshShiftConfig();
+  SERVICES().forEach(sv=>{ if(!state.staffingNeeds[sv]) state.staffingNeeds[sv]=[]; });
+  renderServices(); renderShiftTypes(); renderNeeds(); renderQuotas(); renderTurni(); renderOreExtra();
+}
+
+function renderServices(){
+  const el = document.getElementById('service-list');
+  if(!state.services.length){ el.innerHTML = `<div class="empty">Nessun servizio: la cucina non ha momenti di lavoro definiti.</div>`; return; }
+  el.innerHTML = state.services.map((sv,i)=>{
+    const usato = state.shiftTypes.filter(t=>(t.services||[]).includes(sv.id)).map(t=>t.code);
+    return `
+    <div class="staff-card">
+      <div style="min-width:0;">
+        <input type="text" class="sv-name" data-id="${esc(sv.id)}" value="${esc(sv.name)}" style="font-weight:600;">
+        <div class="contact">${usato.length ? 'coperto dai turni: '+esc(usato.join(', ')) : '⚠ nessun turno lo copre'}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <button class="btn ghost small sv-up" data-i="${i}" ${i===0?'disabled':''}>▲</button>
+        <button class="btn ghost small sv-del" data-id="${esc(sv.id)}" style="color:var(--alert);">Elimina</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.sv-name').forEach(inp=>inp.addEventListener('change', ()=>{
+    const sv = state.services.find(x=>x.id===inp.dataset.id);
+    const nome = inp.value.trim();
+    if(!nome){ toast('Il servizio deve avere un nome'); renderServices(); return; }
+    sv.name = nome; save('services'); afterShiftConfigChange(); toast('Servizio rinominato');
+  }));
+  el.querySelectorAll('.sv-up').forEach(b=>b.addEventListener('click', ()=>{
+    const i = parseInt(b.dataset.i);
+    [state.services[i-1], state.services[i]] = [state.services[i], state.services[i-1]];
+    save('services'); afterShiftConfigChange();
+  }));
+  el.querySelectorAll('.sv-del').forEach(b=>b.addEventListener('click', ()=>{
+    const sv = state.services.find(x=>x.id===b.dataset.id);
+    const turni = state.shiftTypes.filter(t=>(t.services||[]).includes(sv.id));
+    const righe = (state.staffingNeeds[sv.id]||[]).length;
+    if(!confirm(`Eliminare il servizio "${sv.name}"?\n\n`
+      + (turni.length ? `Verrà tolto da ${turni.length} tipo/i di turno (${turni.map(t=>t.code).join(', ')}).\n` : '')
+      + (righe ? `Verranno perse ${righe} righe di fabbisogno.\n` : '')
+      + '\nI turni già assegnati nella griglia restano come sono.')) return;
+    state.services = state.services.filter(x=>x.id!==sv.id);
+    state.shiftTypes.forEach(t=>{ t.services = (t.services||[]).filter(x=>x!==sv.id); });
+    delete state.staffingNeeds[sv.id];
+    save('services'); save('shiftTypes'); save('staffingNeeds');
+    afterShiftConfigChange(); toast('Servizio eliminato');
+  }));
+}
+
+// Copia della configurazione da un'altra cucina dello stesso gestore.
+function renderCopiaConfig(){
+  const panel = document.getElementById('copia-config-panel');
+  const altre = Cloud.enabled ? Cloud.altreCucine() : [];
+  panel.style.display = altre.length ? 'block' : 'none';
+  if(!altre.length) return;
+  document.getElementById('copia-da').innerHTML =
+    altre.map(k=>`<option value="${esc(k.id)}">${esc(k.name)}</option>`).join('');
+}
+document.getElementById('copia-btn').addEventListener('click', async ()=>{
+  const id = document.getElementById('copia-da').value;
+  const nome = (Cloud.altreCucine().find(k=>k.id===id)||{}).name || 'l\'altra cucina';
+  if(!confirm(`Copiare servizi, tipi di turno e stazioni da "${nome}"?\n\n`
+    + 'La configurazione attuale di questa cucina viene sostituita.\n'
+    + 'Brigata, turni assegnati e fabbisogno NON vengono toccati, ma il fabbisogno\n'
+    + 'andrà reimpostato perché i servizi e le stazioni cambiano identificativo.')) return;
+  try{
+    const [servizi, turni, stazioni] = await Promise.all([
+      Cloud.readOtherKitchen(id, 'services'),
+      Cloud.readOtherKitchen(id, 'shiftTypes'),
+      Cloud.readOtherKitchen(id, 'stations'),
+    ]);
+    if(!servizi || !turni){ toast('Quella cucina non ha ancora una configurazione'); return; }
+    state.services   = servizi;
+    state.shiftTypes = turni;
+    if(stazioni) state.stations = stazioni;
+    state.staffingNeeds = {};
+    await save('services'); await save('shiftTypes'); await save('stations'); await save('staffingNeeds');
+    afterShiftConfigChange(); renderStations();
+    toast('Configurazione copiata — ricontrolla il fabbisogno');
+  }catch(e){ toast(humanError(e)); }
+});
+
+document.getElementById('service-add-btn').addEventListener('click', ()=>{
+  const inp = document.getElementById('service-name-input');
+  const nome = inp.value.trim();
+  if(!nome){ toast('Serve un nome'); return; }
+  state.services.push({ id: uid(), name: nome });
+  save('services'); inp.value = '';
+  afterShiftConfigChange(); toast('Servizio aggiunto');
+});
+
+function renderShiftTypes(){
+  const el = document.getElementById('shifttype-list');
+  if(!state.shiftTypes.length){ el.innerHTML = `<div class="empty">Nessun tipo di turno: il generatore non ha niente da assegnare.</div>`; return; }
+  el.innerHTML = state.shiftTypes.map(t=>`
+    <div class="panel" style="background:var(--bg-elev2);padding:12px;margin-bottom:10px;">
+      <div class="grid3">
+        <div><label>Sigla</label><input type="text" class="st-code" data-id="${esc(t.id)}" value="${esc(t.code)}" maxlength="4" style="text-transform:uppercase;"></div>
+        <div><label>Orario</label><input type="text" class="st-label" data-id="${esc(t.id)}" value="${esc(t.label)}" placeholder="es. 9:00–17:00"></div>
+        <div><label>Ore</label><input type="number" step="0.5" min="0" class="st-hours" data-id="${esc(t.id)}" value="${t.hours}"></div>
+      </div>
+      <label>Servizi coperti</label>
+      <div class="chip-toggle st-services" data-id="${esc(t.id)}">
+        ${state.services.map(sv=>`<button type="button" data-sv="${esc(sv.id)}" class="${(t.services||[]).includes(sv.id)?'on':''}">${esc(sv.name)}</button>`).join('')
+          || '<span class="small-note">Crea prima i servizi</span>'}
+      </div>
+      ${(t.services||[]).length>1 ? `<p class="small-note" style="margin-top:4px;">Turno spezzato: una persona sola copre ${(t.services||[]).length} servizi.</p>` : ''}
+      ${!(t.services||[]).length ? `<p class="small-note" style="margin-top:4px;color:var(--alert);">⚠ Non copre nessun servizio: il generatore non lo userà mai.</p>` : ''}
+      <button class="btn ghost small st-del" data-id="${esc(t.id)}" style="margin-top:8px;color:var(--alert);">Elimina turno</button>
+    </div>`).join('');
+
+  const salva = ()=>{ save('shiftTypes'); afterShiftConfigChange(); };
+
+  el.querySelectorAll('.st-code').forEach(inp=>inp.addEventListener('change', ()=>{
+    const t = state.shiftTypes.find(x=>x.id===inp.dataset.id);
+    const nuovo = inp.value.trim().toUpperCase();
+    if(!nuovo){ toast('La sigla non può essere vuota'); renderShiftTypes(); return; }
+    if(SPECIAL_CODES[nuovo]){ toast(`"${nuovo}" è riservata (${SPECIAL_CODES[nuovo].label})`); renderShiftTypes(); return; }
+    if(state.shiftTypes.some(x=>x.id!==t.id && x.code===nuovo)){ toast(`La sigla "${nuovo}" è già usata`); renderShiftTypes(); return; }
+    // La sigla è salvata dentro i turni già assegnati e dentro le quote: va
+    // propagata, altrimenti quei dati puntano a un turno che non esiste più.
+    const vecchio = t.code;
+    t.code = nuovo;
+    Object.values(state.shifts).forEach(giorni=>{
+      Object.values(giorni).forEach(cell=>{ if(cell && cell.code===vecchio) cell.code = nuovo; });
+    });
+    state.staff.forEach(s=>(s.weeklyQuota||[]).forEach(g=>{
+      g.codes = (g.codes||[]).map(c=> c===vecchio ? nuovo : c);
+    }));
+    save('shifts'); save('staff'); salva();
+    toast(`Sigla aggiornata ovunque: ${vecchio} → ${nuovo}`);
+  }));
+  el.querySelectorAll('.st-label').forEach(inp=>inp.addEventListener('change', ()=>{
+    state.shiftTypes.find(x=>x.id===inp.dataset.id).label = inp.value.trim(); salva();
+  }));
+  el.querySelectorAll('.st-hours').forEach(inp=>inp.addEventListener('change', ()=>{
+    state.shiftTypes.find(x=>x.id===inp.dataset.id).hours = parseFloat(inp.value)||0; salva();
+  }));
+  el.querySelectorAll('.st-services button').forEach(b=>b.addEventListener('click', ()=>{
+    const t = state.shiftTypes.find(x=>x.id===b.closest('.st-services').dataset.id);
+    const sv = b.dataset.sv;
+    t.services = t.services || [];
+    if(t.services.includes(sv)) t.services = t.services.filter(x=>x!==sv);
+    else t.services.push(sv);
+    salva();
+  }));
+  el.querySelectorAll('.st-del').forEach(b=>b.addEventListener('click', ()=>{
+    const t = state.shiftTypes.find(x=>x.id===b.dataset.id);
+    const inQuota = state.staff.filter(s=>(s.weeklyQuota||[]).some(g=>(g.codes||[]).includes(t.code)));
+    if(!confirm(`Eliminare il turno "${t.code} · ${t.label}"?\n\n`
+      + (inQuota.length ? `È usato nelle quote di: ${inQuota.map(s=>s.name).join(', ')}.\n` : '')
+      + 'I turni già assegnati nella griglia restano, ma la sigla non sarà più selezionabile.')) return;
+    state.shiftTypes = state.shiftTypes.filter(x=>x.id!==t.id);
+    state.staff.forEach(s=>(s.weeklyQuota||[]).forEach(g=>{ g.codes = (g.codes||[]).filter(c=>c!==t.code); }));
+    save('shiftTypes'); save('staff'); salva(); toast('Tipo di turno eliminato');
+  }));
+}
+
+document.getElementById('shifttype-add-btn').addEventListener('click', ()=>{
+  // Prima sigla libera: si cambia subito, ma non blocca chi vuole solo aggiungere.
+  let code = 'T1', n = 1;
+  while(state.shiftTypes.some(t=>t.code===code) || SPECIAL_CODES[code]) code = 'T'+(++n);
+  state.shiftTypes.push({ id: uid(), code, label:'da compilare', hours: 8, services: [] });
+  save('shiftTypes'); afterShiftConfigChange(); toast('Turno aggiunto — dagli una sigla e i servizi');
+});
+
+/* ============================= TURNI: stazioni ============================= */
+function renderStations(){
+  const el = document.getElementById('station-list');
+  if(!state.stations.length){ el.innerHTML = `<div class="empty">Nessuna stazione ancora.</div>`; return; }
+  el.innerHTML = state.stations.map(st=>`
+    <div class="staff-card">
+      <div style="font-weight:600;">${esc(st.name)}</div>
+      <button class="btn ghost small" data-del="${st.id}" style="color:var(--alert);">Elimina</button>
+    </div>`).join('');
+  el.querySelectorAll('[data-del]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const id = b.dataset.del;
+      state.stations = state.stations.filter(s=>s.id!==id);
+      Object.values(state.staffingNeeds).forEach(list=>{ const i=list.findIndex(n=>n.stationId===id); if(i>=0) list.splice(i,1); });
+      state.staff.forEach(s=>{ s.stations = (s.stations||[]).filter(x=>x!==id); });
+      save('stations'); save('staffingNeeds'); save('staff');
+      renderStations(); toast('Stazione eliminata');
+    });
+  });
+}
+document.getElementById('station-add-btn').addEventListener('click', ()=>{
+  const inp = document.getElementById('station-name-input');
+  const name = inp.value.trim();
+  if(!name){ toast('Serve un nome'); return; }
+  state.stations.push({id:uid(), name});
+  save('stations'); inp.value=''; renderStations(); toast('Stazione aggiunta');
+});
+
+/* ============================= TURNI: fabbisogno per turno/stazione ============================= */
+function renderNeeds(){
+  const el = document.getElementById('needs-panel');
+  if(!state.stations.length){ el.innerHTML = `<div class="empty">Crea prima le stazioni.</div>`; return; }
+  el.innerHTML = SERVICES().map(sv=>{
+    const rows = state.staffingNeeds[sv]||[];
+    return `
+    <div class="panel">
+      <h3>${esc(SERVICE_LABEL(sv))}</h3>
+      <div id="needs-rows-${sv}">
+        ${rows.map((r,i)=>`
+          <div class="ing-row" data-i="${i}" style="grid-template-columns:2fr 1fr auto;">
+            <select class="need-station" data-sv="${sv}" data-i="${i}">
+              ${state.stations.map(st=>`<option value="${st.id}" ${r.stationId===st.id?'selected':''}>${esc(st.name)}</option>`).join('')}
+            </select>
+            <input type="number" class="need-count" data-sv="${sv}" data-i="${i}" value="${r.count}" min="0">
+            <button type="button" class="need-rm" data-sv="${sv}" data-i="${i}">✕</button>
+          </div>`).join('')}
+      </div>
+      <button class="btn ghost small" data-addneed="${sv}" type="button" style="margin-top:4px;">+ Riga</button>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('[data-addneed]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      state.staffingNeeds[b.dataset.addneed].push({stationId: state.stations[0].id, count:1});
+      save('staffingNeeds'); renderNeeds();
+    });
+  });
+  el.querySelectorAll('.need-station').forEach(sel=>{
+    sel.addEventListener('change', ()=>{ state.staffingNeeds[sel.dataset.sv][sel.dataset.i].stationId = sel.value; save('staffingNeeds'); });
+  });
+  el.querySelectorAll('.need-count').forEach(inp=>{
+    inp.addEventListener('input', ()=>{ state.staffingNeeds[inp.dataset.sv][inp.dataset.i].count = parseInt(inp.value)||0; save('staffingNeeds'); });
+  });
+  el.querySelectorAll('.need-rm').forEach(b=>{
+    b.addEventListener('click', ()=>{ state.staffingNeeds[b.dataset.sv].splice(parseInt(b.dataset.i),1); save('staffingNeeds'); renderNeeds(); });
+  });
+}
+
+/* ============================= TURNI: quote settimanali per persona ============================= */
+// Codici selezionabili in una quota: i turni di lavoro configurati, più il Riposo.
+const QUOTA_CODES = () => WORKING_CODES().concat([REST_CODE]);
+function renderQuotas(){
+  const el = document.getElementById('quota-panel');
+  if(!state.staff.length){ el.innerHTML = `<div class="empty">Aggiungi prima persone alla brigata.</div>`; return; }
+  el.innerHTML = state.staff.map(s=>{
+    const quota = s.weeklyQuota||[];
+    const total = quota.reduce((sum,g)=>sum+(parseInt(g.count)||0),0);
+    return `
+    <div class="panel">
+      <h3>${esc(s.name)} <span class="small-note" style="display:inline;">— totale ${total}/7</span></h3>
+      <label>Stazioni qualificate</label>
+      <div class="chip-toggle staff-station-chips" data-staff="${s.id}">
+        ${state.stations.map(st=>`<button type="button" data-st="${st.id}" class="${(s.stations||[]).includes(st.id)?'on':''}">${esc(st.name)}</button>`).join('') || '<span class="small-note">Nessuna stazione creata</span>'}
+      </div>
+      <label>Gruppi di turni</label>
+      <div id="quota-groups-${s.id}">
+        ${quota.map((g,i)=>`
+          <div class="panel" style="background:var(--bg-elev2);padding:10px;">
+            <div class="grid2">
+              <input type="number" class="q-count" data-staff="${s.id}" data-i="${i}" value="${g.count}" min="0" placeholder="n. turni">
+              <button type="button" class="q-rm" data-staff="${s.id}" data-i="${i}">✕ Rimuovi gruppo</button>
+            </div>
+            <div class="chip-toggle q-codes" data-staff="${s.id}" data-i="${i}">
+              ${QUOTA_CODES().map(c=>`<button type="button" data-c="${esc(c)}" title="${esc(CODE_LABEL(c))}" class="${(g.codes||[]).includes(c)?'on':''}">${esc(c)}</button>`).join('')}
+            </div>
+            <p class="small-note" style="margin-top:4px;">Se selezioni più codici (es. P e S), ad ogni turno di questo gruppo verrà scelto casualmente uno dei due.</p>
+          </div>`).join('')}
+      </div>
+      <button class="btn ghost small" data-addgroup="${s.id}" type="button" style="margin-top:6px;">+ Gruppo di turni</button>
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.staff-station-chips button').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const staffId = b.closest('.staff-station-chips').dataset.staff;
+      const s = state.staff.find(x=>x.id===staffId);
+      s.stations = s.stations||[];
+      const stId = b.dataset.st;
+      if(s.stations.includes(stId)) s.stations = s.stations.filter(x=>x!==stId); else s.stations.push(stId);
+      save('staff'); b.classList.toggle('on');
+    });
+  });
+  el.querySelectorAll('[data-addgroup]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const s = state.staff.find(x=>x.id===b.dataset.addgroup);
+      s.weeklyQuota = s.weeklyQuota||[]; s.weeklyQuota.push({count:1, codes:['R']});
+      save('staff'); renderQuotas();
+    });
+  });
+  el.querySelectorAll('.q-count').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const s = state.staff.find(x=>x.id===inp.dataset.staff);
+      s.weeklyQuota[inp.dataset.i].count = parseInt(inp.value)||0;
+      save('staff');
+    });
+  });
+  el.querySelectorAll('.q-rm').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const s = state.staff.find(x=>x.id===b.dataset.staff);
+      s.weeklyQuota.splice(parseInt(b.dataset.i),1);
+      save('staff'); renderQuotas();
+    });
+  });
+  el.querySelectorAll('.q-codes button').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const group = b.closest('.q-codes');
+      const s = state.staff.find(x=>x.id===group.dataset.staff);
+      const g = s.weeklyQuota[group.dataset.i];
+      g.codes = g.codes||[];
+      const c = b.dataset.c;
+      if(g.codes.includes(c)) g.codes = g.codes.filter(x=>x!==c); else g.codes.push(c);
+      save('staff'); b.classList.toggle('on');
+    });
+  });
+}
+
+/* ============================= RICHIESTE DEL PERSONALE ============================= */
+let RICHIESTE = [];
+
+// La persona della brigata corrispondente a chi sta usando l'app. Il
+// collegamento si imposta nell'anagrafica brigata; senza, si possono solo
+// vedere le richieste altrui (da titolare) e non inviarne per sé.
+function miaSchedaBrigata(){
+  if(!Cloud.enabled) return null;
+  return state.staff.find(s=> s.userId === Cloud.user.id) || null;
+}
+function nomeBrigata(staffId){
+  const s = state.staff.find(x=>x.id===staffId);
+  return s ? s.name : '(persona non più in brigata)';
+}
+function elencoDate(dal, al){
+  const out = []; const fine = parseISO(al);
+  for(let d = parseISO(dal); d <= fine; d.setDate(d.getDate()+1)) out.push(isoDate(d));
+  return out;
+}
+const TIPO_LABEL = { ferie:'Ferie', riposo:'Riposo', servizio:'Solo certi servizi' };
+
+// Da richieste approvate a vincoli per il motore. Un blocco (ferie/riposo) ha
+// sempre la precedenza su una preferenza di servizio: è più stringente.
+function constraintsFromRequests(){
+  const c = {};
+  RICHIESTE.filter(r=>r.stato==='approvata').forEach(r=>{
+    elencoDate(r.dal, r.al).forEach(d=>{
+      c[r.staff_id] = c[r.staff_id] || {};
+      const esistente = c[r.staff_id][d];
+      if(esistente && esistente.blocked) return;
+      if(r.tipo==='ferie')       c[r.staff_id][d] = {blocked:'F'};
+      else if(r.tipo==='riposo') c[r.staff_id][d] = {blocked:'R'};
+      else                       c[r.staff_id][d] = {services: r.servizi || []};
+    });
+  });
+  return c;
+}
+
+async function caricaRichieste(){
+  try{ RICHIESTE = await Cloud.listRequests(); }
+  catch(e){ console.error('richieste non caricate', e); RICHIESTE = []; }
+}
+
+async function renderRichieste(){
+  await caricaRichieste();
+  const sonoTitolare = !Cloud.enabled || Cloud.isOwner();
+  const mia = miaSchedaBrigata();
+
+  // --- form ---
+  document.getElementById('req-form-title').textContent = sonoTitolare ? 'Registra una richiesta' : 'Nuova richiesta';
+  document.getElementById('req-form-note').textContent = sonoTitolare
+    ? 'Le richieste che registri tu sono già approvate: valgono subito per il generatore. Quelle inviate dalla brigata restano in attesa finché non decidi.'
+    : 'La richiesta arriva a chi gestisce la cucina. Diventa vincolante per i turni solo quando viene approvata.';
+
+  const whoEl = document.getElementById('req-who');
+  if(sonoTitolare){
+    whoEl.innerHTML = `<label>Per chi</label><select id="req-staff">${
+      state.staff.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')
+      || '<option value="">Nessuno in brigata</option>'}</select>`;
+  } else if(mia){
+    whoEl.innerHTML = `<p class="small-note" style="margin-top:0;">Richiesta a nome di <b>${esc(mia.name)}</b>.</p>`;
+  } else {
+    whoEl.innerHTML = `<div class="alert-box">Non risulti collegato a nessuna persona della brigata: chiedi a chi gestisce la cucina di collegarti, così potrai inviare le tue richieste.</div>`;
+  }
+  document.getElementById('req-add').disabled = !sonoTitolare && !mia;
+
+  document.getElementById('req-servizi').innerHTML = state.services.map(sv=>
+    `<button type="button" data-sv="${esc(sv.id)}">${esc(sv.name)}</button>`).join('');
+
+  // --- elenco ---
+  const visibili = sonoTitolare ? RICHIESTE
+    : RICHIESTE.filter(r=> mia && r.staff_id === mia.id);
+  document.getElementById('req-list-title').textContent = sonoTitolare ? 'Tutte le richieste' : 'Le mie richieste';
+
+  const el = document.getElementById('req-list');
+  if(!visibili.length){ el.innerHTML = `<div class="empty">Nessuna richiesta.</div>`; return; }
+
+  const inAttesa = visibili.filter(r=>r.stato==='in_attesa');
+  const decise   = visibili.filter(r=>r.stato!=='in_attesa');
+  const riga = r=>{
+    const giorni = elencoDate(r.dal, r.al).length;
+    const periodo = r.dal===r.al
+      ? parseISO(r.dal).toLocaleDateString('it-IT',{weekday:'short', day:'numeric', month:'long'})
+      : `${parseISO(r.dal).toLocaleDateString('it-IT',{day:'numeric',month:'short'})} → ${parseISO(r.al).toLocaleDateString('it-IT',{day:'numeric',month:'short'})} (${giorni} giorni)`;
+    const dettaglio = r.tipo==='servizio'
+      ? 'solo: ' + (r.servizi||[]).map(SERVICE_LABEL).join(', ')
+      : TIPO_LABEL[r.tipo];
+    const badge = r.stato==='approvata' ? '<span class="role-badge">approvata</span>'
+                : r.stato==='rifiutata' ? '<span class="role-badge viewer">rifiutata</span>'
+                : '<span class="role-badge viewer">in attesa</span>';
+    return `
+      <div class="staff-card">
+        <div style="min-width:0;">
+          <div style="font-weight:600;">${esc(nomeBrigata(r.staff_id))} — ${esc(dettaglio)}</div>
+          <div class="contact">${esc(periodo)}${r.nota? ' · '+esc(r.nota):''}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+          ${badge}
+          ${sonoTitolare && r.stato==='in_attesa' ? `
+            <button class="btn small req-ok" data-id="${esc(r.id)}">Approva</button>
+            <button class="btn ghost small req-no" data-id="${esc(r.id)}">Rifiuta</button>` : ''}
+          <button class="btn ghost small req-del" data-id="${esc(r.id)}" style="color:var(--alert);">Elimina</button>
+        </div>
+      </div>`;
+  };
+
+  el.innerHTML =
+    (inAttesa.length ? `<label>Da decidere (${inAttesa.length})</label>` + inAttesa.map(riga).join('') : '') +
+    (decise.length   ? `<label>Già decise</label>` + decise.map(riga).join('') : '');
+
+  const dopo = async (fn, msg)=>{ try{ await fn(); toast(msg); renderRichieste(); }catch(e){ toast(humanError(e)); } };
+  el.querySelectorAll('.req-ok').forEach(b=>b.addEventListener('click', ()=>
+    dopo(()=>Cloud.decideRequest(b.dataset.id,'approvata'), 'Approvata — vincola i prossimi turni generati')));
+  el.querySelectorAll('.req-no').forEach(b=>b.addEventListener('click', ()=>
+    dopo(()=>Cloud.decideRequest(b.dataset.id,'rifiutata'), 'Rifiutata')));
+  el.querySelectorAll('.req-del').forEach(b=>b.addEventListener('click', ()=>{
+    if(!confirm('Eliminare questa richiesta?')) return;
+    dopo(()=>Cloud.deleteRequest(b.dataset.id), 'Richiesta eliminata');
+  }));
+}
+
+document.getElementById('req-tipo').addEventListener('change', e=>{
+  document.getElementById('req-servizi-wrap').style.display = e.target.value==='servizio' ? 'block' : 'none';
+});
+document.getElementById('req-servizi').addEventListener('click', e=>{
+  if(e.target.dataset.sv) e.target.classList.toggle('on');
+});
+document.getElementById('req-add').addEventListener('click', async ()=>{
+  const dal = document.getElementById('req-dal').value;
+  const al  = document.getElementById('req-al').value || dal;
+  const tipo = document.getElementById('req-tipo').value;
+  if(!dal){ toast('Indica almeno il giorno di inizio'); return; }
+  if(parseISO(al) < parseISO(dal)){ toast('La data finale è prima di quella iniziale'); return; }
+
+  const sel = document.getElementById('req-staff');
+  const mia = miaSchedaBrigata();
+  const staffId = sel ? sel.value : (mia && mia.id);
+  if(!staffId){ toast('Manca la persona a cui riferire la richiesta'); return; }
+
+  const servizi = Array.from(document.querySelectorAll('#req-servizi button.on')).map(b=>b.dataset.sv);
+  if(tipo==='servizio' && !servizi.length){ toast('Scegli almeno un servizio'); return; }
+
+  try{
+    await Cloud.createRequest({ staff_id: staffId, dal, al, tipo, servizi,
+                                nota: document.getElementById('req-nota').value.trim() });
+    document.getElementById('req-nota').value = '';
+    document.querySelectorAll('#req-servizi button.on').forEach(b=>b.classList.remove('on'));
+    toast(Cloud.enabled && !Cloud.isOwner() ? 'Richiesta inviata — in attesa di approvazione' : 'Richiesta registrata');
+    renderRichieste();
+  }catch(e){ toast(humanError(e)); }
+});
+
+/* ============================= TURNI: generatore casuale (motore in logic.js, need-driven, testato) ============================= */
+async function generateRandomShifts(){
+  if(!state.staff.length){ toast('Aggiungi prima la brigata'); return; }
+  // Le richieste approvate sono vincoli assoluti: vanno rilette adesso, non
+  // usando quelle caricate chissà quando.
+  await caricaRichieste();
+  const missingQuota = state.staff.filter(s=> !(s.weeklyQuota&&s.weeklyQuota.length));
+  if(missingQuota.length){ toast('Imposta prima le quote per: '+missingQuota.map(s=>s.name).join(', ')); return; }
+  const unqualified = state.staff.filter(s=> !(s.stations&&s.stations.length));
+  if(unqualified.length){ toast('Attenzione: senza stazioni assegnate, '+unqualified.map(s=>s.name).join(', ')+' non potranno coprire nessun fabbisogno'); }
+
+  const dates = periodDates();
+  const constraints = constraintsFromRequests();
+  // Contate prima di aggiungere gli impegni altrove: sono due cose diverse e
+  // vanno spiegate separatamente a chi legge il riepilogo.
+  const nRichieste = Object.values(constraints).reduce((n,g)=>n+Object.keys(g).length, 0);
+  const nPersoneRichieste = Object.keys(constraints).length;
+
+  // Chi lavora anche in un'altra cucina non puo' essere in due posti lo stesso
+  // giorno: gli impegni altrove valgono come un vincolo assoluto, esattamente
+  // come una richiesta approvata.
+  let altrove = {};
+  try{ altrove = await Cloud.impegniAltrove(state.staff, dates); }
+  catch(e){ console.error('impegni altrove non letti', e); }
+  Object.entries(altrove).forEach(([staffId, giorni])=>{
+    Object.keys(giorni).forEach(d=>{
+      constraints[staffId] = constraints[staffId] || {};
+      if(!constraints[staffId][d]) constraints[staffId][d] = {blocked:'R'};
+    });
+  });
+  const { newShifts, shortfalls, extras } = computeShiftsForDates(state.staff, state.staffingNeeds,
+    {config: refreshShiftConfig(), dates, constraints});
+  // Si sovrascrivono SOLO le date del periodo: i turni delle altre settimane
+  // gia' pianificate non devono sparire perche' se ne rigenera una.
+  state.staff.forEach(s=>{
+    state.shifts[s.id] = Object.assign(state.shifts[s.id]||{}, newShifts[s.id]||{});
+  });
+  save('shifts');
+  renderTurni(); renderOreExtra(); renderDashboard();
+
+  const logEl = document.getElementById('generate-log');
+  let html = '';
+  if(extras.length){
+    const byPerson = {};
+    extras.forEach(ex=>{ byPerson[ex.staffName] = (byPerson[ex.staffName]||0)+1; });
+    html += `<div class="alert-box">Il fabbisogno impostato supera le quote della brigata: ${extras.length} turni EXTRA (oltre quota) sono stati assegnati per coprire comunque le postazioni — ` +
+      Object.entries(byPerson).map(([name,n])=>`${esc(name)} (+${n})`).join(', ') +
+      `. Sono segnati con "extra" nella griglia qui sotto.</div>`;
+  }
+  if(shortfalls.length){
+    const byDay = {};
+    shortfalls.forEach(sf=>{
+      const st = state.stations.find(x=>x.id===sf.stationId);
+      const key = parseISO(sf.day).toLocaleDateString('it-IT',{weekday:'short', day:'numeric', month:'short'});
+      byDay[key] = byDay[key] || [];
+      byDay[key].push(`${esc(SERVICE_LABEL(sf.service))} · ${st?st.name:'—'} (mancano ${sf.missing})`);
+    });
+    html += `<div class="alert-box">⚠ Anche assegnando turni extra, restano postazioni scoperte perché nessun qualificato è libero quel giorno:<br>` +
+      Object.entries(byDay).map(([day,lines])=>`<b>${day}</b>: ${lines.join(' · ')}`).join('<br>') +
+      `</div><p class="small-note">Per risolvere: aggiungi personale qualificato per quella stazione, o abbassa il fabbisogno richiesto.</p>`;
+  }
+  const nAltrove = Object.values(altrove).reduce((n,g)=>n+Object.keys(g).length, 0);
+  let premessa = '';
+  if(nRichieste){
+    premessa += `<div class="ok-box">Rispettate le richieste approvate: ${nRichieste} giorni vincolati su ${nPersoneRichieste} person${nPersoneRichieste>1?'e':'a'}.</div>`;
+  }
+  if(nAltrove){
+    const nomi = [...new Set(Object.values(altrove).flatMap(g=>Object.values(g)))];
+    premessa += `<div class="ok-box">${nAltrove} giorni lasciati liberi: quelle persone lavorano in un'altra cucina (${nomi.map(esc).join(', ')}).</div>`;
+  }
+  html = premessa + html;
+  if(!extras.length && !shortfalls.length){
+    html += `<div class="ok-box">✓ Fabbisogno coperto per tutti i servizi, tutti i giorni, senza bisogno di turni extra.</div>`;
+  }
+  logEl.innerHTML = html;
+  toast(shortfalls.length ? 'Turni generati — alcune postazioni restano scoperte, vedi dettagli' : (extras.length ? 'Turni generati — con alcuni turni extra' : 'Turni generati — fabbisogno coperto'));
+}
+document.getElementById('btn-generate-shifts').addEventListener('click', generateRandomShifts);
+
+/* ---- Navigazione del periodo ---- */
+function aggiornaPeriodo(){ renderTurni(); renderOreExtra(); }
+document.querySelectorAll('.period-modes button').forEach(b=>b.addEventListener('click', ()=>{
+  periodMode = b.dataset.period;
+  aggiornaPeriodo();
+}));
+document.getElementById('period-prev').addEventListener('click', ()=>{ shiftPeriod(-1); aggiornaPeriodo(); });
+document.getElementById('period-next').addEventListener('click', ()=>{ shiftPeriod(1);  aggiornaPeriodo(); });
+document.getElementById('period-today').addEventListener('click', ()=>{ periodAnchor = new Date(); aggiornaPeriodo(); });
+
+/* ============================= BENESSERE ============================= */
+function renderWbStaffOptions(){
+  const sel = document.getElementById('wb-staff');
+  sel.innerHTML = state.staff.length ? state.staff.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('') : `<option value="">Aggiungi prima la brigata</option>`;
+  document.getElementById('wb-date').valueAsDate = new Date();
+}
+document.getElementById('wb-add').addEventListener('click', ()=>{
+  const staffId = document.getElementById('wb-staff').value;
+  const date = document.getElementById('wb-date').value;
+  const ore = parseFloat(document.getElementById('wb-ore').value);
+  if(!staffId || !date || !ore){ toast('Compila tutti i campi'); return; }
+  state.wellbeing.push({id:uid(), staffId, date, ore});
+  save('wellbeing');
+  document.getElementById('wb-ore').value='';
+  renderWbSummary(); renderWbTips();
+  toast('Ore registrate');
+});
+function weekBounds(d=new Date()){
+  const day = (d.getDay()+6)%7;
+  const monday = new Date(d); monday.setDate(d.getDate()-day); monday.setHours(0,0,0,0);
+  const sunday = new Date(monday); sunday.setDate(monday.getDate()+6); sunday.setHours(23,59,59,999);
+  return [monday, sunday];
+}
+function renderWbSummary(){
+  const el = document.getElementById('wb-summary');
+  const [mon,sun] = weekBounds();
+  const byStaff = {};
+  state.wellbeing.forEach(w=>{ const dt = new Date(w.date); if(dt>=mon && dt<=sun){ byStaff[w.staffId] = (byStaff[w.staffId]||0) + parseFloat(w.ore); } });
+  if(!Object.keys(byStaff).length){ el.innerHTML = `<div class="empty">Nessuna ora registrata questa settimana.</div>`; return; }
+  el.innerHTML = Object.entries(byStaff).map(([id,tot])=>{
+    const name = (state.staff.find(s=>s.id===id)||{}).name || '—';
+    const over = tot>48;
+    return `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;"><span>${esc(name)}</span><span style="font-family:var(--font-mono);color:${over?'var(--alert)':'var(--sage)'};">${tot.toFixed(1)}h ${over?'⚠':'✓'}</span></div>`;
+  }).join('');
+}
+function renderWbTips(){
+  const tips = [
+    "La direttiva UE sull'orario di lavoro indica 48h settimanali come soglia massima media — usala come riferimento, non come obiettivo.",
+    "Un giorno di riposo consecutivo dopo un servizio doppio pesante aiuta il recupero più di due giorni sparsi.",
+    "Ruota chi apre e chi chiude: chi fa sempre il turno più lungo si esaurisce prima, anche se non lo dice.",
+    "Un briefing di 5 minuti prima del servizio riduce lo stress operativo più di qualunque software.",
+  ];
+  document.getElementById('wb-tips').innerHTML = tips.map(t=>`— ${t}`).join('<br><br>');
+}
+
+/* ============================= KNOWLEDGE BASE ============================= */
+function renderKB(){
+  const el = document.getElementById('kb-list');
+  if(!state.knowledge.length){ el.innerHTML = `<div class="empty">Base di conoscenza vuota. Aggiungi ricette o appunti sopra.</div>`; return; }
+  el.innerHTML = state.knowledge.map(k=>`<div class="kb-item"><span class="t">${esc(k.title)}</span><button class="rm" data-id="${k.id}">✕</button></div>`).join('');
+  el.querySelectorAll('.rm').forEach(b=> b.addEventListener('click', ()=>{ state.knowledge = state.knowledge.filter(k=>k.id!==b.dataset.id); save('knowledge'); renderKB(); toast('Nota rimossa'); }));
+}
+document.getElementById('kb-add').addEventListener('click', async ()=>{
+  const title = document.getElementById('kb-title').value.trim();
+  const text = document.getElementById('kb-text').value.trim();
+  const fileInput = document.getElementById('kb-file');
+  let content = text;
+  if(fileInput.files[0]){ content = await fileInput.files[0].text(); }
+  if(!content){ toast('Aggiungi del testo o un file'); return; }
+  state.knowledge.push({id:uid(), title: title || 'Nota senza titolo', content, addedAt: new Date().toISOString()});
+  save('knowledge');
+  document.getElementById('kb-title').value=''; document.getElementById('kb-text').value=''; fileInput.value='';
+  renderKB(); toast('Aggiunto alla base di conoscenza');
+});
+
+/* ============================= CHAT / AI AGENT ============================= */
+function renderChat(){
+  const log = document.getElementById('chat-log');
+  if(!state.chatHistory.length){
+    log.innerHTML = `<div class="msg ai">Ciao chef. Sono qui per pensare i piatti con te, rivedere un menu, o solo confrontarci su un'idea. Se carichi qualche ricetta nella base di conoscenza qui sopra, terrò conto del tuo stile.</div>`;
+    return;
+  }
+  log.innerHTML = state.chatHistory.map(m=>`<div class="msg ${m.role==='user'?'user':'ai'}">${esc(m.content)}</div>`).join('');
+  log.scrollTop = log.scrollHeight;
+}
+function buildSystemPrompt(){
+  let kb = '';
+  if(state.knowledge.length){
+    const recent = state.knowledge.slice(-10);
+    kb = '\n\nBase di conoscenza dello chef (ricette e appunti personali, usali per capire il suo stile e dare consigli coerenti):\n' + recent.map(k=>`### ${k.title}\n${k.content}`).join('\n\n').slice(0, 6000);
+  }
+  const dishSummary = state.recipes.length ? '\n\nPiatti attuali in ricettario: ' + state.recipes.map(r=>r.name).join(', ') : '';
+  return `Sei il sous-chef personale e assistente di fiducia di uno chef professionista. Parli italiano, in modo diretto, concreto e da collega di cucina — non da assistente generico. Aiuti a: ideare nuovi piatti, bilanciare menu, valutare food cost, gestire la brigata e i turni, e a prenderti cura del benessere dello chef. Dai consigli pratici, con quantità e tecniche quando utile, e fai domande solo se davvero necessario per procedere.${kb}${dishSummary}`;
+}
+async function sendChat(){
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if(!text) return;
+  state.chatHistory.push({role:'user', content:text});
+  save('chatHistory');
+  input.value='';
+  renderChat();
+  document.getElementById('chat-typing').style.visibility='visible';
+  try{
+    const data = await Cloud.ai({
+      task: 'chat',
+      system: buildSystemPrompt(),
+      messages: state.chatHistory.map(m=>({role:m.role, content:m.content}))
+    });
+    const textBlocks = (data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
+    state.chatHistory.push({role:'assistant', content: textBlocks || 'Non sono riuscito a rispondere, riprova.'});
+  }catch(e){
+    state.chatHistory.push({role:'assistant', content: e.userFacing ? e.message : 'C\'è stato un problema di connessione. Riprova tra poco.'});
+  }
+  document.getElementById('chat-typing').style.visibility='hidden';
+  save('chatHistory');
+  renderChat();
+}
+document.getElementById('chat-send').addEventListener('click', sendChat);
+document.getElementById('chat-input').addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendChat(); } });
+
+/* ============================= BACKUP ============================= */
+document.getElementById('btn-export').addEventListener('click', ()=>{
+  const backup = {};
+  STORE_KEYS.forEach(k=> backup[k]=state[k]);
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,10);
+  a.href = url; a.download = `comanda-backup-${stamp}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Backup scaricato');
+});
+
+document.getElementById('import-file-input').addEventListener('change', async (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  try{
+    const text = await file.text();
+    const backup = JSON.parse(text);
+    for(const k of STORE_KEYS){
+      if(backup[k] !== undefined){ state[k] = backup[k]; await save(k); }
+    }
+    migrateData();
+    renderDashboard();
+    toast('Backup importato — dati ripristinati');
+  }catch(err){
+    toast('File di backup non valido');
+  }
+  e.target.value = '';
+});
+
+/* ============================= ACCESSO, CUCINA, RUOLI ============================= */
+const gateEl  = document.getElementById('gate');
+const gateErr = document.getElementById('gate-error');
+
+function gateRender(lead, html){
+  document.getElementById('gate-lead').textContent = lead;
+  document.getElementById('gate-body').innerHTML = html;
+  gateErr.style.display = 'none';
+  gateEl.classList.add('show');
+}
+function gateError(msg){
+  gateErr.textContent = msg;
+  gateErr.style.display = 'block';
+}
+// Gli errori tecnici di Supabase sono in inglese: in cucina non servono a nessuno.
+function humanError(e){
+  const m = (e && e.message) || '';
+  if(/Invalid login credentials/i.test(m)) return 'Email o password non corretti.';
+  if(/Email not confirmed/i.test(m))       return 'Devi prima confermare l\'email che ti abbiamo inviato.';
+  if(/User already registered/i.test(m))   return 'Esiste già un account con questa email — accedi invece di registrarti.';
+  if(/Password should be/i.test(m))        return 'La password deve avere almeno 6 caratteri.';
+  if(/Codice invito|permessi/i.test(m))    return m;
+  if(/FORBIDDEN|row-level security|permission denied/i.test(m))
+    return 'Non hai i permessi per questa modifica in questa cucina.';
+  if(/Failed to fetch|NetworkError/i.test(m)) return 'Nessuna connessione. Controlla la rete e riprova.';
+  return m || 'Qualcosa non ha funzionato. Riprova.';
+}
+
+function screenSignIn(mode){
+  const isNew = mode === 'signup';
+  gateRender(isNew ? 'Crea il tuo account' : 'Accedi alla tua cucina', `
+    <label>Email</label>
+    <input type="email" id="g-email" autocomplete="email" placeholder="nome@ristorante.it">
+    <label>Password</label>
+    <input type="password" id="g-pass" autocomplete="${isNew?'new-password':'current-password'}" placeholder="${isNew?'almeno 6 caratteri':''}">
+    <button class="btn full" id="g-submit" style="margin-top:16px;">${isNew?'Crea account':'Entra'}</button>
+    <div style="text-align:center;margin-top:10px;">
+      <button class="gate-switch" id="g-switch">${isNew?'Ho già un account, accedi':'Non ho un account, creane uno'}</button>
+    </div>
+    ${isNew?'':'<div style="text-align:center;"><button class="gate-switch" id="g-forgot">Ho dimenticato la password</button></div>'}
+  `);
+
+  const submit = async ()=>{
+    const email = document.getElementById('g-email').value.trim();
+    const pass  = document.getElementById('g-pass').value;
+    if(!email || !pass){ gateError('Servono email e password.'); return; }
+    const btn = document.getElementById('g-submit');
+    btn.disabled = true; btn.textContent = 'Un attimo…';
+    try{
+      if(isNew){
+        const { needsConfirmation } = await Cloud.signUp(email, pass);
+        if(needsConfirmation){
+          gateRender('Controlla la posta', `
+            <p style="font-size:13.5px;line-height:1.6;">Ti abbiamo inviato un'email a <b>${esc(email)}</b>.
+            Aprila e conferma l'indirizzo, poi torna qui e accedi.</p>
+            <button class="btn full" id="g-back" style="margin-top:16px;">Torna all'accesso</button>`);
+          document.getElementById('g-back').addEventListener('click', ()=>screenSignIn('signin'));
+          return;
+        }
+      } else {
+        await Cloud.signIn(email, pass);
+      }
+      await afterSignIn();
+    }catch(e){
+      gateError(humanError(e));
+      btn.disabled = false; btn.textContent = isNew?'Crea account':'Entra';
+    }
+  };
+
+  document.getElementById('g-submit').addEventListener('click', submit);
+  document.getElementById('g-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
+  document.getElementById('g-switch').addEventListener('click', ()=>screenSignIn(isNew?'signin':'signup'));
+  const forgot = document.getElementById('g-forgot');
+  if(forgot) forgot.addEventListener('click', async ()=>{
+    const email = document.getElementById('g-email').value.trim();
+    if(!email){ gateError('Scrivi prima la tua email qui sopra.'); return; }
+    try{ await Cloud.resetPassword(email); gateError('Ti abbiamo inviato un link per reimpostare la password.'); }
+    catch(e){ gateError(humanError(e)); }
+  });
+}
+
+function screenKitchens(){
+  const rows = Cloud.memberships.map(m=>`
+    <button class="kitchen-row" data-k="${esc(m.kitchen.id)}">
+      <span>${esc(m.kitchen.name)}</span>
+      <span class="role-badge ${m.role==='viewer'?'viewer':''}">${m.role==='owner'?'titolare':(m.role==='editor'?'può modificare':'sola lettura')}</span>
+    </button>`).join('');
+
+  gateRender(Cloud.memberships.length ? 'Scegli la cucina' : 'Nessuna cucina, ancora', `
+    ${rows}
+    <div class="panel" style="margin-top:18px;">
+      <h3>Apri una nuova cucina</h3>
+      <label>Nome della cucina</label>
+      <input type="text" id="g-kname" placeholder="es. Trattoria del Porto">
+      <label>Come ti chiamano in cucina</label>
+      <input type="text" id="g-myname" placeholder="es. Emanuele, chef">
+      <button class="btn full" id="g-create" style="margin-top:12px;">Crea cucina</button>
+    </div>
+    <div class="panel">
+      <h3>Entra con un codice d'invito</h3>
+      <p class="small-note" style="margin-top:0;">Te lo dà chi gestisce la cucina.</p>
+      <label>Codice</label>
+      <input type="text" id="g-code" placeholder="ABCD2345" style="text-transform:uppercase;letter-spacing:2px;">
+      <label>Come ti chiamano in cucina</label>
+      <input type="text" id="g-joinname" placeholder="es. Marco, secondo">
+      <p class="small-note" style="margin-top:4px;">Serve a chi gestisce la cucina per riconoscerti nell'elenco della squadra.</p>
+      <button class="btn ghost full" id="g-join" style="margin-top:10px;">Entra nella cucina</button>
+    </div>
+    <div style="text-align:center;"><button class="gate-switch" id="g-out">Esci dall'account</button></div>
+  `);
+
+  gateEl.querySelectorAll('.kitchen-row').forEach(b=>{
+    b.addEventListener('click', ()=>{ Cloud.selectKitchen(b.dataset.k); startApp(); });
+  });
+  document.getElementById('g-create').addEventListener('click', async ()=>{
+    const name = document.getElementById('g-kname').value.trim();
+    if(!name){ gateError('Dai un nome alla cucina.'); return; }
+    try{ await Cloud.createKitchen(name, document.getElementById('g-myname').value); startApp(); }
+    catch(e){ gateError(humanError(e)); }
+  });
+  document.getElementById('g-join').addEventListener('click', async ()=>{
+    const code = document.getElementById('g-code').value.trim().toUpperCase();
+    if(!code){ gateError('Inserisci il codice.'); return; }
+    try{ await Cloud.joinKitchen(code, document.getElementById('g-joinname').value); startApp(); }
+    catch(e){ gateError(humanError(e)); }
+  });
+  document.getElementById('g-out').addEventListener('click', async ()=>{ await Cloud.signOut(); screenSignIn('signin'); });
+}
+
+function screenBlocked(reason){
+  const testo = reason === 'suspended'
+    ? 'Questa cucina è sospesa. I dati sono al sicuro e tornano disponibili appena viene riattivata.'
+    : 'Il periodo di prova di questa cucina è terminato. I dati sono al sicuro e tornano disponibili appena viene attivata.';
+  gateRender('Accesso sospeso', `
+    <p style="font-size:13.5px;line-height:1.6;">${testo}</p>
+    <button class="btn ghost full" id="g-other" style="margin-top:16px;">Scegli un'altra cucina</button>
+    <div style="text-align:center;"><button class="gate-switch" id="g-out2">Esci dall'account</button></div>
+  `);
+  document.getElementById('g-other').addEventListener('click', ()=>{ Cloud.kitchen=null; screenKitchens(); });
+  document.getElementById('g-out2').addEventListener('click', async ()=>{ await Cloud.signOut(); screenSignIn('signin'); });
+}
+
+async function afterSignIn(){
+  gateRender('Carico le tue cucine…', '');
+  await Cloud.loadMemberships();
+  const last = Cloud.lastKitchenId();
+  const auto = Cloud.memberships.find(m=>m.kitchen.id===last) ||
+               (Cloud.memberships.length===1 ? Cloud.memberships[0] : null);
+  if(auto){ Cloud.selectKitchen(auto.kitchen.id); return startApp(); }
+  screenKitchens();
+}
+
+/* ---- Barra account e sola lettura ---- */
+function renderAccountBar(){
+  if(!Cloud.enabled) return;
+  const bar = document.getElementById('account-bar');
+  bar.style.display = 'flex';
+  // Con più cucine il nome diventa un menu: chi ne gestisce quattro cambia di
+  // continuo, e passare dalla schermata iniziale ogni volta è una tortura.
+  const sel = document.getElementById('ab-kitchen-sel');
+  const nome = document.getElementById('ab-kitchen');
+  if(Cloud.memberships.length > 1){
+    sel.innerHTML = Cloud.memberships.map(m=>
+      `<option value="${esc(m.kitchen.id)}" ${m.kitchen.id===Cloud.kitchen.id?'selected':''}>${esc(m.kitchen.name)}</option>`).join('');
+    sel.style.display = ''; nome.style.display = 'none';
+  } else {
+    sel.style.display = 'none'; nome.style.display = '';
+    nome.textContent = Cloud.kitchen.name;
+  }
+  // Il nome scelto, se c'è: l'email è lunga e non dice niente a colpo d'occhio.
+  document.getElementById('ab-email').textContent = Cloud.myDisplayName || Cloud.user.email;
+  const badge = document.getElementById('ab-role');
+  badge.textContent = Cloud.role==='owner' ? 'titolare' : (Cloud.role==='editor' ? 'può modificare' : 'sola lettura');
+  badge.className = 'role-badge' + (Cloud.role==='viewer' ? ' viewer' : '');
+  document.getElementById('ab-team').style.display = Cloud.isOwner() ? 'inline-block' : 'none';
+}
+
+// I comandi di navigazione e l'assistente personale restano usabili anche in
+// sola lettura: quello che si blocca è tutto ciò che modificherebbe i dati.
+const READONLY_ALLOWED = '#tabs, nav.subtabs, #chat-input, #chat-send, #btn-export, #account-bar, .overlay';
+function readonlyGuard(e){
+  if(!Cloud.enabled || Cloud.canWrite()) return;
+  const t = e.target;
+  if(!t.closest || t.closest(READONLY_ALLOWED)) return;
+  if(!t.matches('button, input, select, textarea, label[for], .chip-toggle button, .rm')) return;
+  e.preventDefault(); e.stopPropagation();
+  if(e.type === 'click') toast('Sei in sola lettura: non puoi modificare i dati di questa cucina.');
+}
+['click','change','input','keydown'].forEach(ev=>document.addEventListener(ev, readonlyGuard, true));
+
+/* ---- Gestione squadra (titolare) ---- */
+const teamEl = document.getElementById('team');
+document.getElementById('team-close').addEventListener('click', ()=>teamEl.classList.remove('show'));
+
+// Durate proposte per i codici d'invito. 'mai' = nessuna scadenza.
+const DURATE_INVITO = [
+  {v:'1', l:'1 giorno'}, {v:'3', l:'3 giorni'}, {v:'7', l:'7 giorni'},
+  {v:'14', l:'14 giorni'}, {v:'30', l:'30 giorni'}, {v:'90', l:'90 giorni'},
+  {v:'mai', l:'senza scadenza'},
+];
+function DURATA_OPTIONS(scelta){
+  return DURATE_INVITO.map(d=>
+    `<option value="${d.v}" ${String(scelta)===d.v?'selected':''}>${d.l}</option>`).join('');
+}
+function ROLE_OPTIONS(scelto){
+  return [['editor','può modificare'],['viewer','sola lettura']].map(([v,l])=>
+    `<option value="${v}" ${scelto===v?'selected':''}>${l}</option>`).join('');
+}
+// Quanto resta, detto come lo direbbe una persona.
+function scadenzaTesto(iso){
+  if(!iso) return 'senza scadenza';
+  const ms = new Date(iso) - new Date();
+  if(ms <= 0) return 'scaduto';
+  const giorni = Math.floor(ms/86400000);
+  if(giorni >= 1) return 'scade tra ' + giorni + (giorni===1 ? ' giorno' : ' giorni');
+  const ore = Math.floor(ms/3600000);
+  if(ore >= 1) return 'scade tra ' + ore + (ore===1 ? ' ora' : ' ore');
+  return 'scade tra meno di un\'ora';
+}
+
+async function openTeam(){
+  teamEl.classList.add('show');
+  document.getElementById('team-kitchen').textContent = Cloud.kitchen.name;
+  document.getElementById('team-error').style.display = 'none';
+  document.getElementById('team-body').innerHTML = '<div class="empty">Carico…</div>';
+  try{
+    const [members, invites] = await Promise.all([Cloud.listMembers(), Cloud.listInvites()]);
+    const pending = invites.filter(Cloud.inviteIsPending);
+    document.getElementById('team-body').innerHTML = `
+      <div class="panel">
+        <h3>Chi lavora su questa cucina</h3>
+        ${members.map(m=>{
+          const io = m.user_id === Cloud.user.id;
+          const nome = m.display_name || m.email || 'Senza nome';
+          return `
+          <div class="panel" style="background:var(--bg-elev2);padding:12px;margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+              <div style="min-width:0;">
+                <div style="font-weight:600;overflow-wrap:anywhere;">${esc(nome)}</div>
+                <div class="contact" style="overflow-wrap:anywhere;">${esc(m.email||'')}${
+                  io ? ' · sei tu' : ' · dal ' + new Date(m.created_at).toLocaleDateString('it-IT')}</div>
+              </div>
+              ${io
+                ? `<span class="role-badge">${m.role==='owner'?'titolare':(m.role==='editor'?'può modificare':'sola lettura')}</span>`
+                : `<select class="tm-role" data-u="${esc(m.user_id)}" style="width:auto;flex-shrink:0;">
+                     <option value="editor" ${m.role==='editor'?'selected':''}>può modificare</option>
+                     <option value="viewer" ${m.role==='viewer'?'selected':''}>sola lettura</option>
+                     <option value="owner"  ${m.role==='owner'?'selected':''}>titolare</option>
+                   </select>`}
+            </div>
+            <div class="grid2" style="margin-top:8px;">
+              <input type="text" class="tm-name" data-u="${esc(m.user_id)}"
+                     value="${esc(m.display_name||'')}" placeholder="nome in cucina, es. Marco secondo">
+              ${io ? '' : `<button class="btn ghost small tm-rm" data-u="${esc(m.user_id)}"
+                           data-n="${esc(nome)}" style="color:var(--alert);">Rimuovi dalla cucina</button>`}
+            </div>
+          </div>`;}).join('')}
+      </div>
+      <div class="panel">
+        <h3>Invita qualcuno</h3>
+        <p class="small-note" style="margin-top:0;">Genera un codice e daglielo: lo inserisce al primo accesso ed entra con il permesso che scegli tu. Vale per una persona sola. Permesso e durata restano modificabili anche dopo averlo consegnato.</p>
+        <div class="grid2">
+          <div>
+            <label>Permesso</label>
+            <select id="inv-role">${ROLE_OPTIONS('editor')}</select>
+          </div>
+          <div>
+            <label>Validità</label>
+            <select id="inv-days">${DURATA_OPTIONS(14)}</select>
+          </div>
+        </div>
+        <button class="btn small full" id="inv-create" style="margin-top:12px;">Genera codice</button>
+        <div id="team-new-code"></div>
+
+        ${pending.length ? `<label style="margin-top:16px;">Codici ancora validi</label>` + pending.map(i=>`
+          <div class="panel" style="background:var(--bg-elev2);padding:10px;margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+              <span style="font-family:var(--font-mono);font-size:15px;letter-spacing:2px;color:var(--copper-light);">${esc(i.code)}</span>
+              <span style="display:flex;align-items:center;gap:8px;">
+                <span class="small-note" style="margin:0;">${esc(scadenzaTesto(i.expires_at))}</span>
+                <button class="rm tm-revoke" data-c="${esc(i.code)}" title="Annulla il codice">✕</button>
+              </span>
+            </div>
+            <div class="grid2" style="margin-top:8px;">
+              <select class="inv-edit-role" data-c="${esc(i.code)}">${ROLE_OPTIONS(i.role)}</select>
+              <select class="inv-edit-days" data-c="${esc(i.code)}">
+                <option value="">— cambia validità —</option>${DURATA_OPTIONS()}
+              </select>
+            </div>
+          </div>`).join('') : ''}
+      </div>`;
+
+    document.getElementById('inv-create').addEventListener('click', async ()=>{
+      try{
+        const giorni = document.getElementById('inv-days').value;
+        const code = await Cloud.createInvite(
+          document.getElementById('inv-role').value,
+          giorni === 'mai' ? null : giorni
+        );
+        document.getElementById('team-new-code').innerHTML =
+          `<div class="invite-code">${esc(code)}</div><p class="small-note" style="margin-top:0;">Annotalo ora: lo trovi anche nell'elenco qui sotto, ma è più comodo dettarlo subito.</p>`;
+      }catch(e){ teamError(e); }
+    });
+    teamEl.querySelectorAll('.inv-edit-role').forEach(sel=>sel.addEventListener('change', async ()=>{
+      try{ await Cloud.updateInvite(sel.dataset.c, {role: sel.value}); toast('Permesso del codice aggiornato'); }
+      catch(e){ teamError(e); }
+    }));
+    teamEl.querySelectorAll('.inv-edit-days').forEach(sel=>sel.addEventListener('change', async ()=>{
+      if(!sel.value) return;
+      try{
+        await Cloud.updateInvite(sel.dataset.c, {giorni: sel.value === 'mai' ? null : sel.value});
+        openTeam(); toast('Validità aggiornata');
+      }catch(e){ teamError(e); }
+    }));
+    teamEl.querySelectorAll('.tm-role').forEach(sel=>sel.addEventListener('change', async ()=>{
+      try{ await Cloud.setMemberRole(sel.dataset.u, sel.value); toast('Ruolo aggiornato'); }
+      catch(e){ teamError(e); }
+    }));
+    teamEl.querySelectorAll('.tm-name').forEach(inp=>inp.addEventListener('change', async ()=>{
+      try{
+        await Cloud.setMemberName(inp.dataset.u, inp.value);
+        if(inp.dataset.u === Cloud.user.id){ Cloud.myDisplayName = inp.value.trim() || null; renderAccountBar(); }
+        toast('Nome aggiornato');
+      }catch(e){ teamError(e); }
+    }));
+    teamEl.querySelectorAll('.tm-rm').forEach(b=>b.addEventListener('click', async ()=>{
+      // Rimuovere qualcuno gli toglie l'accesso subito: meglio una conferma con
+      // il nome davanti agli occhi, viste le righe una sotto l'altra.
+      if(!confirm(`Togliere a ${b.dataset.n} l'accesso a ${Cloud.kitchen.name}?\n\nI dati della cucina restano intatti. Potrai riammetterla con un nuovo codice d'invito.`)) return;
+      try{ await Cloud.removeMember(b.dataset.u); openTeam(); toast('Persona rimossa'); }
+      catch(e){ teamError(e); }
+    }));
+    teamEl.querySelectorAll('.tm-revoke').forEach(b=>b.addEventListener('click', async ()=>{
+      try{ await Cloud.revokeInvite(b.dataset.c); openTeam(); }
+      catch(e){ teamError(e); }
+    }));
+  }catch(e){ teamError(e); }
+}
+function teamError(e){
+  const el = document.getElementById('team-error');
+  el.textContent = humanError(e); el.style.display = 'block';
+}
+
+document.getElementById('ab-kitchen-sel').addEventListener('change', e=>{
+  // Ricarico invece di ridisegnare: cambiare cucina cambia tutto (brigata,
+  // servizi, turni, richieste) e una ripartenza pulita non lascia residui.
+  Cloud.selectKitchen(e.target.value);
+  location.reload();
+});
+document.getElementById('ab-team').addEventListener('click', openTeam);
+document.getElementById('ab-rename').addEventListener('click', async ()=>{
+  const nome = prompt('Come ti chiamano in cucina?\n\nÈ il nome con cui ti vede chi gestisce la cucina.',
+                      Cloud.myDisplayName || '');
+  if(nome === null) return;
+  try{ await Cloud.setMyDisplayName(nome); renderAccountBar(); toast('Nome aggiornato'); }
+  catch(e){ toast(humanError(e)); }
+});
+document.getElementById('ab-logout').addEventListener('click', async ()=>{ await Cloud.signOut(); location.reload(); });
+document.getElementById('ab-switch').addEventListener('click', ()=>{
+  try{ localStorage.removeItem((Cloud.isStaging?'comanda_staging_':'comanda_')+'last_kitchen'); }catch(e){}
+  location.reload();
+});
+
+/* ============================= INIT ============================= */
+async function startApp(){
+  const blocco = Cloud.accessBlock();
+  if(blocco) return screenBlocked(blocco);
+
+  gateRender('Carico i dati della cucina…', '');
+  try{
+    await loadAll();
+  }catch(e){
+    gateRender('Dati non raggiungibili', `
+      <p style="font-size:13.5px;line-height:1.6;">${esc(humanError(e))}</p>
+      <button class="btn full" id="g-retry" style="margin-top:16px;">Riprova</button>`);
+    document.getElementById('g-retry').addEventListener('click', ()=>location.reload());
+    return;
+  }
+
+  gateEl.classList.remove('show');
+  document.body.classList.toggle('readonly', Cloud.enabled && !Cloud.canWrite());
+  renderAccountBar();
+  document.getElementById('backup-note').textContent = Cloud.enabled
+    ? 'I dati di questa cucina sono salvati sul tuo account e visibili a chi ne fa parte. Il backup serve a portarteli via quando vuoi, o a passare da una cucina all\'altra.'
+    : 'I dati restano salvati nel browser che stai usando ora. Se cambi browser, dispositivo, o svuoti la cache, li perdi — esporta un backup ogni tanto per stare tranquillo.';
+
+  initTabs();
+}
+
+Cloud.onConflict = function(key){
+  toast('Qualcuno ha modificato questa sezione mentre lavoravi — ricarica per vedere la versione aggiornata.');
+};
+
+(async function init(){
+  if(Cloud.isStaging) document.getElementById('staging-badge').style.display = 'inline-block';
+  try{
+    const { mode, signedIn } = await Cloud.init();
+    if(mode === 'local') return startApp();
+    if(signedIn) return afterSignIn();
+    screenSignIn('signin');
+  }catch(e){
+    gateRender('Avvio non riuscito', `<p style="font-size:13.5px;line-height:1.6;">${esc(humanError(e))}</p>`);
+  }
+})();
