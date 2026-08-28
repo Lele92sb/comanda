@@ -512,3 +512,82 @@ test('chi non è pianificabile viene dichiarato, non lasciato da intuire', () =>
   const m = computeShiftsForDates(staff, needs, {config:BASE, dates});
   assert.equal(m.nonPianificabili.length, 1);
 });
+
+/* ===================== TURNI OLTRE QUOTA: CHI SI PUÒ CHIAMARE =====================
+   `puoFareExtra` dice se la persona è disponibile a turni OLTRE la sua quota.
+   Il default è "sì", perché chi ha già i dati salvati non ha il campo: deve
+   comportarsi esattamente come prima, senza nessuna migrazione. */
+
+test('chi non può fare extra non viene chiamato oltre quota: il buco si dichiara', () => {
+  // Gemello del test "turno extra: se un secondo qualificato esiste...":
+  // stessa brigata, stesso fabbisogno, ma Marco ha detto di no.
+  const staff = [
+    { id:'s1', name:'Marco', stations:['a'], weeklyQuota:[{count:7,codes:['R']}], puoFareExtra:false },
+    { id:'s2', name:'Luca',  stations:['a'], weeklyQuota:[{count:7,codes:['P']}] },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:2}], cena:[] };
+  const { shortfalls, extras, newShifts } = computeShifts(staff, needs, {config:BASE});
+  assert.equal(extras.length, 0, 'nessuno doveva essere chiamato oltre quota');
+  assert.equal(shortfalls.length, 7, 'il buco va dichiarato, non risolto chiamando chi ha detto di no');
+  GIORNI7.forEach(d=> assert.equal(newShifts['s1'][d].code, 'R'));
+});
+
+test('il campo assente vale come sì: i dati già salvati non cambiano comportamento', () => {
+  const brigata = flag => [
+    Object.assign({ id:'s1', name:'Marco', stations:['a'], weeklyQuota:[{count:7,codes:['R']}] },
+                  flag === undefined ? {} : {puoFareExtra:flag}),
+    { id:'s2', name:'Luca', stations:['a'], weeklyQuota:[{count:7,codes:['P']}] },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:2}], cena:[] };
+  [undefined, true].forEach(flag=>{
+    const { extras, shortfalls } = computeShifts(brigata(flag), needs, {config:BASE});
+    assert.equal(extras.length, 7, 'senza il campo il comportamento deve restare quello di prima');
+    assert.equal(shortfalls.length, 0);
+  });
+});
+
+test('chi non può fare extra riceve comunque i turni della SUA quota', () => {
+  // Il divieto vale oltre la quota, non dentro. Se il filtro finisse fra i
+  // candidati normali, questa persona non lavorerebbe più affatto.
+  const staff = [
+    { id:'s1', name:'Marco', stations:['a'], weeklyQuota:[{count:7,codes:['P']}], puoFareExtra:false },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const { newShifts, extras, shortfalls } = computeShifts(staff, needs, {config:BASE});
+  assert.equal(extras.length, 0);
+  assert.equal(shortfalls.length, 0);
+  GIORNI7.forEach(d=>{
+    assert.equal(newShifts['s1'][d].code, 'P', `il ${d} manca un turno che la quota prevedeva`);
+    assert.equal(newShifts['s1'][d].stationId, 'a');
+    assert.equal(newShifts['s1'][d].extra, false);
+  });
+});
+
+test('fra due qualificati l\'extra va a chi lo può fare', () => {
+  const staff = [
+    { id:'s1', name:'Marco', stations:['a'], weeklyQuota:[{count:7,codes:['R']}], puoFareExtra:false },
+    { id:'s2', name:'Luca',  stations:['a'], weeklyQuota:[{count:7,codes:['R']}] },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  // Ripetuto: l'ordine dei candidati è mescolato, un solo giro non prova nulla.
+  for(let i=0;i<50;i++){
+    const { extras, shortfalls } = computeShifts(staff, needs, {config:BASE});
+    assert.equal(shortfalls.length, 0, 'un candidato disponibile c\'era');
+    assert.equal(extras.length, 7);
+    extras.forEach(e=> assert.equal(e.staffId, 's2', 'chiamato chi aveva detto di no'));
+  }
+});
+
+test('il divieto di extra vale in ogni settimana del periodo', () => {
+  // Il raggruppamento per settimana ricostruisce lo stato a ogni giro: qui si
+  // controlla che il campo non si perda per strada.
+  const staff = [
+    { id:'s1', name:'Marco', stations:['a'], weeklyQuota:[{count:7,codes:['R']}], puoFareExtra:false },
+    { id:'s2', name:'Luca',  stations:['a'], weeklyQuota:[{count:7,codes:['P']}] },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:2}], cena:[] };
+  const dates = monthDates(new Date(2026, 8, 1));
+  const { extras, newShifts } = computeShiftsForDates(staff, needs, {config:BASE, dates});
+  assert.equal(extras.length, 0);
+  dates.forEach(d=> assert.equal(newShifts['s1'][d].code, 'R', `il ${d} Marco è stato chiamato`));
+});

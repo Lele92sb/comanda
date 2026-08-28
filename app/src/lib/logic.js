@@ -175,6 +175,14 @@ function codeAllowed(constraints, staffId, day, code, codeToServices){
   return true;
 }
 
+// Questa persona è disponibile a turni OLTRE la sua quota?
+// Il confronto è con `false`, non con `true`, e non è un dettaglio di stile:
+// chi ha già i dati salvati non ha questo campo, `undefined !== false` è vero,
+// e continua a comportarsi esattamente come prima. Scritto `=== true` il
+// default si invertirebbe e l'intera brigata esistente smetterebbe di poter
+// coprire un buco, senza che nessuno l'abbia deciso.
+function puoFareExtra(s){ return s.puoFareExtra !== false; }
+
 function computeShifts(staffList, staffingNeeds, options){
   options = options || {};
   const cfg = options.config || buildShiftConfig(null, null);
@@ -230,8 +238,15 @@ function computeShifts(staffList, staffingNeeds, options){
             // quel giorno, invece di lasciare la postazione scoperta. Le richieste
             // approvate restano intoccabili anche qui: si preferisce dichiarare la
             // scopertura piuttosto che far saltare un riposo concordato.
-            candidates = staffList.filter(s=> !assigned[s.id][day] && s.stations
-              && s.stations.includes(stationId) && codiciUtili(s).length);
+            //
+            // Chi ha dichiarato di non fare turni oltre la quota vale quanto una
+            // richiesta approvata: se non resta nessuno si dichiara il buco, non
+            // si chiama lo stesso qualcuno che ha detto di no. Il filtro sta QUI e
+            // non fra i candidati di quota poche righe sopra: sono due cose
+            // diverse, e messo lì toglierebbe alla persona anche i turni che le
+            // spettano.
+            candidates = staffList.filter(s=> !assigned[s.id][day] && puoFareExtra(s)
+              && s.stations && s.stations.includes(stationId) && codiciUtili(s).length);
             isExtra = true;
           }
           if(!candidates.length){
@@ -405,4 +420,5 @@ export {
   computeShiftsForDates,
   constraintFor,
   codeAllowed,
+  puoFareExtra,
 };
