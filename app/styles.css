@@ -224,7 +224,7 @@ p.section-sub{font-family:var(--font-mono);font-size:11px;color:var(--brass);let
 @media(max-width:560px){.grid2,.grid3{grid-template-columns:1fr;}}
 
 label{display:block;font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.5px;text-transform:uppercase;color:var(--brass);margin:10px 0 5px;}
-input[type=text],input[type=number],input[type=date],input[type=tel],input[type=email],textarea,select{
+input[type=text],input[type=number],input[type=date],input[type=tel],input[type=email],input[type=password],textarea,select{
   width:100%;background:var(--bg-elev2);border:1px solid var(--line-strong);color:var(--paper);padding:9px 10px;border-radius:4px;font-size:13.5px;
 }
 textarea{resize:vertical;min-height:70px;}
