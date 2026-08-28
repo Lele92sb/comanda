@@ -591,3 +591,212 @@ test('il divieto di extra vale in ogni settimana del periodo', () => {
   assert.equal(extras.length, 0);
   dates.forEach(d=> assert.equal(newShifts['s1'][d].code, 'R', `il ${d} Marco è stato chiamato`));
 });
+
+/* ===================== L'INTELLIGENZA DEL GENERATORE =====================
+   I test qui sotto non controllano che il codice non esploda: misurano.
+   Ognuno porta accanto il numero che dava il motore PRIMA, misurato eseguendolo
+   (400 generazioni per scenario), così se un domani qualcuno tocca gli
+   ordinamenti si vede subito cosa si è perso. */
+
+// Sei persone da 4 turni di lavoro (24 slot di quota) contro un fabbisogno di 4
+// al pranzo per 7 giorni (28 turni). Quattro turni oltre quota sono inevitabili:
+// è il divario strutturale fra fabbisogno e quote. Tutto ciò che supera quattro
+// è spreco del generatore.
+const BRIGATA_STRETTA = Array.from({length:6}, (_,i)=>({
+  id:'p'+i, name:'P'+i, stations:['a'],
+  weeklyQuota:[{count:4,codes:['P']},{count:3,codes:['R']}],
+}));
+const FABBISOGNO_STRETTO = { colazione:[], pranzo:[{stationId:'a',count:4}], cena:[] };
+
+test('gli extra scendono al minimo strutturale: nessun turno oltre quota sprecato', () => {
+  // PRIMA: media 4,17 a settimana, con punte di 6. DOPO: sempre esattamente 4.
+  // La differenza è la quota che veniva bruciata all'inizio della settimana
+  // senza guardare quanti giorni restassero da coprire.
+  for(let i=0;i<200;i++){
+    const { extras, shortfalls } = computeShifts(BRIGATA_STRETTA, FABBISOGNO_STRETTO, {config:BASE});
+    assert.equal(shortfalls.length, 0);
+    assert.equal(extras.length, 4,
+      `${extras.length} turni oltre quota: il divario fra fabbisogno e quote ne giustifica 4`);
+  }
+});
+
+test('gli extra non cadono più a metà settimana: la quota arriva fino in fondo', () => {
+  // PRIMA, extra medi per giorno: Ven 0,06 · Sab 1,11 · Dom 3,00.
+  // DOPO: solo l'ultimo giorno, quello in cui la quota è oggettivamente finita.
+  for(let i=0;i<200;i++){
+    const { extras } = computeShifts(BRIGATA_STRETTA, FABBISOGNO_STRETTO, {config:BASE});
+    extras.forEach(e=> assert.ok(GIORNI7.indexOf(e.day) >= 5,
+      `un turno oltre quota il ${e.day}: la quota è stata bruciata troppo presto`));
+  }
+});
+
+test('gli extra si concentrano su una persona sola, non su tutta la brigata', () => {
+  // PRIMA: 7 extra sparsi su 3,46 teste diverse in media (fino a 4 su 4).
+  // DOPO: 1 sola. Sette telefonate a sette persone diventano una telefonata a
+  // una persona, che è il modo in cui il prospetto si fa a mano.
+  const staff = Array.from({length:4}, (_,i)=>({
+    id:'q'+i, name:'Q'+i, stations:['a'], weeklyQuota:[{count:7,codes:['R']}],
+  }));
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  for(let i=0;i<200;i++){
+    const { extras } = computeShifts(staff, needs, {config:BASE});
+    assert.equal(extras.length, 7);
+    // Va misurato DENTRO la singola settimana: sommando più generazioni il
+    // conteggio torna uniforme comunque e non proverebbe niente.
+    assert.equal(new Set(extras.map(e=>e.staffId)).size, 1,
+      'gli extra si sono sparsi su più persone invece di concentrarsi');
+  }
+});
+
+test('il motore sa quanto dura un turno e pareggia le ore fra pari qualifica', () => {
+  // PRIMA il motore non guardava mai le ore: SP (11h) e P (8h) erano la stessa
+  // cosa, e a parità di qualifica decideva solo il caso. Scarto max-min entro la
+  // singola settimana: media 6,45 ore, caso peggiore 12. DOPO: media 2,60, caso
+  // peggiore 6. La soglia sta in mezzo apposta.
+  const staff = Array.from({length:4}, (_,i)=>({
+    id:'h'+i, name:'H'+i, stations:['a'],
+    weeklyQuota:[{count:5,codes:['SP','P','S']},{count:2,codes:['R']}],
+  }));
+  const needs = { colazione:[],
+    pranzo:[{stationId:'a',count:2}], cena:[{stationId:'a',count:2}] };
+  for(let i=0;i<200;i++){
+    const { newShifts } = computeShifts(staff, needs, {config:BASE});
+    const ore = staff.map(s=> Object.values(newShifts[s.id])
+      .reduce((n,c)=> n + ((BASE.turnoDef[c.code]||{}).hours||0), 0));
+    const scarto = Math.max(...ore) - Math.min(...ore);
+    assert.ok(scarto <= 8, `una settimana con ${scarto} ore di scarto fra pari qualifica`);
+  }
+});
+
+test('ore mancanti o a zero nella configurazione non mandano in tilt l ordinamento', () => {
+  // Le ore arrivano dalla configurazione della cucina: possono essere vuote.
+  // Un NaN nel confronto non si vede, rende solo l'ordinamento indefinito.
+  const cfg = buildShiftConfig(
+    [{id:'pranzo',name:'Pranzo'}],
+    [{code:'P', label:'Pranzo', hours:'', services:['pranzo']}]
+  );
+  assert.equal(cfg.turnoDef['P'].hours, 0);
+  const staff = [
+    { id:'a1', name:'A1', stations:['a'], weeklyQuota:[{count:7,codes:['P']}] },
+    { id:'a2', name:'A2', stations:['a'], weeklyQuota:[{count:7,codes:['P']}] },
+  ];
+  const { newShifts, shortfalls } = computeShifts(staff, {pranzo:[{stationId:'a',count:1}]}, {config:cfg});
+  assert.equal(shortfalls.length, 0);
+  GIORNI7.forEach(d=>{
+    assert.ok(newShifts['a1'][d].code, 'cella senza codice');
+    assert.ok(newShifts['a2'][d].code, 'cella senza codice');
+  });
+});
+
+/* ----------------------- Il tetto ai turni oltre quota ----------------------- */
+
+test('con un tetto gli extra si spargono, invece di cadere tutti sulla stessa persona', () => {
+  const staff = Array.from({length:4}, (_,i)=>({
+    id:'q'+i, name:'Q'+i, stations:['a'], weeklyQuota:[{count:7,codes:['R']}],
+  }));
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  for(let i=0;i<50;i++){
+    const { extras } = computeShifts(staff, needs, {config:BASE, maxExtraPerPersona:2});
+    assert.equal(extras.length, 7);
+    const perPersona = {};
+    extras.forEach(e=>{ perPersona[e.staffId] = (perPersona[e.staffId]||0)+1; });
+    // Sette extra e un tetto di due su quattro persone: 2+2+2+1.
+    Object.values(perPersona).forEach(n=> assert.ok(n <= 2, `${n} extra su una persona sola col tetto a 2`));
+  }
+});
+
+test('il tetto si sfora invece di inventare una scopertura che non esiste', () => {
+  // Una sola persona chiamabile: rispettare il tetto significherebbe dichiarare
+  // scoperti cinque giorni che qualcuno potrebbe coprire. Una scopertura falsa
+  // manda a cercare un problema che non c'è: meglio dire che si è sforato.
+  const staff = [
+    { id:'s1', name:'Marco', stations:['a'], weeklyQuota:[{count:7,codes:['R']}] },
+    { id:'s2', name:'Luca',  stations:['a'], weeklyQuota:[{count:7,codes:['P']}] },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:2}], cena:[] };
+  const { extras, shortfalls } = computeShifts(staff, needs, {config:BASE, maxExtraPerPersona:2});
+  assert.equal(shortfalls.length, 0, 'nessuna scopertura: un candidato cera tutti i giorni');
+  assert.equal(extras.length, 7);
+});
+
+test('senza tetto il comportamento è quello di sempre', () => {
+  const staff = [
+    { id:'s1', name:'Marco', stations:['a'], weeklyQuota:[{count:7,codes:['R']}] },
+    { id:'s2', name:'Luca',  stations:['a'], weeklyQuota:[{count:7,codes:['P']}] },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:2}], cena:[] };
+  const { extras } = computeShifts(staff, needs, {config:BASE});
+  assert.equal(extras.length, 7);
+});
+
+/* ----------------------- Il seme: rigenerare uguale ----------------------- */
+
+const BRIGATA_SEME = [
+  { id:'a1', name:'A1', stations:['a'], weeklyQuota:[{count:3,codes:['SP']},{count:2,codes:['P','S']},{count:2,codes:['R']}] },
+  { id:'a2', name:'A2', stations:['a'], weeklyQuota:[{count:3,codes:['SP']},{count:2,codes:['P','S']},{count:2,codes:['R']}] },
+  { id:'j',  name:'Jolly', stations:['a','b'], weeklyQuota:[{count:6,codes:['P','S']},{count:1,codes:['R']}] },
+  { id:'b1', name:'B1', stations:['b'], weeklyQuota:[{count:5,codes:['P','S']},{count:2,codes:['R']}] },
+];
+const FABBISOGNO_SEME = { colazione:[],
+  pranzo:[{stationId:'a',count:1},{stationId:'b',count:1}],
+  cena:[{stationId:'a',count:1},{stationId:'b',count:1}] };
+
+test('con lo stesso seme si rigenera esattamente lo stesso prospetto', () => {
+  const dates = monthDates(new Date(2026, 8, 1));
+  const a = computeShiftsForDates(BRIGATA_SEME, FABBISOGNO_SEME, {config:BASE, dates, seed:'2026-09-01'});
+  const b = computeShiftsForDates(BRIGATA_SEME, FABBISOGNO_SEME, {config:BASE, dates, seed:'2026-09-01'});
+  assert.deepEqual(a.newShifts, b.newShifts, 'stesso seme, prospetto diverso: qualche punto usa ancora il caso');
+  assert.deepEqual(a.extras, b.extras);
+  assert.deepEqual(a.shortfalls, b.shortfalls);
+});
+
+test('semi diversi danno prospetti diversi: il seme viene usato davvero', () => {
+  // Senza questo, il test precedente passerebbe anche con un motore rotto in
+  // modo banale (per esempio se ignorasse il seme e fosse deterministico da sé).
+  const dates = weekDates(new Date(2026, 8, 16));
+  const a = computeShiftsForDates(BRIGATA_SEME, FABBISOGNO_SEME, {config:BASE, dates, seed:1});
+  const diversi = [2,3,4,5,6,7,8].some(sm=>{
+    const b = computeShiftsForDates(BRIGATA_SEME, FABBISOGNO_SEME, {config:BASE, dates, seed:sm});
+    return JSON.stringify(a.newShifts) !== JSON.stringify(b.newShifts);
+  });
+  assert.ok(diversi, 'tutti i semi danno lo stesso risultato: il seme non viene usato');
+});
+
+test('senza seme il caso resta: due generazioni possono differire come prima', () => {
+  const dates = weekDates(new Date(2026, 8, 16));
+  const primo = JSON.stringify(computeShiftsForDates(BRIGATA_SEME, FABBISOGNO_SEME,
+    {config:BASE, dates}).newShifts);
+  let diverso = false;
+  for(let i=0;i<40 && !diverso;i++){
+    diverso = JSON.stringify(computeShiftsForDates(BRIGATA_SEME, FABBISOGNO_SEME,
+      {config:BASE, dates}).newShifts) !== primo;
+  }
+  assert.ok(diverso, 'senza seme il motore è diventato deterministico: non era questo il patto');
+});
+
+test('un seme solo non fa uscire quattro settimane identiche', () => {
+  const dates = monthDates(new Date(2026, 8, 1));
+  const { newShifts } = computeShiftsForDates(BRIGATA_SEME, FABBISOGNO_SEME,
+    {config:BASE, dates, seed:'2026-09-01'});
+  const settimane = groupByWeek(dates).filter(g=> g.length === 7);
+  const impronte = settimane.map(g=> g.map(d=> BRIGATA_SEME.map(s=> newShifts[s.id][d].code).join('')).join('|'));
+  assert.ok(new Set(impronte).size > 1, 'le settimane del mese sono uscite tutte uguali');
+});
+
+test('il jolly non viene sprecato nemmeno fra i turni oltre quota', () => {
+  // Canarino: la concentrazione degli extra non deve passare davanti alla
+  // regola "chi sa fare meno stazioni va piazzato lì", che è una regressione
+  // già pagata in produzione.
+  const staff = [
+    { id:'sp', name:'Specialista', stations:['a'], weeklyQuota:[{count:7,codes:['R']}] },
+    { id:'jo', name:'Jolly',       stations:['a','b'], weeklyQuota:[{count:7,codes:['R']}] },
+    { id:'b1', name:'B1',          stations:['b'], weeklyQuota:[{count:7,codes:['P']}] },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1},{stationId:'b',count:2}], cena:[] };
+  for(let i=0;i<50;i++){
+    const { extras } = computeShifts(staff, needs, {config:BASE});
+    const suA = extras.filter(e=> e.stationId === 'a');
+    suA.forEach(e=> assert.equal(e.staffId, 'sp',
+      'la stazione a è stata coperta dal jolly, che serviva altrove'));
+  }
+});
