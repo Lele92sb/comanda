@@ -211,13 +211,36 @@ create policy requests_select on public.kitchen_requests
     user_id = auth.uid() or public.my_role(kitchen_id) = 'owner'
   );
 
--- Si può inserire solo a proprio nome, e solo in una cucina di cui si fa parte.
--- Il titolare può inserirne anche per chi non ha un account.
+-- La persona della brigata collegata a chi sta usando l'app. Il collegamento
+-- vive dentro i dati della cucina (staff[].userId), non leggibili sotto RLS da
+-- una policy: da qui il security definer.
+create or replace function public.my_staff_id(p_kitchen uuid)
+returns text
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select s->>'id'
+  from public.kitchen_data d,
+       lateral jsonb_array_elements(d.value) s
+  where d.kitchen_id = p_kitchen and d.key = 'staff'
+    and s->>'userId' = auth.uid()::text
+  limit 1;
+$$;
+grant execute on function public.my_staff_id(uuid) to authenticated;
+
+-- Si può inserire una richiesta SOLO PER SÉ STESSI. Senza il controllo sul
+-- staff_id, un dipendente poteva inserire richieste a nome di un collega: gli
+-- bastava scriverne l'identificativo. Restavano in attesa, ma un titolare
+-- distratto avrebbe potuto mandare in ferie qualcuno che non le aveva chieste.
+-- Il titolare resta libero di registrarle per chiunque, anche per chi non ha
+-- un account.
 drop policy if exists requests_insert on public.kitchen_requests;
 create policy requests_insert on public.kitchen_requests
   for insert with check (
-    public.my_role(kitchen_id) is not null
-    and (user_id = auth.uid() or public.my_role(kitchen_id) = 'owner')
+    public.my_role(kitchen_id) = 'owner'
+    or (user_id = auth.uid() and staff_id = public.my_staff_id(kitchen_id))
   );
 
 -- Approvare o rifiutare è solo del titolare: altrimenti chiunque potrebbe
