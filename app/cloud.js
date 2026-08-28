@@ -340,6 +340,74 @@ window.storageSet = async function(key, value){
 };
 
 // --------------------------------------------------------------------------
+// Più cucine dello stesso gestore.
+// Chi ne gestisce diverse ha spesso persone che girano: lo stesso cuoco su due
+// locali. Qui si legge cosa succede nelle ALTRE cucine per non assegnarlo in
+// due posti lo stesso giorno. Non serve nessuna tabella nuova: il gestore è
+// membro di tutte, quindi può già leggerne i dati.
+// --------------------------------------------------------------------------
+Cloud.altreCucine = function(){
+  if(!CLOUD_ENABLED || !Cloud.kitchen) return [];
+  return Cloud.memberships.filter(m=>m.kitchen.id !== Cloud.kitchen.id).map(m=>m.kitchen);
+};
+
+// Legge una sezione dati di un'ALTRA cucina (solo lettura, senza toccare le
+// versioni della cucina corrente).
+Cloud.readOtherKitchen = async function(kitchenId, key){
+  const { data, error } = await Cloud.client
+    .from('kitchen_data').select('value')
+    .eq('kitchen_id', kitchenId).eq('key', key).maybeSingle();
+  if(error) throw error;
+  return data ? data.value : null;
+};
+
+// Impegni della stessa persona nelle altre cucine, nell'intervallo di date.
+// L'identità attraversa le cucine quando coincide l'account collegato oppure
+// il numero di telefono: sono i due dati che restano gli stessi per la stessa
+// persona anche in due anagrafiche compilate separatamente.
+function chiaviIdentita(persona){
+  const k = [];
+  if(persona.userId) k.push('u:'+persona.userId);
+  const tel = String(persona.phone||'').replace(/\D/g,'');
+  if(tel.length >= 6) k.push('t:'+tel.slice(-9));
+  return k;
+}
+Cloud.identityKeys = chiaviIdentita;
+
+Cloud.impegniAltrove = async function(brigataLocale, dates){
+  const occupati = {};   // staffId locale → { data: nomeCucina }
+  if(!CLOUD_ENABLED || !Cloud.kitchen) return occupati;
+
+  const indice = new Map();   // chiave identità → staffId locale
+  brigataLocale.forEach(p=> chiaviIdentita(p).forEach(k=>{ if(!indice.has(k)) indice.set(k, p.id); }));
+  if(!indice.size) return occupati;
+
+  for(const cucina of Cloud.altreCucine()){
+    let staffAltrove, turniAltrove;
+    try{
+      staffAltrove  = await Cloud.readOtherKitchen(cucina.id, 'staff');
+      turniAltrove  = await Cloud.readOtherKitchen(cucina.id, 'shifts');
+    }catch(e){ console.error('cucina non leggibile', cucina.name, e); continue; }
+    if(!staffAltrove || !turniAltrove) continue;
+
+    staffAltrove.forEach(p=>{
+      const locale = chiaviIdentita(p).map(k=>indice.get(k)).find(Boolean);
+      if(!locale) return;
+      const suoiTurni = turniAltrove[p.id] || {};
+      dates.forEach(d=>{
+        const cell = suoiTurni[d];
+        // Riposo e ferie altrove non impegnano: la persona è comunque libera.
+        if(cell && cell.code && !['R','M','F',''].includes(cell.code)){
+          occupati[locale] = occupati[locale] || {};
+          occupati[locale][d] = cucina.name;
+        }
+      });
+    });
+  }
+  return occupati;
+};
+
+// --------------------------------------------------------------------------
 // Richieste del personale (ferie, riposi, servizi preferiti).
 // In cloud stanno in una tabella dedicata: chi è in sola lettura deve poter
 // inserire le proprie richieste senza poter toccare i dati della cucina.

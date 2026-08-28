@@ -385,3 +385,31 @@ test('senza vincoli il comportamento resta identico a prima', () => {
     assert.equal(b.newShifts['s1'][d].code, 'P');
   });
 });
+
+/* ===================== PIÙ CUCINE: CHI GIRA TRA I LOCALI ===================== */
+
+test('un impegno in un altra cucina vale come vincolo assoluto', () => {
+  // Marco lavora in due locali. Il martedì è già in servizio nell'altro:
+  // qui non deve comparire, anche se è l'unico qualificato e serve.
+  const staff = [{ id:'m1', name:'Marco', stations:['a'], weeklyQuota:[{count:7,codes:['P']}] }];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const constraints = { m1: { [SETT[1]]: {blocked:'R'} } };  // impegnato altrove
+
+  for(let i=0;i<40;i++){
+    const { newShifts, shortfalls } = computeShiftsForDates(staff, needs,
+      {config:BASE, dates:SETT, constraints});
+    assert.equal(newShifts['m1'][SETT[1]].code, 'R',
+      'assegnato qui mentre lavora nell\'altra cucina');
+    assert.ok(shortfalls.some(sf=>sf.day===SETT[1]),
+      'il buco va dichiarato, non risolto facendolo lavorare in due posti');
+  }
+});
+
+test('gli altri giorni restano liberi: un impegno altrove non blocca la settimana', () => {
+  const staff = [{ id:'m1', name:'Marco', stations:['a'], weeklyQuota:[{count:7,codes:['P']}] }];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const constraints = { m1: { [SETT[1]]: {blocked:'R'} } };
+  const { newShifts } = computeShiftsForDates(staff, needs, {config:BASE, dates:SETT, constraints});
+  SETT.filter((_,i)=>i!==1).forEach(d=>
+    assert.equal(newShifts['m1'][d].code, 'P', `il ${d} Marco doveva essere disponibile`));
+});

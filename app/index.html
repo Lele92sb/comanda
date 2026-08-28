@@ -231,6 +231,7 @@ body.readonly main label.btn{opacity:0.45;}
     <div id="staging-badge" style="display:none;font-family:var(--font-mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#1d1b18;background:var(--copper-light);padding:3px 8px;border-radius:20px;margin-top:6px;font-weight:700;">⚠ AMBIENTE DI TEST — dati separati da quelli reali</div>
     <div id="account-bar">
       <div class="who">
+        <select id="ab-kitchen-sel" style="display:none;width:auto;padding:3px 6px;font-size:11px;"></select>
         <span id="ab-kitchen"></span>
         <span id="ab-role" class="role-badge"></span>
         <span id="ab-email"></span>
@@ -355,6 +356,14 @@ body.readonly main label.btn{opacity:0.45;}
             <button class="btn" id="service-add-btn">+ Aggiungi servizio</button>
           </div>
           <div id="service-list"></div>
+        </div>
+        <div class="panel" id="copia-config-panel" style="display:none;">
+          <h3>Copia da un'altra cucina</h3>
+          <p class="small-note" style="margin-top:0;">Se i tuoi locali lavorano in modo simile, prendi servizi, tipi di turno e stazioni da uno già impostato invece di riscrivere tutto.</p>
+          <div class="grid2">
+            <select id="copia-da"></select>
+            <button class="btn" id="copia-btn">Copia qui</button>
+          </div>
         </div>
         <div class="panel">
           <h3>I tipi di turno</h3>
@@ -714,7 +723,7 @@ function initTabs(){
       document.querySelectorAll('#turni-subtabs button').forEach(x=>x.classList.toggle('active', x===b));
       document.querySelectorAll('#view-turni .subview').forEach(v=>v.classList.toggle('active', v.id==='turnisub-'+b.dataset.sub));
       if(b.dataset.sub==='piano'){ renderTurni(); renderOreExtra(); }
-      if(b.dataset.sub==='servizi'){ renderServices(); renderShiftTypes(); }
+      if(b.dataset.sub==='servizi'){ renderServices(); renderShiftTypes(); renderCopiaConfig(); }
       if(b.dataset.sub==='stazioni') renderStations();
       if(b.dataset.sub==='fabbisogno') renderNeeds();
       if(b.dataset.sub==='quote') renderQuotas();
@@ -1788,6 +1797,39 @@ function renderServices(){
   }));
 }
 
+// Copia della configurazione da un'altra cucina dello stesso gestore.
+function renderCopiaConfig(){
+  const panel = document.getElementById('copia-config-panel');
+  const altre = Cloud.enabled ? Cloud.altreCucine() : [];
+  panel.style.display = altre.length ? 'block' : 'none';
+  if(!altre.length) return;
+  document.getElementById('copia-da').innerHTML =
+    altre.map(k=>`<option value="${esc(k.id)}">${esc(k.name)}</option>`).join('');
+}
+document.getElementById('copia-btn').addEventListener('click', async ()=>{
+  const id = document.getElementById('copia-da').value;
+  const nome = (Cloud.altreCucine().find(k=>k.id===id)||{}).name || 'l\'altra cucina';
+  if(!confirm(`Copiare servizi, tipi di turno e stazioni da "${nome}"?\n\n`
+    + 'La configurazione attuale di questa cucina viene sostituita.\n'
+    + 'Brigata, turni assegnati e fabbisogno NON vengono toccati, ma il fabbisogno\n'
+    + 'andrà reimpostato perché i servizi e le stazioni cambiano identificativo.')) return;
+  try{
+    const [servizi, turni, stazioni] = await Promise.all([
+      Cloud.readOtherKitchen(id, 'services'),
+      Cloud.readOtherKitchen(id, 'shiftTypes'),
+      Cloud.readOtherKitchen(id, 'stations'),
+    ]);
+    if(!servizi || !turni){ toast('Quella cucina non ha ancora una configurazione'); return; }
+    state.services   = servizi;
+    state.shiftTypes = turni;
+    if(stazioni) state.stations = stazioni;
+    state.staffingNeeds = {};
+    await save('services'); await save('shiftTypes'); await save('stations'); await save('staffingNeeds');
+    afterShiftConfigChange(); renderStations();
+    toast('Configurazione copiata — ricontrolla il fabbisogno');
+  }catch(e){ toast(humanError(e)); }
+});
+
 document.getElementById('service-add-btn').addEventListener('click', ()=>{
   const inp = document.getElementById('service-name-input');
   const nome = inp.value.trim();
@@ -2182,6 +2224,23 @@ async function generateRandomShifts(){
 
   const dates = periodDates();
   const constraints = constraintsFromRequests();
+  // Contate prima di aggiungere gli impegni altrove: sono due cose diverse e
+  // vanno spiegate separatamente a chi legge il riepilogo.
+  const nRichieste = Object.values(constraints).reduce((n,g)=>n+Object.keys(g).length, 0);
+  const nPersoneRichieste = Object.keys(constraints).length;
+
+  // Chi lavora anche in un'altra cucina non puo' essere in due posti lo stesso
+  // giorno: gli impegni altrove valgono come un vincolo assoluto, esattamente
+  // come una richiesta approvata.
+  let altrove = {};
+  try{ altrove = await Cloud.impegniAltrove(state.staff, dates); }
+  catch(e){ console.error('impegni altrove non letti', e); }
+  Object.entries(altrove).forEach(([staffId, giorni])=>{
+    Object.keys(giorni).forEach(d=>{
+      constraints[staffId] = constraints[staffId] || {};
+      if(!constraints[staffId][d]) constraints[staffId][d] = {blocked:'R'};
+    });
+  });
   const { newShifts, shortfalls, extras } = computeShiftsForDates(state.staff, state.staffingNeeds,
     {config: refreshShiftConfig(), dates, constraints});
   // Si sovrascrivono SOLO le date del periodo: i turni delle altre settimane
@@ -2213,11 +2272,16 @@ async function generateRandomShifts(){
       Object.entries(byDay).map(([day,lines])=>`<b>${day}</b>: ${lines.join(' · ')}`).join('<br>') +
       `</div><p class="small-note">Per risolvere: aggiungi personale qualificato per quella stazione, o abbassa il fabbisogno richiesto.</p>`;
   }
-  const vincolate = Object.keys(constraints).length;
-  if(vincolate){
-    const giorni = Object.values(constraints).reduce((n,g)=>n+Object.keys(g).length, 0);
-    html = `<div class="ok-box">Rispettate le richieste approvate: ${giorni} giorni vincolati su ${vincolate} person${vincolate>1?'e':'a'}.</div>` + html;
+  const nAltrove = Object.values(altrove).reduce((n,g)=>n+Object.keys(g).length, 0);
+  let premessa = '';
+  if(nRichieste){
+    premessa += `<div class="ok-box">Rispettate le richieste approvate: ${nRichieste} giorni vincolati su ${nPersoneRichieste} person${nPersoneRichieste>1?'e':'a'}.</div>`;
   }
+  if(nAltrove){
+    const nomi = [...new Set(Object.values(altrove).flatMap(g=>Object.values(g)))];
+    premessa += `<div class="ok-box">${nAltrove} giorni lasciati liberi: quelle persone lavorano in un'altra cucina (${nomi.map(esc).join(', ')}).</div>`;
+  }
+  html = premessa + html;
   if(!extras.length && !shortfalls.length){
     html += `<div class="ok-box">✓ Fabbisogno coperto per tutti i servizi, tutti i giorni, senza bisogno di turni extra.</div>`;
   }
@@ -2535,7 +2599,18 @@ function renderAccountBar(){
   if(!Cloud.enabled) return;
   const bar = document.getElementById('account-bar');
   bar.style.display = 'flex';
-  document.getElementById('ab-kitchen').textContent = Cloud.kitchen.name;
+  // Con più cucine il nome diventa un menu: chi ne gestisce quattro cambia di
+  // continuo, e passare dalla schermata iniziale ogni volta è una tortura.
+  const sel = document.getElementById('ab-kitchen-sel');
+  const nome = document.getElementById('ab-kitchen');
+  if(Cloud.memberships.length > 1){
+    sel.innerHTML = Cloud.memberships.map(m=>
+      `<option value="${esc(m.kitchen.id)}" ${m.kitchen.id===Cloud.kitchen.id?'selected':''}>${esc(m.kitchen.name)}</option>`).join('');
+    sel.style.display = ''; nome.style.display = 'none';
+  } else {
+    sel.style.display = 'none'; nome.style.display = '';
+    nome.textContent = Cloud.kitchen.name;
+  }
   // Il nome scelto, se c'è: l'email è lunga e non dice niente a colpo d'occhio.
   document.getElementById('ab-email').textContent = Cloud.myDisplayName || Cloud.user.email;
   const badge = document.getElementById('ab-role');
@@ -2710,6 +2785,12 @@ function teamError(e){
   el.textContent = humanError(e); el.style.display = 'block';
 }
 
+document.getElementById('ab-kitchen-sel').addEventListener('change', e=>{
+  // Ricarico invece di ridisegnare: cambiare cucina cambia tutto (brigata,
+  // servizi, turni, richieste) e una ripartenza pulita non lascia residui.
+  Cloud.selectKitchen(e.target.value);
+  location.reload();
+});
 document.getElementById('ab-team').addEventListener('click', openTeam);
 document.getElementById('ab-rename').addEventListener('click', async ()=>{
   const nome = prompt('Come ti chiamano in cucina?\n\nÈ il nome con cui ti vede chi gestisce la cucina.',
