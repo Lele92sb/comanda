@@ -316,11 +316,19 @@ declare
   v_delta   bigint;
   v_sezioni integer;
 begin
+  -- In cancellazione si AGGIORNA soltanto, non si inserisce mai. Quando si
+  -- rimuove una cucina, Postgres toglie prima la riga della cucina e poi le
+  -- righe collegate: un insert qui proverebbe a ricreare una statistica che
+  -- punta a una cucina che non c'è più, e la rimozione fallirebbe.
   if tg_op = 'DELETE' then
-    v_cucina  := old.kitchen_id;
-    v_delta   := -octet_length(old.value::text);
-    v_sezioni := -1;
-  elsif tg_op = 'INSERT' then
+    update public.kitchen_stats
+       set byte_dati = greatest(byte_dati - octet_length(old.value::text), 0),
+           sezioni   = greatest(sezioni - 1, 0)
+     where kitchen_id = old.kitchen_id;
+    return null;
+  end if;
+
+  if tg_op = 'INSERT' then
     v_cucina  := new.kitchen_id;
     v_delta   := octet_length(new.value::text);
     v_sezioni := 1;
@@ -358,7 +366,11 @@ set search_path = public
 as $$
 declare v_cucina uuid := coalesce(new.kitchen_id, old.kitchen_id);
 begin
-  insert into public.kitchen_stats (kitchen_id) values (v_cucina) on conflict do nothing;
+  -- Come sopra: in cancellazione si aggiorna e basta, altrimenti la rimozione
+  -- di una cucina inciamperebbe nella statistica ricreata a metà strada.
+  if tg_op <> 'DELETE' then
+    insert into public.kitchen_stats (kitchen_id) values (v_cucina) on conflict do nothing;
+  end if;
   update public.kitchen_stats s set
     membri_owner  = (select count(*) from public.kitchen_members m where m.kitchen_id = v_cucina and m.role = 'owner'),
     membri_editor = (select count(*) from public.kitchen_members m where m.kitchen_id = v_cucina and m.role = 'editor'),
@@ -846,3 +858,524 @@ begin
 end;
 $$;
 grant execute on function public.admin_registro(uuid, integer, timestamptz, bigint) to authenticated;
+
+
+-- ============================================================================
+-- 5. AGIRE — ogni azione lascia una riga nel registro
+--
+-- Forma comune a tutte le funzioni qui sotto:
+--   1. la PRIMA istruzione è il controllo di is_platform_admin(), che solleva;
+--   2. i rifiuti per regola non sollevano: tornano {"ok": false, "motivo": ...}
+--      e si scrivono nel registro con esito 'rifiutato'. Un tentativo di
+--      togliere l'ultimo titolare a una cucina è una cosa che si deve poter
+--      leggere dopo, non un errore che sparisce con la transazione;
+--   3. la scrittura nel registro sta nella stessa transazione dell'azione:
+--      se non si scrive, l'azione non si fa.
+--
+-- COME SI IDENTIFICA UNA PERSONA
+-- Per id esplicito oppure per email, uno dei due, mai "quello diverso da me"
+-- e mai per differenza. In questo progetto è già successo di declassare il
+-- titolare sbagliato usando un identificatore non aggiornato: l'email si
+-- risolve su auth.users, che è viva, non sulla copia in kitchen_members, che
+-- è ferma al giorno dell'ingresso.
+-- ============================================================================
+
+create or replace function public.admin_bersaglio(p_kitchen uuid, p_user uuid, p_email text)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+declare
+  v_email text := nullif(lower(trim(coalesce(p_email, ''))), '');
+  v_id    uuid;
+  m       public.kitchen_members;
+  v_vera  text;
+begin
+  -- Uno dei due, non tutti e due e non nessuno: un'azione che riceve due
+  -- identificatori discordi deve fermarsi, non scegliere.
+  if (p_user is null) = (v_email is null) then
+    return jsonb_build_object('trovato', false, 'motivo',
+      'Indica la persona per id oppure per email: uno dei due, non entrambi e non nessuno.');
+  end if;
+
+  if p_user is not null then
+    v_id := p_user;
+  else
+    select u.id into v_id from auth.users u where lower(u.email) = v_email;
+    if v_id is null then
+      return jsonb_build_object('trovato', false, 'motivo', 'Nessun account con questa email.');
+    end if;
+  end if;
+
+  select * into m from public.kitchen_members where kitchen_id = p_kitchen and user_id = v_id;
+  if m.user_id is null then
+    return jsonb_build_object('trovato', false, 'motivo', 'Questa persona non fa parte di questa cucina.');
+  end if;
+
+  select u.email into v_vera from auth.users u where u.id = v_id;
+  return jsonb_build_object('trovato', true, 'user_id', v_id, 'email', v_vera, 'ruolo', m.role);
+end;
+$$;
+revoke all on function public.admin_bersaglio(uuid, uuid, text) from public, anon, authenticated;
+
+-- Un rifiuto per regola: si registra e si racconta. Non solleva, apposta.
+create or replace function public.admin_rifiuta(
+  p_azione text, p_cucina uuid, p_cucina_nome text,
+  p_bersaglio uuid, p_bersaglio_email text, p_motivo text, p_dettagli jsonb default '{}'::jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.admin_scrivi_registro(p_azione, p_cucina, p_cucina_nome,
+    p_bersaglio, p_bersaglio_email, 'rifiutato',
+    coalesce(p_dettagli, '{}'::jsonb) || jsonb_build_object('motivo', p_motivo));
+  return jsonb_build_object('ok', false, 'motivo', p_motivo);
+end;
+$$;
+revoke all on function public.admin_rifiuta(text, uuid, text, uuid, text, text, jsonb)
+  from public, anon, authenticated;
+
+-- Quanti titolari resterebbero togliendo (o declassando) questa persona.
+create or replace function public.admin_titolari_rimasti(p_kitchen uuid, p_escluso uuid)
+returns integer
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select count(*)::integer from public.kitchen_members
+   where kitchen_id = p_kitchen and role = 'owner'
+     and (p_escluso is null or user_id <> p_escluso);
+$$;
+revoke all on function public.admin_titolari_rimasti(uuid, uuid) from public, anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Stato commerciale. Sospendere e riattivare sono questa stessa funzione con
+-- 'suspended' e 'active': un'unica strada, un'unica riga di registro da leggere.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_set_stato(
+  p_kitchen uuid, p_stato text, p_trial_ends_at timestamptz default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare k public.kitchens;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select * into k from public.kitchens where id = p_kitchen;
+  if k.id is null then
+    return public.admin_rifiuta('stato', p_kitchen, null, null, null, 'Cucina non trovata.');
+  end if;
+  if p_stato not in ('trial', 'active', 'suspended') then
+    return public.admin_rifiuta('stato', k.id, k.name, null, null,
+      'Stato non ammesso: trial, active o suspended.');
+  end if;
+
+  update public.kitchens
+     set status = p_stato,
+         trial_ends_at = coalesce(p_trial_ends_at, trial_ends_at)
+   where id = p_kitchen;
+
+  perform public.admin_scrivi_registro('stato', k.id, k.name, null, null, 'ok',
+    jsonb_build_object('da', k.status, 'a', p_stato,
+                       'prova_da', k.trial_ends_at,
+                       'prova_a', coalesce(p_trial_ends_at, k.trial_ends_at)));
+
+  return jsonb_build_object('ok', true, 'stato', p_stato);
+end;
+$$;
+grant execute on function public.admin_set_stato(uuid, text, timestamptz) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Spostare la scadenza della prova senza toccare lo stato.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_set_prova(p_kitchen uuid, p_scadenza timestamptz)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare k public.kitchens;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select * into k from public.kitchens where id = p_kitchen;
+  if k.id is null then
+    return public.admin_rifiuta('prova', p_kitchen, null, null, null, 'Cucina non trovata.');
+  end if;
+  if p_scadenza is null then
+    return public.admin_rifiuta('prova', k.id, k.name, null, null, 'Serve una data di scadenza.');
+  end if;
+
+  update public.kitchens set trial_ends_at = p_scadenza where id = p_kitchen;
+
+  perform public.admin_scrivi_registro('prova', k.id, k.name, null, null, 'ok',
+    jsonb_build_object('da', k.trial_ends_at, 'a', p_scadenza));
+
+  return jsonb_build_object('ok', true, 'trial_ends_at', p_scadenza);
+end;
+$$;
+grant execute on function public.admin_set_prova(uuid, timestamptz) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Tetto AI e contatore del mese.
+-- Azzerare il contatore riporta anche il mese a quello corrente: altrimenti il
+-- primo utilizzo del mese nuovo lo azzererebbe di nuovo da solo e il regalo
+-- fatto al cliente sparirebbe senza spiegazione.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_set_ai(
+  p_kitchen uuid, p_limite integer default null, p_azzera boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare k public.kitchens;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select * into k from public.kitchens where id = p_kitchen;
+  if k.id is null then
+    return public.admin_rifiuta('ai', p_kitchen, null, null, null, 'Cucina non trovata.');
+  end if;
+  if p_limite is not null and p_limite < 0 then
+    return public.admin_rifiuta('ai', k.id, k.name, null, null, 'Il tetto non può essere negativo.');
+  end if;
+  if p_limite is null and not coalesce(p_azzera, false) then
+    return public.admin_rifiuta('ai', k.id, k.name, null, null, 'Niente da cambiare.');
+  end if;
+
+  update public.kitchens
+     set ai_limit = coalesce(p_limite, ai_limit),
+         ai_calls = case when coalesce(p_azzera, false) then 0 else ai_calls end,
+         ai_month = case when coalesce(p_azzera, false) then to_char(now(), 'YYYY-MM') else ai_month end
+   where id = p_kitchen;
+
+  perform public.admin_scrivi_registro('ai', k.id, k.name, null, null, 'ok',
+    jsonb_build_object('tetto_da', k.ai_limit, 'tetto_a', coalesce(p_limite, k.ai_limit),
+                       'usate_da', k.ai_calls, 'azzerato', coalesce(p_azzera, false)));
+
+  return jsonb_build_object('ok', true);
+end;
+$$;
+grant execute on function public.admin_set_ai(uuid, integer, boolean) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Cambiare il ruolo di una persona dentro una cucina.
+-- Una cucina senza titolare non è recuperabile dall'interno: nessuno può più
+-- invitare, cambiare permessi, o decidere sulle richieste. Il controllo sta qui
+-- e non nell'interfaccia.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_set_ruolo(
+  p_kitchen uuid, p_ruolo text, p_user uuid default null, p_email text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  k public.kitchens;
+  b jsonb;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select * into k from public.kitchens where id = p_kitchen;
+  if k.id is null then
+    return public.admin_rifiuta('ruolo', p_kitchen, null, null, null, 'Cucina non trovata.');
+  end if;
+  if p_ruolo not in ('owner', 'editor', 'viewer') then
+    return public.admin_rifiuta('ruolo', k.id, k.name, null, null,
+      'Ruolo non ammesso: owner, editor o viewer.');
+  end if;
+
+  b := public.admin_bersaglio(p_kitchen, p_user, p_email);
+  if not (b->>'trovato')::boolean then
+    return public.admin_rifiuta('ruolo', k.id, k.name, p_user, p_email, b->>'motivo');
+  end if;
+
+  if b->>'ruolo' = 'owner' and p_ruolo <> 'owner'
+     and public.admin_titolari_rimasti(p_kitchen, (b->>'user_id')::uuid) = 0 then
+    return public.admin_rifiuta('ruolo', k.id, k.name, (b->>'user_id')::uuid, b->>'email',
+      'È l''unico titolare: la cucina resterebbe senza nessuno che possa gestirla. Prima nomina un altro titolare.');
+  end if;
+
+  update public.kitchen_members set role = p_ruolo
+   where kitchen_id = p_kitchen and user_id = (b->>'user_id')::uuid;
+
+  perform public.admin_scrivi_registro('ruolo', k.id, k.name,
+    (b->>'user_id')::uuid, b->>'email', 'ok',
+    jsonb_build_object('da', b->>'ruolo', 'a', p_ruolo));
+
+  return jsonb_build_object('ok', true, 'user_id', b->>'user_id', 'email', b->>'email', 'ruolo', p_ruolo);
+end;
+$$;
+grant execute on function public.admin_set_ruolo(uuid, text, uuid, text) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Togliere una persona da una cucina.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_rimuovi_membro(
+  p_kitchen uuid, p_user uuid default null, p_email text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  k public.kitchens;
+  b jsonb;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select * into k from public.kitchens where id = p_kitchen;
+  if k.id is null then
+    return public.admin_rifiuta('rimozione', p_kitchen, null, null, null, 'Cucina non trovata.');
+  end if;
+
+  b := public.admin_bersaglio(p_kitchen, p_user, p_email);
+  if not (b->>'trovato')::boolean then
+    return public.admin_rifiuta('rimozione', k.id, k.name, p_user, p_email, b->>'motivo');
+  end if;
+
+  if b->>'ruolo' = 'owner'
+     and public.admin_titolari_rimasti(p_kitchen, (b->>'user_id')::uuid) = 0 then
+    return public.admin_rifiuta('rimozione', k.id, k.name, (b->>'user_id')::uuid, b->>'email',
+      'È l''unico titolare: prima trasferisci la proprietà a qualcun altro.');
+  end if;
+
+  delete from public.kitchen_members
+   where kitchen_id = p_kitchen and user_id = (b->>'user_id')::uuid;
+
+  perform public.admin_scrivi_registro('rimozione', k.id, k.name,
+    (b->>'user_id')::uuid, b->>'email', 'ok',
+    jsonb_build_object('ruolo_che_aveva', b->>'ruolo'));
+
+  return jsonb_build_object('ok', true, 'user_id', b->>'user_id', 'email', b->>'email');
+end;
+$$;
+grant execute on function public.admin_rimuovi_membro(uuid, uuid, text) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Trasferire la proprietà.
+--
+-- Il nuovo titolare si indica esplicitamente. Il vecchio ANCHE: se non lo si
+-- nomina, non viene declassato nessuno e la cucina resta con due titolari —
+-- che è uno stato sano, mentre "declassa tutti quelli diversi dal nuovo" è il
+-- genere di scorciatoia che toglie il ruolo alla persona sbagliata.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_trasferisci_proprieta(
+  p_kitchen        uuid,
+  p_nuovo_user     uuid default null,
+  p_nuovo_email    text default null,
+  p_vecchio_user   uuid default null,
+  p_vecchio_email  text default null,
+  p_declassa_a     text default 'editor'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  k public.kitchens;
+  b_nuovo   jsonb;
+  b_vecchio jsonb := null;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select * into k from public.kitchens where id = p_kitchen;
+  if k.id is null then
+    return public.admin_rifiuta('proprieta', p_kitchen, null, null, null, 'Cucina non trovata.');
+  end if;
+  if p_declassa_a not in ('editor', 'viewer') then
+    return public.admin_rifiuta('proprieta', k.id, k.name, null, null,
+      'Il vecchio titolare può diventare editor o viewer.');
+  end if;
+
+  b_nuovo := public.admin_bersaglio(p_kitchen, p_nuovo_user, p_nuovo_email);
+  if not (b_nuovo->>'trovato')::boolean then
+    return public.admin_rifiuta('proprieta', k.id, k.name, p_nuovo_user, p_nuovo_email,
+      'Nuovo titolare: ' || (b_nuovo->>'motivo'));
+  end if;
+
+  if p_vecchio_user is not null or nullif(trim(coalesce(p_vecchio_email, '')), '') is not null then
+    b_vecchio := public.admin_bersaglio(p_kitchen, p_vecchio_user, p_vecchio_email);
+    if not (b_vecchio->>'trovato')::boolean then
+      return public.admin_rifiuta('proprieta', k.id, k.name, p_vecchio_user, p_vecchio_email,
+        'Vecchio titolare: ' || (b_vecchio->>'motivo'));
+    end if;
+    if b_vecchio->>'user_id' = b_nuovo->>'user_id' then
+      return public.admin_rifiuta('proprieta', k.id, k.name, (b_nuovo->>'user_id')::uuid,
+        b_nuovo->>'email', 'Il nuovo e il vecchio titolare sono la stessa persona.');
+    end if;
+  end if;
+
+  update public.kitchen_members set role = 'owner'
+   where kitchen_id = p_kitchen and user_id = (b_nuovo->>'user_id')::uuid;
+
+  if b_vecchio is not null then
+    update public.kitchen_members set role = p_declassa_a
+     where kitchen_id = p_kitchen and user_id = (b_vecchio->>'user_id')::uuid;
+  end if;
+
+  -- Cintura e bretelle: se dopo tutto questo non resta nessun titolare, la
+  -- transazione si annulla per intero invece di lasciare una cucina orfana.
+  if public.admin_titolari_rimasti(p_kitchen, null) = 0 then
+    raise exception 'Trasferimento annullato: la cucina resterebbe senza titolare';
+  end if;
+
+  perform public.admin_scrivi_registro('proprieta', k.id, k.name,
+    (b_nuovo->>'user_id')::uuid, b_nuovo->>'email', 'ok',
+    jsonb_build_object(
+      'nuovo_titolare', b_nuovo->>'email',
+      'ruolo_che_aveva', b_nuovo->>'ruolo',
+      'vecchio_titolare', case when b_vecchio is null then null else b_vecchio->>'email' end,
+      'vecchio_declassato_a', case when b_vecchio is null then null else p_declassa_a end));
+
+  return jsonb_build_object('ok', true, 'nuovo', b_nuovo->>'email',
+    'vecchio', case when b_vecchio is null then null else b_vecchio->>'email' end);
+end;
+$$;
+grant execute on function public.admin_trasferisci_proprieta(uuid, uuid, text, uuid, text, text) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Cancellazione in due passi.
+--
+-- Primo passo, reversibile: la cucina resta, marcata e sospesa. L'app blocca
+-- già l'accesso alle cucine sospese, quindi da fuori l'effetto è immediato e
+-- non serve cambiare una riga dell'applicazione.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_cancella_cucina(p_kitchen uuid, p_motivo text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare k public.kitchens;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select * into k from public.kitchens where id = p_kitchen;
+  if k.id is null then
+    return public.admin_rifiuta('cancellazione', p_kitchen, null, null, null, 'Cucina non trovata.');
+  end if;
+  if k.deleted_at is not null then
+    return public.admin_rifiuta('cancellazione', k.id, k.name, null, null, 'Era già cancellata.');
+  end if;
+
+  update public.kitchens set deleted_at = now(), status = 'suspended' where id = p_kitchen;
+
+  perform public.admin_scrivi_registro('cancellazione', k.id, k.name, null, null, 'ok',
+    jsonb_build_object('stato_prima', k.status, 'motivo', p_motivo));
+
+  return jsonb_build_object('ok', true);
+end;
+$$;
+grant execute on function public.admin_cancella_cucina(uuid, text) to authenticated;
+
+-- Ripristino. Torna sospesa, non attiva: riattivare è una seconda decisione,
+-- presa guardando lo stato commerciale, non un effetto collaterale del
+-- "annulla". Chi ripristina per errore non regala un abbonamento.
+create or replace function public.admin_ripristina_cucina(p_kitchen uuid, p_stato text default 'suspended')
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare k public.kitchens;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select * into k from public.kitchens where id = p_kitchen;
+  if k.id is null then
+    return public.admin_rifiuta('ripristino', p_kitchen, null, null, null, 'Cucina non trovata.');
+  end if;
+  if k.deleted_at is null then
+    return public.admin_rifiuta('ripristino', k.id, k.name, null, null, 'Non era cancellata.');
+  end if;
+  if p_stato not in ('trial', 'active', 'suspended') then
+    return public.admin_rifiuta('ripristino', k.id, k.name, null, null, 'Stato non ammesso.');
+  end if;
+
+  update public.kitchens set deleted_at = null, status = p_stato where id = p_kitchen;
+
+  perform public.admin_scrivi_registro('ripristino', k.id, k.name, null, null, 'ok',
+    jsonb_build_object('cancellata_il', k.deleted_at, 'stato', p_stato));
+
+  return jsonb_build_object('ok', true, 'stato', p_stato);
+end;
+$$;
+grant execute on function public.admin_ripristina_cucina(uuid, text) to authenticated;
+
+-- Secondo passo, definitivo. Pretende due cose che un clic distratto non ha:
+-- che la cucina sia già marcata come cancellata, e il suo nome scritto per
+-- esteso. Il registro si scrive PRIMA della rimozione e non ha chiavi esterne
+-- verso le cucine, quindi resta anche quando la cucina non c'è più.
+create or replace function public.admin_elimina_definitivamente(p_kitchen uuid, p_conferma_nome text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  k public.kitchens;
+  s public.kitchen_stats;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select * into k from public.kitchens where id = p_kitchen;
+  if k.id is null then
+    return public.admin_rifiuta('eliminazione', p_kitchen, null, null, null, 'Cucina non trovata.');
+  end if;
+  if k.deleted_at is null then
+    return public.admin_rifiuta('eliminazione', k.id, k.name, null, null,
+      'Prima va cancellata (passo reversibile), poi eliminata.');
+  end if;
+  if trim(coalesce(p_conferma_nome, '')) <> trim(k.name) then
+    return public.admin_rifiuta('eliminazione', k.id, k.name, null, null,
+      'Il nome scritto non coincide con quello della cucina.');
+  end if;
+
+  select * into s from public.kitchen_stats where kitchen_id = p_kitchen;
+
+  perform public.admin_scrivi_registro('eliminazione', k.id, k.name, null, null, 'ok',
+    jsonb_build_object('creata_il', k.created_at, 'cancellata_il', k.deleted_at,
+                       'byte_dati', coalesce(s.byte_dati, 0),
+                       'membri', coalesce(s.membri_owner, 0) + coalesce(s.membri_editor, 0)
+                                 + coalesce(s.membri_viewer, 0)));
+
+  delete from public.kitchens where id = p_kitchen;
+
+  return jsonb_build_object('ok', true);
+end;
+$$;
+grant execute on function public.admin_elimina_definitivamente(uuid, text) to authenticated;

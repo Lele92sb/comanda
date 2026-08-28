@@ -128,6 +128,61 @@ test('la scrittura nel registro non è concessa a nessun ruolo', () => {
   assert.equal(funzioniConcesse().some(f => f.nome === 'admin_scrivi_registro'), false);
 });
 
+test('ogni azione amministrativa lascia una riga nel registro', () => {
+  // Una funzione che cambia qualcosa e non scrive nel registro è un potere
+  // senza traccia: è la cosa che questa console non deve avere.
+  const scrive = /(insert\s+into|update|delete\s+from)\s+public\.(kitchens|kitchen_members|kitchen_data|kitchen_invites|kitchen_requests)\b/i;
+  let contate = 0;
+  for (const f of funzioniConcesse()) {
+    if (!scrive.test(f.corpo)) continue;
+    contate++;
+    assert.match(f.corpo, /admin_scrivi_registro/,
+      `${f.nome} cambia i dati di un cliente senza scrivere nel registro`);
+  }
+  assert.ok(contate >= 6, `attese almeno 6 funzioni che modificano, trovate ${contate}`);
+});
+
+test('nessuna cucina può restare senza titolare', () => {
+  // Una cucina senza titolare non si ripara dall'interno: nessuno può più
+  // invitare, cambiare permessi o decidere sulle richieste.
+  for (const nome of ['admin_set_ruolo', 'admin_rimuovi_membro', 'admin_trasferisci_proprieta']) {
+    const f = funzioni().find(x => x.nome === nome);
+    assert.ok(f, `manca ${nome}`);
+    assert.match(f.corpo, /admin_titolari_rimasti/,
+      `${nome} può togliere un titolare senza contare quelli che restano`);
+  }
+});
+
+test('le persone si identificano per id o per email, mai per differenza da chi agisce', () => {
+  // L'errore già commesso in questo progetto: declassare il titolare
+  // sbagliato usando un identificatore non aggiornato. Una funzione che
+  // guarda auth.uid() per decidere SU CHI agire è la stessa classe di errore.
+  for (const nome of ['admin_set_ruolo', 'admin_rimuovi_membro', 'admin_trasferisci_proprieta']) {
+    const f = funzioni().find(x => x.nome === nome);
+    assert.equal(/auth\.uid\(\)/.test(f.corpo), false,
+      `${nome} guarda chi sta agendo per scegliere il bersaglio: deve riceverlo esplicito`);
+    assert.match(f.corpo, /admin_bersaglio/, `${nome} deve risolvere la persona da admin_bersaglio`);
+  }
+
+  const b = funzioni().find(x => x.nome === 'admin_bersaglio');
+  assert.ok(b, 'manca admin_bersaglio');
+  assert.match(b.corpo, /\(p_user is null\) = \(v_email is null\)/,
+    'admin_bersaglio deve pretendere uno e un solo identificatore');
+  // L'email si risolve sulla tabella viva, non sulla copia ferma al giorno
+  // dell'ingresso: è la copia vecchia che fa sbagliare persona.
+  assert.match(b.corpo, /from auth\.users u where lower\(u\.email\)/);
+});
+
+test('la rimozione definitiva è un secondo passo, e chiede il nome per esteso', () => {
+  const f = funzioni().find(x => x.nome === 'admin_elimina_definitivamente');
+  assert.ok(f, 'manca admin_elimina_definitivamente');
+  assert.match(f.corpo, /deleted_at is null/, 'deve pretendere che la cucina sia già cancellata');
+  assert.match(f.corpo, /p_conferma_nome/, 'deve pretendere il nome scritto per esteso');
+  // Il registro prima della rimozione: dopo, la cucina non c'è più.
+  assert.ok(f.corpo.indexOf('admin_scrivi_registro') < f.corpo.indexOf('delete from public.kitchens'),
+    'la riga di registro va scritta prima della rimozione');
+});
+
 test('il registro si scrive nella stessa transazione dell\'azione', () => {
   // Nessun "exception when others" attorno alla scrittura: se il registro non
   // si scrive, l'azione non si fa. È la proprietà richiesta.
