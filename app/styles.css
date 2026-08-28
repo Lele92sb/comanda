@@ -117,6 +117,20 @@
    perché su iOS Safari l'apertura via script non funziona. */
 .file-hidden{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;}
 
+/* --- Finestra di dialogo -----------------------------------------------
+   Sostituisce confirm() e prompt() del browser: quelle non seguono lo stile
+   dell'app, non si possono tradurre, e in alcuni contesti (anteprime, webview,
+   iframe con restrizioni) vengono bloccate del tutto — il pulsante sembra
+   rotto senza dire perché. */
+.dialog-backdrop{position:fixed;inset:0;background:rgba(15,13,11,0.72);backdrop-filter:blur(3px);
+  z-index:300;display:flex;align-items:center;justify-content:center;padding:var(--space-4);}
+.dialog{background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:var(--radius-md);
+  box-shadow:var(--shadow-float);max-width:420px;width:100%;padding:var(--space-4);}
+.dialog h3{margin:0 0 var(--space-2);font-family:var(--font-display);font-size:var(--text-lg);font-weight:600;}
+.dialog p{margin:0 0 var(--space-3);font-size:var(--text-md);line-height:1.55;white-space:pre-line;color:var(--paper);}
+.dialog .dialog-actions{display:flex;gap:var(--space-2);margin-top:var(--space-4);}
+.dialog .dialog-actions .btn{flex:1;}
+
 /* Paragrafo discorsivo: le spiegazioni lunghe dentro i riquadri. */
 .prose{font-size:var(--text-md);line-height:1.6;}
 

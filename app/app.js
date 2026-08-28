@@ -161,6 +161,54 @@ function migrateData(){
   SERVICES().forEach(sv=>{ if(!state.staffingNeeds[sv]) state.staffingNeeds[sv]=[]; });
 }
 
+/* ============================= FINESTRE DI DIALOGO =============================
+   Sostituiscono confirm() e prompt() del browser. Quelle bloccano l'intera
+   pagina, non seguono lo stile dell'app, non sono traducibili, e in alcuni
+   contesti (anteprime, webview, iframe con restrizioni) vengono soppresse: il
+   pulsante sembra semplicemente rotto. Queste restituiscono una promessa.
+   ============================================================================ */
+function apriDialogo({titolo, testo, campo, valore, conferma, annulla, pericolo}){
+  return new Promise(resolve=>{
+    const back = document.createElement('div');
+    back.className = 'dialog-backdrop';
+    back.innerHTML = `
+      <div class="dialog" role="dialog" aria-modal="true" aria-label="${esc(titolo)}">
+        <h3>${esc(titolo)}</h3>
+        ${testo ? `<p>${esc(testo)}</p>` : ''}
+        ${campo ? `<label>${esc(campo)}</label><input type="text" id="dlg-input" value="${esc(valore||'')}">` : ''}
+        <div class="dialog-actions">
+          <button class="btn ghost" data-no>${esc(annulla || 'Annulla')}</button>
+          <button class="btn" data-yes ${pericolo?'style="background:var(--alert);color:var(--paper);"':''}>${esc(conferma || 'Conferma')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(back);
+    const input = back.querySelector('#dlg-input');
+    if(input){ input.focus(); input.select(); }
+    else back.querySelector('[data-yes]').focus();
+
+    const chiudi = esito => { document.removeEventListener('keydown', tasti, true); back.remove(); resolve(esito); };
+    const conferma_ = () => chiudi(campo ? (input.value) : true);
+    // Esc annulla, Invio conferma: le stesse abitudini delle finestre di sistema.
+    const tasti = e => {
+      if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); chiudi(campo ? null : false); }
+      if(e.key === 'Enter' && (campo || document.activeElement === back.querySelector('[data-yes]'))){
+        e.preventDefault(); e.stopPropagation(); conferma_();
+      }
+    };
+    document.addEventListener('keydown', tasti, true);
+    back.querySelector('[data-yes]').addEventListener('click', conferma_);
+    back.querySelector('[data-no]').addEventListener('click', ()=> chiudi(campo ? null : false));
+    // Un clic fuori dal riquadro equivale ad annullare.
+    back.addEventListener('click', e=>{ if(e.target === back) chiudi(campo ? null : false); });
+  });
+}
+// Ritorna true/false. `pericolo` colora di rosso il pulsante che conferma.
+const conferma = (titolo, testo, opzioni={}) =>
+  apriDialogo({titolo, testo, conferma: opzioni.conferma, annulla: opzioni.annulla, pericolo: opzioni.pericolo});
+// Ritorna il testo scritto, oppure null se annullato.
+const chiediTesto = (titolo, campo, valore, testo) =>
+  apriDialogo({titolo, testo, campo, valore, conferma:'Salva'});
+
 function toast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
@@ -1259,14 +1307,16 @@ function renderServices(){
     [state.services[i-1], state.services[i]] = [state.services[i], state.services[i-1]];
     save('services'); afterShiftConfigChange();
   }));
-  el.querySelectorAll('.sv-del').forEach(b=>b.addEventListener('click', ()=>{
+  el.querySelectorAll('.sv-del').forEach(b=>b.addEventListener('click', async ()=>{
     const sv = state.services.find(x=>x.id===b.dataset.id);
     const turni = state.shiftTypes.filter(t=>(t.services||[]).includes(sv.id));
     const righe = (state.staffingNeeds[sv.id]||[]).length;
-    if(!confirm(`Eliminare il servizio "${sv.name}"?\n\n`
-      + (turni.length ? `Verrà tolto da ${turni.length} tipo/i di turno (${turni.map(t=>t.code).join(', ')}).\n` : '')
+    const ok = await conferma(`Eliminare il servizio "${sv.name}"?`,
+      (turni.length ? `Verrà tolto da ${turni.length} tipo/i di turno (${turni.map(t=>t.code).join(', ')}).\n` : '')
       + (righe ? `Verranno perse ${righe} righe di fabbisogno.\n` : '')
-      + '\nI turni già assegnati nella griglia restano come sono.')) return;
+      + 'I turni già assegnati nella griglia restano come sono.',
+      {conferma:'Elimina', pericolo:true});
+    if(!ok) return;
     state.services = state.services.filter(x=>x.id!==sv.id);
     state.shiftTypes.forEach(t=>{ t.services = (t.services||[]).filter(x=>x!==sv.id); });
     delete state.staffingNeeds[sv.id];
@@ -1287,10 +1337,12 @@ function renderCopiaConfig(){
 document.getElementById('copia-btn').addEventListener('click', async ()=>{
   const id = document.getElementById('copia-da').value;
   const nome = (Cloud.altreCucine().find(k=>k.id===id)||{}).name || 'l\'altra cucina';
-  if(!confirm(`Copiare servizi, tipi di turno e stazioni da "${nome}"?\n\n`
-    + 'La configurazione attuale di questa cucina viene sostituita.\n'
+  const ok = await conferma(`Copiare la configurazione da "${nome}"?`,
+    'La configurazione attuale di questa cucina viene sostituita.\n'
     + 'Brigata, turni assegnati e fabbisogno NON vengono toccati, ma il fabbisogno\n'
-    + 'andrà reimpostato perché i servizi e le stazioni cambiano identificativo.')) return;
+    + 'andrà reimpostato perché i servizi e le stazioni cambiano identificativo.',
+    {conferma:'Copia qui', pericolo:true});
+  if(!ok) return;
   try{
     const [servizi, turni, stazioni] = await Promise.all([
       Cloud.readOtherKitchen(id, 'services'),
@@ -1372,12 +1424,14 @@ function renderShiftTypes(){
     else t.services.push(sv);
     salva();
   }));
-  el.querySelectorAll('.st-del').forEach(b=>b.addEventListener('click', ()=>{
+  el.querySelectorAll('.st-del').forEach(b=>b.addEventListener('click', async ()=>{
     const t = state.shiftTypes.find(x=>x.id===b.dataset.id);
     const inQuota = state.staff.filter(s=>(s.weeklyQuota||[]).some(g=>(g.codes||[]).includes(t.code)));
-    if(!confirm(`Eliminare il turno "${t.code} · ${t.label}"?\n\n`
-      + (inQuota.length ? `È usato nelle quote di: ${inQuota.map(s=>s.name).join(', ')}.\n` : '')
-      + 'I turni già assegnati nella griglia restano, ma la sigla non sarà più selezionabile.')) return;
+    const ok = await conferma(`Eliminare il turno "${t.code} · ${t.label}"?`,
+      (inQuota.length ? `È usato nelle quote di: ${inQuota.map(s=>s.name).join(', ')}.\n` : '')
+      + 'I turni già assegnati nella griglia restano, ma la sigla non sarà più selezionabile.',
+      {conferma:'Elimina', pericolo:true});
+    if(!ok) return;
     state.shiftTypes = state.shiftTypes.filter(x=>x.id!==t.id);
     state.staff.forEach(s=>(s.weeklyQuota||[]).forEach(g=>{ g.codes = (g.codes||[]).filter(c=>c!==t.code); }));
     save('shiftTypes'); save('staff'); salva(); toast('Tipo di turno eliminato');
@@ -1652,8 +1706,8 @@ async function renderRichieste(){
     dopo(()=>Cloud.decideRequest(b.dataset.id,'approvata'), 'Approvata — vincola i prossimi turni generati')));
   el.querySelectorAll('.req-no').forEach(b=>b.addEventListener('click', ()=>
     dopo(()=>Cloud.decideRequest(b.dataset.id,'rifiutata'), 'Rifiutata')));
-  el.querySelectorAll('.req-del').forEach(b=>b.addEventListener('click', ()=>{
-    if(!confirm('Eliminare questa richiesta?')) return;
+  el.querySelectorAll('.req-del').forEach(b=>b.addEventListener('click', async ()=>{
+    if(!await conferma('Eliminare questa richiesta?', null, {conferma:'Elimina', pericolo:true})) return;
     dopo(()=>Cloud.deleteRequest(b.dataset.id), 'Richiesta eliminata');
   }));
 }
@@ -2248,7 +2302,10 @@ async function openTeam(){
     teamEl.querySelectorAll('.tm-rm').forEach(b=>b.addEventListener('click', async ()=>{
       // Rimuovere qualcuno gli toglie l'accesso subito: meglio una conferma con
       // il nome davanti agli occhi, viste le righe una sotto l'altra.
-      if(!confirm(`Togliere a ${b.dataset.n} l'accesso a ${Cloud.kitchen.name}?\n\nI dati della cucina restano intatti. Potrai riammetterla con un nuovo codice d'invito.`)) return;
+      const ok = await conferma(`Togliere a ${b.dataset.n} l'accesso a ${Cloud.kitchen.name}?`,
+        'I dati della cucina restano intatti. Potrai riammetterla con un nuovo codice d\'invito.',
+        {conferma:'Rimuovi', pericolo:true});
+      if(!ok) return;
       try{ await Cloud.removeMember(b.dataset.u); openTeam(); toast('Persona rimossa'); }
       catch(e){ teamError(e); }
     }));
@@ -2271,8 +2328,9 @@ document.getElementById('ab-kitchen-sel').addEventListener('change', e=>{
 });
 document.getElementById('ab-team').addEventListener('click', openTeam);
 document.getElementById('ab-rename').addEventListener('click', async ()=>{
-  const nome = prompt('Come ti chiamano in cucina?\n\nÈ il nome con cui ti vede chi gestisce la cucina.',
-                      Cloud.myDisplayName || '');
+  const nome = await chiediTesto('Il tuo nome in cucina', 'Come ti chiamano',
+                      Cloud.myDisplayName || '',
+                      'È il nome con cui ti vede chi gestisce la cucina.');
   if(nome === null) return;
   try{ await Cloud.setMyDisplayName(nome); renderAccountBar(); toast('Nome aggiornato'); }
   catch(e){ toast(humanError(e)); }
