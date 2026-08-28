@@ -10,3 +10,6 @@ node_modules/
 
 # Build di Vite
 dist/
+
+# Copie di lavoro degli agenti: sono repository a se, non contenuto del progetto.
+.claude/worktrees/
