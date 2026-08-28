@@ -155,8 +155,12 @@ create policy admin_audit_select on public.admin_audit
 -- Volutamente assenti: admin_audit_insert, admin_audit_update, admin_audit_delete.
 -- L'inserimento avviene solo dentro le funzioni security definer di questo file.
 
+-- Nessun permesso di tabella, nemmeno in lettura: il registro si legge da
+-- admin_registro(), che è security definer e controlla i permessi da sé.
+-- La policy qui sopra resta come seconda serratura — se un domani qualcuno
+-- concedesse la lettura diretta, quella continuerebbe a filtrare. Ma la porta
+-- non è aperta: non si concede quello che non serve a nessuno.
 revoke all on table public.admin_audit from anon, authenticated;
-grant select on table public.admin_audit to authenticated;   -- filtrato dalla policy
 
 create or replace function public.admin_audit_immutabile()
 returns trigger
@@ -1447,8 +1451,10 @@ create policy app_errors_select on public.app_errors
 -- Volutamente assenti: insert, update, delete. Scrive solo la chiave di
 -- servizio dal proxy, che scavalca RLS.
 
+-- Come per il registro: nessun permesso di tabella. Gli errori si leggono da
+-- admin_errori() e admin_errori_gruppi(). La policy resta come seconda
+-- serratura, non come porta.
 revoke all on table public.app_errors from anon, authenticated;
-grant select on table public.app_errors to authenticated;
 
 -- ----------------------------------------------------------------------------
 -- I gruppi: lo stesso errore ripetuto è UNA cosa da sistemare, non trecento
@@ -1634,8 +1640,10 @@ create policy support_access_select on public.admin_support_access
   );
 -- Niente insert, update o delete: si passa dalle funzioni, che registrano.
 
+-- Anche qui nessun permesso di tabella: il titolare legge da
+-- assistenza_sulla_cucina(), l'amministratore da admin_assistenze(). La policy
+-- resta come seconda serratura.
 revoke all on table public.admin_support_access from anon, authenticated;
-grant select on table public.admin_support_access to authenticated;
 
 -- ----------------------------------------------------------------------------
 -- C'è un accesso in corso, per CHI STA CHIAMANDO?
@@ -1979,9 +1987,10 @@ grant execute on function public.admin_leggi_contenuto(uuid, text) to authentica
 --   await window.__comanda.db.from('app_errors').select('*')
 --   await window.__comanda.db.from('kitchen_stats').select('*')
 --   await window.__comanda.db.from('platform_counters').select('*')
---   ATTESO: nessuna riga in nessuna delle quattro.
---     admin_audit e app_errors hanno la policy di lettura, che non ti riguarda;
---     kitchen_stats e platform_counters non hanno policy affatto.
+--   ATTESO: errore, oppure nessuna riga. Nessuna delle quattro deve
+--     restituire dati. Su tutte i permessi di tabella sono revocati: si
+--     leggono solo dalle funzioni. La policy di lettura su admin_audit e
+--     app_errors resta come seconda serratura, non come porta.
 --   PERCHÉ CONTA: kitchen_stats dice quanto pesano i dati di ogni cliente e
 --   quando lo ha usato l'ultima volta. È il ritratto commerciale di tutti i
 --   concorrenti messi in fila.
