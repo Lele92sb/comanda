@@ -25,6 +25,9 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run typecheck
+      # Un simbolo usato ma non importato non lo vede ne' il compilatore ne'
+      # il bundler: esplode solo a schermo, davanti a chi usa l'app.
+      - run: npm run lint:import
       # La build fa da controllo strutturale: un import verso un simbolo che
       # non esiste piu' ferma qui il rilascio, non davanti all'utente.
       - run: npm run build

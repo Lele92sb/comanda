@@ -1,3 +1,4 @@
+import { lingua, t } from '../core/lingua.ts';
 import { CODE_LABEL, esc, state } from '../core/state.js';
 import { isoDate, parseISO } from '../lib/logic.js';
 import { dishTotalCost } from '../ricettario/costi.js';
@@ -14,17 +15,19 @@ export function renderDashboard(){
     return (cost/price*100) > 35;
   });
   let alerts = '';
-  if(highFc.length) alerts += `<div class="alert-box">⚠ ${highFc.length} piatt${highFc.length>1?'i hanno':'o ha'} un food cost reale sopra il 35%: ${highFc.map(r=>r.name).join(', ')}.</div>`;
+  if(highFc.length) alerts += `<div class="alert-box">⚠ ${esc(t('{n} piatti hanno un food cost reale sopra il 35%: {elenco}.',
+    {n: highFc.length, elenco: highFc.map(r=>r.name).join(', ')}))}</div>`;
   const overworked = weeklyExtraFromTurni().filter(o=>o.extra>0);
-  if(overworked.length) alerts += `<div class="alert-box">⚠ Questa settimana, secondo il planning turni, ${overworked.map(o=>o.name).join(', ')} ${overworked.length>1?'fanno':'fa'} ore extra rispetto al contratto.</div>`;
-  if(!alerts) alerts = `<div class="ok-box">✓ Nessun alert. Cucina in equilibrio.</div>`;
+  if(overworked.length) alerts += `<div class="alert-box">⚠ ${esc(t('Secondo il planning, {chi} fa ore extra rispetto al contratto.',
+    {chi: overworked.map(o=>o.name).join(', ')}))}</div>`;
+  if(!alerts) alerts = `<div class="ok-box">✓ ${esc(t('Nessun alert. Cucina in equilibrio.'))}</div>`;
   alertsEl.innerHTML = alerts;
 
   statsEl.innerHTML = `
-    <div class="stat"><div class="n">${state.recipes.length}</div><div class="l">Piatti in ricettario</div></div>
-    <div class="stat"><div class="n">${state.subrecipes.length}</div><div class="l">Sub-ricette</div></div>
-    <div class="stat"><div class="n">${state.staff.length}</div><div class="l">Persone in brigata</div></div>
-    <div class="stat"><div class="n">${state.menus.length}</div><div class="l">Menu attivi</div></div>
+    <div class="stat"><div class="n">${state.recipes.length}</div><div class="l">${esc(t('Piatti in ricettario'))}</div></div>
+    <div class="stat"><div class="n">${state.subrecipes.length}</div><div class="l">${esc(t('Sub-ricette'))}</div></div>
+    <div class="stat"><div class="n">${state.staff.length}</div><div class="l">${esc(t('Persone in brigata'))}</div></div>
+    <div class="stat"><div class="n">${state.menus.length}</div><div class="l">${esc(t('Menu attivi'))}</div></div>
   `;
 
   const todayKey = isoDate(new Date());
@@ -37,5 +40,6 @@ export function renderDashboard(){
         const st = state.stations.find(s=>s.id===t.stationId);
         return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;"><span>${esc(t.name)}</span><span style="font-family:var(--font-mono);color:var(--copper-light);">${esc(CODE_LABEL(t.code))}${st?' · '+esc(st.name):''}</span></div>`;
       }).join('')
-    : `<div class="empty">Nessun turno assegnato per oggi (${parseISO(todayKey).toLocaleDateString('it-IT',{weekday:'long', day:'numeric', month:'long'})})</div>`;
+    : `<div class="empty">${esc(t('Nessun turno assegnato per oggi ({giorno})',
+        {giorno: parseISO(todayKey).toLocaleDateString(lingua(), {weekday:'long', day:'numeric', month:'long'})}))}</div>`;
 }

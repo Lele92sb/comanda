@@ -1,3 +1,5 @@
+import { t } from '../core/lingua.ts';
+import { esc } from '../core/state.js';
 import { renderStoricoImportazioni } from '../ricettario/fatture.js';
 import { renderChat } from '../assistente/chat.js';
 import { renderKB } from '../assistente/conoscenza.js';
@@ -16,6 +18,8 @@ import { renderStaffList } from '../viste/brigata.js';
 import { renderDashboard } from '../viste/dashboard.js';
 import { renderMenuList } from '../viste/menu.js';
 /* ============================= TABS ============================= */
+// Le etichette si traducono al momento di disegnarle, non qui: la lingua può
+// cambiare, l'elenco delle schede no.
 const TABS = [
   {id:'dashboard', label:'Dashboard'},
   {id:'ricette', label:'Ricettario'},
@@ -28,7 +32,7 @@ const TABS = [
 ];
 export function initTabs(){
   const nav = document.getElementById('tabs');
-  nav.innerHTML = TABS.map(t=>`<button data-tab="${t.id}">${t.label}</button>`).join('');
+  nav.innerHTML = TABS.map(x=>`<button data-tab="${x.id}">${esc(t(x.label))}</button>`).join('');
   nav.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>switchTab(b.dataset.tab)));
   switchTab('dashboard');
 

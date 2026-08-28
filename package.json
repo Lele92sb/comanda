@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite build && wrangler pages dev dist --port 4173",
     "test": "node --experimental-strip-types --test tests/*.test.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint:import": "node scripts/controlla-import.cjs"
   },
   "devDependencies": {
     "typescript": "^7.0.2",

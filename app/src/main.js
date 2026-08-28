@@ -29,6 +29,7 @@ import './assistente/conoscenza.js';
 import './assistente/chat.js';
 import './core/backup.js';
 import * as stato from './core/state.js';
+import { LINGUE, caricaLingua, lingua, t, traduciMarkup } from './core/lingua.ts';
 
 /* ============================= DIAGNOSTICA =============================
    I moduli non lasciano più niente su window, ed è giusto così. Ma senza un
@@ -44,6 +45,22 @@ window.__comanda = {
   get ruolo(){ return Cloud.role; },
   versione: __VERSIONE__,
 };
+
+/* ============================= LINGUA ============================= */
+async function preparaLingua(){
+  const sel = document.getElementById('ab-lingua');
+  sel.innerHTML = LINGUE.map(l =>
+    `<option value="${l.codice}" ${l.codice===lingua()?'selected':''}>${l.nome}</option>`).join('');
+  sel.addEventListener('change', async e => {
+    await caricaLingua(e.target.value);
+    // Ricarico invece di ritradurre a caldo: mezza app è disegnata da
+    // JavaScript, e ridisegnarla pezzo per pezzo lascerebbe testi misti.
+    location.reload();
+  });
+  await caricaLingua(lingua());
+  traduciMarkup();
+  document.documentElement.lang = lingua();
+}
 
 /* ============================= INIT ============================= */
 export async function startApp(){
@@ -62,11 +79,12 @@ export async function startApp(){
   }
 
   gateEl.classList.remove('show');
+  traduciMarkup();          // le viste sono nel markup: si traducono qui
   document.body.classList.toggle('readonly', Cloud.enabled && !Cloud.canWrite());
   renderAccountBar();
   document.getElementById('backup-note').textContent = Cloud.enabled
-    ? 'I dati di questa cucina sono salvati sul tuo account e visibili a chi ne fa parte. Il backup serve a portarteli via quando vuoi, o a passare da una cucina all\'altra.'
-    : 'I dati restano salvati nel browser che stai usando ora. Se cambi browser, dispositivo, o svuoti la cache, li perdi — esporta un backup ogni tanto per stare tranquillo.';
+    ? t('I dati di questa cucina sono salvati sul tuo account e visibili a chi ne fa parte. Il backup serve a portarteli via quando vuoi, o a passare da una cucina all\'altra.')
+    : t('I dati restano salvati nel browser che stai usando ora. Se cambi browser, dispositivo, o svuoti la cache, li perdi — esporta un backup ogni tanto per stare tranquillo.');
 
   initTabs();
 }
@@ -76,6 +94,9 @@ Cloud.onConflict = function(key){
 };
 
 (async function init(){
+  // La lingua si sceglie prima di disegnare qualsiasi cosa: altrimenti la
+  // schermata d'accesso comparirebbe in italiano e cambierebbe sotto gli occhi.
+  await preparaLingua();
   if(Cloud.isStaging) document.getElementById('staging-badge').style.display = 'inline-block';
   try{
     const { mode, signedIn } = await Cloud.init();
