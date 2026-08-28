@@ -171,6 +171,14 @@ test('le persone si identificano per id o per email, mai per differenza da chi a
   // L'email si risolve sulla tabella viva, non sulla copia ferma al giorno
   // dell'ingresso: è la copia vecchia che fa sbagliare persona.
   assert.match(b.corpo, /from auth\.users u where lower\(u\.email\)/);
+
+  // E si contano le corrispondenze prima di prenderne una: "select into" con
+  // due righe non protesta, ne prende una a caso. Su una funzione che serve a
+  // declassare o rimuovere qualcuno, "una a caso" è la persona sbagliata.
+  assert.match(b.corpo, /select count\(\*\)[\s\S]*?into v_quanti/,
+    'admin_bersaglio deve contare le corrispondenze, non prendere la prima');
+  assert.match(b.corpo, /v_quanti > 1/,
+    'admin_bersaglio deve rifiutarsi di scegliere fra due account con la stessa email');
 });
 
 test('la rimozione definitiva è un secondo passo, e chiede il nome per esteso', () => {

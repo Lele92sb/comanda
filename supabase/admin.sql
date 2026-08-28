@@ -888,10 +888,11 @@ stable
 set search_path = public
 as $$
 declare
-  v_email text := nullif(lower(trim(coalesce(p_email, ''))), '');
-  v_id    uuid;
-  m       public.kitchen_members;
-  v_vera  text;
+  v_email  text := nullif(lower(trim(coalesce(p_email, ''))), '');
+  v_id     uuid;
+  v_quanti integer;
+  m        public.kitchen_members;
+  v_vera   text;
 begin
   -- Uno dei due, non tutti e due e non nessuno: un'azione che riceve due
   -- identificatori discordi deve fermarsi, non scegliere.
@@ -903,7 +904,20 @@ begin
   if p_user is not null then
     v_id := p_user;
   else
-    select u.id into v_id from auth.users u where lower(u.email) = v_email;
+    -- Si contano le corrispondenze prima di prenderne una. "select into" con
+    -- due righe non protesta: ne prende una, quale non si sa. Su una funzione
+    -- che serve a declassare o rimuovere una persona, "quale non si sa" è
+    -- l'errore che questo progetto ha già fatto una volta.
+    select count(*), min(u.id) into v_quanti, v_id
+      from auth.users u where lower(u.email) = v_email;
+
+    if v_quanti = 0 then
+      return jsonb_build_object('trovato', false, 'motivo', 'Nessun account con questa email.');
+    end if;
+    if v_quanti > 1 then
+      return jsonb_build_object('trovato', false, 'motivo',
+        'Ci sono ' || v_quanti || ' account con questa email: indica la persona per id, non per email.');
+    end if;
     if v_id is null then
       return jsonb_build_object('trovato', false, 'motivo', 'Nessun account con questa email.');
     end if;
