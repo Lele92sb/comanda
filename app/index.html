@@ -131,10 +131,26 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .alert-box{background:var(--alert-soft);border:1px solid rgba(168,65,47,0.4);border-radius:6px;padding:12px 14px;margin-bottom:10px;font-size:13px;}
 .ok-box{background:var(--sage-soft);border:1px solid rgba(107,128,100,0.4);border-radius:6px;padding:12px 14px;margin-bottom:10px;font-size:13px;}
 
-.shift-table{width:100%;border-collapse:collapse;font-size:12px;}
+.shift-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;}
 .shift-table th,.shift-table td{border:1px solid var(--line);padding:4px;text-align:center;}
 .shift-table th{font-family:var(--font-mono);font-weight:400;color:var(--brass);text-transform:uppercase;font-size:9px;}
 .shift-table td.name{text-align:left;font-family:var(--font-mono);font-size:10.5px;padding-left:6px;}
+/* Su un mese sono 31 colonne: la colonna dei nomi resta ferma mentre si scorre,
+   altrimenti a metà mese non si sa più di chi sia la riga che si sta guardando. */
+.shift-table th.name-col,.shift-table td.name{position:sticky;left:0;z-index:2;background:var(--bg-elev);min-width:104px;}
+.shift-table th.name-col{z-index:3;}
+.shift-table th.today,.shift-table td.today-col{background:rgba(176,107,52,0.14);}
+.shift-table th.weekend{color:var(--copper-light);}
+.shift-scroll{overflow-x:auto;max-width:100%;}
+
+.period-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+.period-modes{display:flex;gap:4px;}
+.period-modes button{background:var(--bg-elev);border:1px solid var(--line);color:var(--brass);font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.5px;text-transform:uppercase;padding:6px 12px;border-radius:20px;}
+.period-modes button.active{background:var(--copper);border-color:var(--copper);color:#1d1b18;font-weight:700;}
+.period-nav{display:flex;align-items:center;gap:6px;}
+.period-nav button{background:transparent;border:1px solid var(--line-strong);color:var(--paper);font-family:var(--font-mono);font-size:12px;padding:5px 10px;border-radius:5px;}
+.period-nav button:hover{border-color:var(--copper);}
+#period-label{font-family:var(--font-mono);font-size:12px;color:var(--copper-light);min-width:150px;text-align:center;text-transform:capitalize;}
 .shift-select{width:52px;background:var(--bg-elev2);border:1px solid var(--line-strong);color:var(--paper);font-size:10px;padding:4px 2px;border-radius:4px;text-align:center;}
 .shift-select.C{background:#d38f57;color:#1d1b18;font-weight:700;}
 .shift-select.P{background:#b06b34;color:#1d1b18;font-weight:700;}
@@ -349,13 +365,25 @@ body.readonly main label.btn{opacity:0.45;}
       </div>
 
       <div class="subview active" id="turnisub-piano">
-        <button class="btn full" id="btn-generate-shifts" style="margin-bottom:14px;">🎲 Genera turni della settimana</button>
+        <div class="period-bar">
+          <div class="period-modes">
+            <button data-period="settimana" class="active">Settimana</button>
+            <button data-period="mese">Mese</button>
+          </div>
+          <div class="period-nav">
+            <button id="period-prev" title="Periodo precedente">←</button>
+            <span id="period-label"></span>
+            <button id="period-next" title="Periodo successivo">→</button>
+            <button id="period-today">Oggi</button>
+          </div>
+        </div>
+        <button class="btn full" id="btn-generate-shifts" style="margin-bottom:14px;">🎲 Genera turni del periodo</button>
         <div id="generate-log" style="margin-bottom:14px;"></div>
         <div class="panel" id="turni-panel"></div>
         <p class="small-note" id="turni-legend"></p>
         <div class="panel">
-          <h3>Ore extra a fine settimana</h3>
-          <p class="small-note" style="margin-top:0;">Calcolate dal planning di questa settimana rispetto alle ore contrattuali di ciascuno.</p>
+          <h3>Ore extra del periodo</h3>
+          <p class="small-note" style="margin-top:0;">Calcolate dal planning del periodo mostrato sopra, rapportate alle ore contrattuali di ciascuno.</p>
           <div id="ore-extra-table"></div>
         </div>
       </div>
@@ -489,7 +517,31 @@ const ALLERGENS = ["Glutine","Crostacei","Uova","Pesce","Arachidi","Soia","Latte
 // DAYS, SPECIAL_CODES, buildShiftConfig, computeShifts... arrivano da logic.js
 // (condiviso con la test suite).
 const { DAYS, SPECIAL_CODES, REST_CODE, DEFAULT_SERVICES, DEFAULT_SHIFT_TYPES,
-        buildShiftConfig, shuffleArray, buildStaffPools, computeShifts } = window;
+        buildShiftConfig, shuffleArray, buildStaffPools, computeShifts,
+        isoDate, parseISO, startOfWeek, weekDates, monthDates, dayName, groupByWeek,
+        computeShiftsForDates } = window;
+
+// Periodo mostrato nella pianificazione: una settimana o un mese, ancorato a una
+// data. I turni sono salvati per data, quindi spostarsi nel tempo non perde nulla.
+let periodMode = 'settimana';
+let periodAnchor = new Date();
+function periodDates(){
+  return periodMode === 'mese' ? monthDates(periodAnchor) : weekDates(periodAnchor);
+}
+function periodLabel(){
+  const d = periodDates();
+  if(periodMode === 'mese'){
+    return periodAnchor.toLocaleDateString('it-IT', {month:'long', year:'numeric'});
+  }
+  const fmt = iso => parseISO(iso).toLocaleDateString('it-IT', {day:'numeric', month:'short'});
+  return fmt(d[0]) + ' – ' + fmt(d[6]);
+}
+function shiftPeriod(delta){
+  const d = new Date(periodAnchor);
+  if(periodMode === 'mese') d.setMonth(d.getMonth() + delta);
+  else d.setDate(d.getDate() + 7*delta);
+  periodAnchor = d;
+}
 
 // I servizi e i turni non sono più fissi: ogni cucina ha i suoi. Questa funzione
 // ricalcola le tabelle di consultazione a partire dalla configurazione salvata,
@@ -562,6 +614,22 @@ function migrateData(){
       cena: [...(old.S||[]), ...(old.SP||[])],
     };
   }
+  // I turni erano indicizzati per nome del giorno ("Lun"), quindi esisteva una
+  // sola settimana senza sapere quale. Ora sono indicizzati per data: i dati
+  // esistenti vengono riportati sulla settimana corrente, che è l'unica
+  // interpretazione possibile di una griglia che non porta con sé una data.
+  const settimanaCorrente = weekDates(new Date());
+  Object.keys(state.shifts||{}).forEach(staffId=>{
+    const giorni = state.shifts[staffId] || {};
+    const vecchie = Object.keys(giorni).filter(k=> DAYS.includes(k));
+    if(!vecchie.length) return;
+    vecchie.forEach(nomeGiorno=>{
+      const iso = settimanaCorrente[DAYS.indexOf(nomeGiorno)];
+      giorni[iso] = giorni[nomeGiorno];
+      delete giorni[nomeGiorno];
+    });
+  });
+
   // Servizi e tipi di turno erano cablati nel codice: chi ha già dati si
   // ritroverebbe la configurazione vuota, quindi gli si ricrea quella di prima.
   // Da qui in poi sono modificabili come qualsiasi altro dato della cucina.
@@ -802,8 +870,7 @@ function renderDashboard(){
     <div class="stat"><div class="n">${state.menus.length}</div><div class="l">Menu attivi</div></div>
   `;
 
-  const todayIdx = (new Date().getDay()+6)%7;
-  const todayKey = DAYS[todayIdx];
+  const todayKey = isoDate(new Date());
   const todayShifts = state.staff.map(s=>{
     const cell = (state.shifts[s.id]||{})[todayKey];
     return {name:s.name, code: cell? cell.code : '', stationId: cell? cell.stationId : null};
@@ -813,7 +880,7 @@ function renderDashboard(){
         const st = state.stations.find(s=>s.id===t.stationId);
         return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;"><span>${esc(t.name)}</span><span style="font-family:var(--font-mono);color:var(--copper-light);">${esc(CODE_LABEL(t.code))}${st?' · '+esc(st.name):''}</span></div>`;
       }).join('')
-    : `<div class="empty">Nessun turno assegnato per oggi (${todayKey})</div>`;
+    : `<div class="empty">Nessun turno assegnato per oggi (${parseISO(todayKey).toLocaleDateString('it-IT',{weekday:'long', day:'numeric', month:'long'})})</div>`;
 }
 
 /* ============================= INGREDIENTI ============================= */
@@ -1531,20 +1598,28 @@ document.getElementById('btn-new-staff').addEventListener('click', ()=> openStaf
 /* ============================= TURNI: griglia ============================= */
 function renderTurni(){
   const el = document.getElementById('turni-panel');
+  document.getElementById('period-label').textContent = periodLabel();
+  document.querySelectorAll('.period-modes button').forEach(b=>
+    b.classList.toggle('active', b.dataset.period === periodMode));
   if(!state.staff.length){ el.innerHTML = `<div class="empty">Aggiungi prima persone alla brigata.</div>`; return; }
+  const dates = periodDates();
+  const oggi = isoDate(new Date());
   el.innerHTML = `
-    <div style="overflow-x:auto;">
+    <div class="shift-scroll">
     <table class="shift-table">
-      <thead><tr><th style="text-align:left;">Persona</th>${DAYS.map(d=>`<th>${d}</th>`).join('')}</tr></thead>
+      <thead><tr><th class="name-col" style="text-align:left;">Persona</th>${dates.map(d=>{
+        const g = dayName(d), weekend = (g==='Sab'||g==='Dom');
+        return `<th class="${d===oggi?'today':''} ${weekend?'weekend':''}">${g}<br>${parseISO(d).getDate()}</th>`;
+      }).join('')}</tr></thead>
       <tbody>
         ${state.staff.map(s=>`
           <tr>
             <td class="name">${esc(s.name)}</td>
-            ${DAYS.map(d=>{
+            ${dates.map(d=>{
               const cell = (state.shifts[s.id]||{})[d] || {code:'', stationId:null};
               const qualified = (s.stations&&s.stations.length) ? state.stations.filter(st=>s.stations.includes(st.id)) : state.stations;
               const showStation = WORKING_CODES().includes(cell.code) && qualified.length>0;
-              return `<td class="${cell.extra?'extra-cell':''}" ${cell.extra?'title="Turno extra: assegnato oltre la quota di questa persona per coprire il fabbisogno"':''}>
+              return `<td class="${cell.extra?'extra-cell':''} ${d===oggi?'today-col':''}" ${cell.extra?'title="Turno extra: assegnato oltre la quota di questa persona per coprire il fabbisogno"':''}>
                 <select class="shift-select ${cell.code}" data-staff="${s.id}" data-day="${d}">
                   ${Object.keys(TURNO_DEF()).map(code=>`<option value="${code}" ${cell.code===code?'selected':''}>${code||'—'}</option>`).join('')}
                 </select>
@@ -1582,10 +1657,14 @@ function renderTurni(){
   document.getElementById('turni-legend').innerHTML = Object.entries(TURNO_DEF()).filter(([c])=>c).map(([c,v])=>esc(v.label)).join(' · ');
 }
 function weeklyExtraFromTurni(){
+  const dates = periodDates();
+  // Le ore contrattuali sono settimanali: su un mese vanno rapportate alla
+  // durata del periodo, altrimenti chiunque risulterebbe in fortissimo extra.
+  const settimane = dates.length / 7;
   return state.staff.map(s=>{
     const days = state.shifts[s.id] || {};
-    const totalHours = DAYS.reduce((sum,d)=> sum + CODE_HOURS((days[d]||{}).code||''), 0);
-    const contracted = parseFloat(s.hours)||0;
+    const totalHours = dates.reduce((sum,d)=> sum + CODE_HOURS((days[d]||{}).code||''), 0);
+    const contracted = (parseFloat(s.hours)||0) * settimane;
     const extra = Math.max(0, totalHours - contracted);
     const under = contracted>0 ? Math.max(0, contracted-totalHours) : 0;
     return {id:s.id, name:s.name, totalHours, contracted, extra, under};
@@ -1901,8 +1980,14 @@ function generateRandomShifts(){
   const unqualified = state.staff.filter(s=> !(s.stations&&s.stations.length));
   if(unqualified.length){ toast('Attenzione: senza stazioni assegnate, '+unqualified.map(s=>s.name).join(', ')+' non potranno coprire nessun fabbisogno'); }
 
-  const { newShifts, shortfalls, extras } = computeShifts(state.staff, state.staffingNeeds, {config: refreshShiftConfig()});
-  state.shifts = newShifts;
+  const dates = periodDates();
+  const { newShifts, shortfalls, extras } = computeShiftsForDates(state.staff, state.staffingNeeds,
+    {config: refreshShiftConfig(), dates});
+  // Si sovrascrivono SOLO le date del periodo: i turni delle altre settimane
+  // gia' pianificate non devono sparire perche' se ne rigenera una.
+  state.staff.forEach(s=>{
+    state.shifts[s.id] = Object.assign(state.shifts[s.id]||{}, newShifts[s.id]||{});
+  });
   save('shifts');
   renderTurni(); renderOreExtra(); renderDashboard();
 
@@ -1919,7 +2004,7 @@ function generateRandomShifts(){
     const byDay = {};
     shortfalls.forEach(sf=>{
       const st = state.stations.find(x=>x.id===sf.stationId);
-      const key = sf.day;
+      const key = parseISO(sf.day).toLocaleDateString('it-IT',{weekday:'short', day:'numeric', month:'short'});
       byDay[key] = byDay[key] || [];
       byDay[key].push(`${esc(SERVICE_LABEL(sf.service))} · ${st?st.name:'—'} (mancano ${sf.missing})`);
     });
@@ -1934,6 +2019,16 @@ function generateRandomShifts(){
   toast(shortfalls.length ? 'Turni generati — alcune postazioni restano scoperte, vedi dettagli' : (extras.length ? 'Turni generati — con alcuni turni extra' : 'Turni generati — fabbisogno coperto'));
 }
 document.getElementById('btn-generate-shifts').addEventListener('click', generateRandomShifts);
+
+/* ---- Navigazione del periodo ---- */
+function aggiornaPeriodo(){ renderTurni(); renderOreExtra(); }
+document.querySelectorAll('.period-modes button').forEach(b=>b.addEventListener('click', ()=>{
+  periodMode = b.dataset.period;
+  aggiornaPeriodo();
+}));
+document.getElementById('period-prev').addEventListener('click', ()=>{ shiftPeriod(-1); aggiornaPeriodo(); });
+document.getElementById('period-next').addEventListener('click', ()=>{ shiftPeriod(1);  aggiornaPeriodo(); });
+document.getElementById('period-today').addEventListener('click', ()=>{ periodAnchor = new Date(); aggiornaPeriodo(); });
 
 /* ============================= BENESSERE ============================= */
 function renderWbStaffOptions(){

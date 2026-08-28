@@ -92,6 +92,52 @@ function buildShiftConfig(services, shiftTypes){
   };
 }
 
+// ----------------------------------------------------------------------------
+// Date. I turni sono indicizzati per data reale ("2026-09-14"), non per nome
+// del giorno: senza data esisterebbe una sola settimana, senza storico e senza
+// sapere quale settimana sia. Tutto costruito in ora locale — passando da UTC
+// un turno di lunedì può scivolare a domenica a seconda del fuso.
+// ----------------------------------------------------------------------------
+function isoDate(d){
+  const p = n => String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+}
+function parseISO(s){
+  const [y,m,d] = String(s).split('-').map(Number);
+  return new Date(y, m-1, d);
+}
+// Lunedì della settimana che contiene la data.
+function startOfWeek(d){
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() - ((x.getDay()+6) % 7));
+  return x;
+}
+function weekDates(anchor){
+  const start = startOfWeek(anchor);
+  return Array.from({length:7}, (_,i)=>{
+    const d = new Date(start); d.setDate(start.getDate()+i); return isoDate(d);
+  });
+}
+function monthDates(anchor){
+  const y = anchor.getFullYear(), m = anchor.getMonth();
+  const n = new Date(y, m+1, 0).getDate();
+  return Array.from({length:n}, (_,i)=> isoDate(new Date(y, m, i+1)));
+}
+// Nome del giorno di una data, con lo stesso vocabolario di DAYS.
+function dayName(iso){ return DAYS[(parseISO(iso).getDay()+6) % 7]; }
+
+// Raggruppa date consecutive per settimana (lunedì-domenica). Serve al
+// generatore: le quote sono settimanali, quindi ogni settimana riparte da capo.
+function groupByWeek(dates){
+  const gruppi = new Map();
+  dates.forEach(iso=>{
+    const k = isoDate(startOfWeek(parseISO(iso)));
+    if(!gruppi.has(k)) gruppi.set(k, []);
+    gruppi.get(k).push(iso);
+  });
+  return Array.from(gruppi.values());
+}
+
 function shuffleArray(arr){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
 
 function buildStaffPools(staffList){
@@ -238,6 +284,32 @@ function computeShifts(staffList, staffingNeeds, options){
   return { newShifts, shortfalls, extras };
 }
 
+// ----------------------------------------------------------------------------
+// Generazione su un periodo qualsiasi (una settimana, un mese, un intervallo).
+// Le quote sono settimanali, quindi il periodo viene spezzato in settimane e
+// ogni settimana riparte con le quote piene: altrimenti su un mese la brigata
+// esaurirebbe i turni dopo sette giorni e il resto sarebbe tutto riposo.
+// ----------------------------------------------------------------------------
+function computeShiftsForDates(staffList, staffingNeeds, options){
+  options = options || {};
+  const dates = (options.dates && options.dates.length) ? options.dates : weekDates(new Date());
+  const newShifts = {}, shortfalls = [], extras = [];
+  staffList.forEach(s=>{ newShifts[s.id] = {}; });
+
+  groupByWeek(dates).forEach(settimana=>{
+    const res = computeShifts(staffList, staffingNeeds, {
+      config: options.config, days: settimana,
+    });
+    staffList.forEach(s=>{ Object.assign(newShifts[s.id], res.newShifts[s.id]||{}); });
+    shortfalls.push(...res.shortfalls);
+    extras.push(...res.extras);
+  });
+
+  return { newShifts, shortfalls, extras };
+}
+
 return { DAYS, SPECIAL_CODES, REST_CODE, DEFAULT_SERVICES, DEFAULT_SHIFT_TYPES,
-         buildShiftConfig, shuffleArray, buildStaffPools, computeShifts };
+         buildShiftConfig, shuffleArray, buildStaffPools, computeShifts,
+         isoDate, parseISO, startOfWeek, weekDates, monthDates, dayName, groupByWeek,
+         computeShiftsForDates };
 });

@@ -3,7 +3,8 @@
 // che deve restare semplice da eseguire ovunque con "npm test".
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { computeShifts, buildShiftConfig } = require('../app/logic.js');
+const { computeShifts, buildShiftConfig, computeShiftsForDates,
+        weekDates, monthDates, groupByWeek, isoDate, startOfWeek, dayName } = require('../app/logic.js');
 
 // Configurazione classica (colazione/pranzo/cena con spezzato): è quella che
 // l'app crea da sola per chi non ne ha una propria.
@@ -185,4 +186,100 @@ test('un servizio coperto solo da un turno accorpato non resta orfano', () => {
   const staff = [{ id:'s1', name:'Unico', stations:['a'], weeklyQuota:[{count:7,codes:['PC']}] }];
   const { shortfalls } = computeShifts(staff, { pranzo:[], cena:[{stationId:'a',count:1}] }, {config:cfg});
   assert.equal(shortfalls.length, 0);
+});
+
+/* ===================== PERIODI: SETTIMANA E MESE ===================== */
+
+test('le date di una settimana partono sempre da lunedì e sono sette', () => {
+  // mercoledì 16 settembre 2026
+  const d = weekDates(new Date(2026, 8, 16));
+  assert.equal(d.length, 7);
+  assert.equal(d[0], '2026-09-14', 'deve iniziare dal lunedì');
+  assert.equal(d[6], '2026-09-20');
+  assert.equal(dayName('2026-09-14'), 'Lun');
+  assert.equal(dayName('2026-09-20'), 'Dom');
+});
+
+test('la settimana è calcolata in ora locale, senza slittamenti di fuso', () => {
+  // Con una conversione via UTC, una data di lunedì mattina può retrocedere a
+  // domenica: qui il lunedì deve restare lunedì.
+  assert.equal(isoDate(startOfWeek(new Date(2026, 0, 1))), '2025-12-29');
+  assert.equal(dayName('2026-01-01'), 'Gio');
+});
+
+test('un mese contiene tutti i suoi giorni, anche febbraio bisestile', () => {
+  assert.equal(monthDates(new Date(2026, 1, 10)).length, 28);
+  assert.equal(monthDates(new Date(2024, 1, 10)).length, 29, '2024 è bisestile');
+  const set = monthDates(new Date(2026, 8, 1));
+  assert.equal(set.length, 30);
+  assert.equal(set[0], '2026-09-01');
+  assert.equal(set[29], '2026-09-30');
+});
+
+test('un mese viene spezzato in settimane, comprese quelle a cavallo', () => {
+  const gruppi = groupByWeek(monthDates(new Date(2026, 8, 1))); // settembre 2026
+  const totale = gruppi.reduce((n,g)=>n+g.length, 0);
+  assert.equal(totale, 30, 'nessun giorno perso nella suddivisione');
+  gruppi.forEach(g=> assert.ok(g.length <= 7));
+  // il 1° settembre 2026 è martedì: la prima settimana del mese è parziale
+  assert.equal(gruppi[0].length, 6);
+});
+
+test('generazione mensile: ogni persona ha un turno per ogni giorno del mese', () => {
+  const staff = [
+    { id:'a1', name:'A1', stations:['a'], weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}] },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const dates = monthDates(new Date(2026, 8, 1));
+  const { newShifts } = computeShiftsForDates(staff, needs, {config:BASE, dates});
+  assert.equal(Object.keys(newShifts['a1']).length, 30);
+  dates.forEach(d=> assert.ok(newShifts['a1'][d] && newShifts['a1'][d].code, `manca il turno del ${d}`));
+});
+
+test('generazione mensile: le quote ripartono ogni settimana, senza turni oltre quota', () => {
+  // Due persone da 5 pranzi + 2 riposi coprono comodamente un fabbisogno di una
+  // persona al giorno: 10 turni disponibili a settimana per 7 giorni da coprire.
+  // Se le quote NON ripartissero ogni settimana, dopo i primi sette giorni i
+  // turni disponibili finirebbero e il motore sarebbe costretto a chiamare
+  // qualcuno oltre quota: è esattamente ciò che questo test esclude.
+  const staff = [
+    { id:'a1', name:'A1', stations:['a'], weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}] },
+    { id:'a2', name:'A2', stations:['a'], weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}] },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const dates = monthDates(new Date(2026, 8, 1));
+  const { newShifts, extras, shortfalls } = computeShiftsForDates(staff, needs, {config:BASE, dates});
+
+  assert.equal(extras.length, 0, 'le quote bastano: nessuno deve essere chiamato oltre quota');
+  assert.equal(shortfalls.length, 0, 'nessun giorno deve restare scoperto');
+
+  const lavorati = id => Object.values(newShifts[id]).filter(c=>c.code==='P').length;
+  // Ogni giorno deve avere qualcuno al pranzo. Non "esattamente uno": chi ha
+  // ancora quota da smaltire viene schedulato comunque, ed è giusto così — la
+  // quota dice quanti turni deve fare quella persona, non solo quanti ne servono.
+  dates.forEach(d=>{
+    const presenti = staff.filter(s=> newShifts[s.id][d].code === 'P').length;
+    assert.ok(presenti >= 1, `il ${d} non c'è nessuno al pranzo`);
+  });
+  // Il mese tocca 5 settimane di calendario (la prima e l'ultima parziali), e
+  // ogni settimana toccata porta la sua quota: il tetto è 5 turni per settimana
+  // toccata, non 5 per ogni sette giorni di calendario.
+  const settimane = groupByWeek(dates).length;
+  staff.forEach(s=>{
+    const riposi = Object.values(newShifts[s.id]).filter(c=>c.code==='R').length;
+    assert.ok(lavorati(s.id) >= 15,
+      `${s.name} lavora solo ${lavorati(s.id)} giorni: le quote non stanno ripartendo ogni settimana`);
+    assert.ok(lavorati(s.id) <= settimane*5,
+      `${s.name} supera i 5 turni settimanali di quota (${lavorati(s.id)} su ${settimane} settimane)`);
+    assert.ok(riposi >= 5, `${s.name} deve avere dei riposi, ne ha ${riposi}`);
+  });
+});
+
+test('generazione su una sola settimana: risultato identico al motore base', () => {
+  const staff = [{ id:'s1', name:'Unico', stations:['a'], weeklyQuota:[{count:7,codes:['P']}] }];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const dates = weekDates(new Date(2026, 8, 16));
+  const { newShifts, shortfalls } = computeShiftsForDates(staff, needs, {config:BASE, dates});
+  assert.equal(shortfalls.length, 0);
+  assert.deepEqual(Object.keys(newShifts['s1']).sort(), dates.slice().sort());
 });
