@@ -116,7 +116,14 @@ Cloud.onConflict = function(key){
   // La lingua si sceglie prima di disegnare qualsiasi cosa: altrimenti la
   // schermata d'accesso comparirebbe in italiano e cambierebbe sotto gli occhi.
   await preparaLingua();
-  if(Cloud.isStaging) document.getElementById('staging-badge').style.display = 'inline-block';
+  // Due avvisi, non uno: la schermata d'accesso copre l'intestazione, e senza
+  // il secondo l'avviso mancherebbe proprio mentre si crea l'account.
+  // Si usa classList, non style.display: .hidden e' !important e vincerebbe.
+  if(Cloud.isStaging){
+    for(const id of ['staging-badge','gate-badge']){
+      document.getElementById(id).classList.remove('hidden');
+    }
+  }
   try{
     const { mode, signedIn } = await Cloud.init();
     if(mode === 'local') return startApp();

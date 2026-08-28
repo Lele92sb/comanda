@@ -408,3 +408,22 @@ body.readonly main label.btn{opacity:0.45;}
 .riga-scelta:last-child{border-bottom:none;}
 .riga-scelta input[type=checkbox]{width:18px;height:18px;margin-top:2px;flex-shrink:0;accent-color:var(--copper);}
 .riga-scelta .contact{margin-top:2px;display:block;}
+
+/* Avviso "ambiente di prova". Compare in due posti: nell'intestazione dell'app
+   e dentro la schermata d'accesso. Il secondo non e' un doppione: la schermata
+   d'accesso e' un pannello a tutto schermo (z-index 200) che copre
+   l'intestazione, quindi senza questo l'avviso sparirebbe proprio nel momento
+   in cui si decide a quale ambiente affidare email e dati. */
+.badge-ambiente{
+  display:inline-block;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  color:#1d1b18;
+  background:var(--copper-light);
+  padding:3px 8px;
+  border-radius:20px;
+  margin-top:6px;
+  font-weight:700;
+}

@@ -26,7 +26,7 @@
   <header class="top">
     <div class="brand"><span class="mark"></span>Comanda</div>
     <div class="sub" data-t>Cucina · Brigata · Menu · Testa libera</div>
-    <div id="staging-badge" style="display:none;font-family:var(--font-mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#1d1b18;background:var(--copper-light);padding:3px 8px;border-radius:20px;margin-top:6px;font-weight:700;" data-t>⚠ AMBIENTE DI TEST — dati separati da quelli reali</div>
+    <div id="staging-badge" class="badge-ambiente hidden" data-t>⚠ AMBIENTE DI TEST — dati separati da quelli reali</div>
     <div id="account-bar">
       <div class="who">
         <select id="ab-kitchen-sel" class="hidden"></select>
@@ -314,6 +314,7 @@
 <div class="overlay show" id="gate">
   <div class="sheet">
     <div class="logo"><span class="mark"></span>Comanda</div>
+    <div id="gate-badge" class="badge-ambiente hidden" data-t>⚠ AMBIENTE DI TEST — dati separati da quelli reali</div>
     <p class="lead" id="gate-lead" data-t>Avvio…</p>
     <div id="gate-error" class="gate-error hidden" ></div>
     <div id="gate-body"></div>
