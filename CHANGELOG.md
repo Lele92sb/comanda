@@ -2,6 +2,31 @@
 
 Tutte le modifiche rilevanti all'app, versione per versione.
 
+## [1.5.0] — Chi vede cosa, e turni da pubblicare
+
+### Riservatezza imposta dal database
+- Tre livelli: **titolare** tutto; **può modificare** tutto tranne ciò che il
+  titolare si tiene; **sola lettura** i turni pubblicati, le ricette senza
+  numeri e le proprie richieste.
+- I dati vengono filtrati prima di uscire dal database. Chi ha sola lettura,
+  aprendo la console del browser, non trova un prezzo: non gli è mai arrivato.
+- Due interruttori per cucina, nel pannello Squadra: se chi può modificare vede
+  i costi (predefinito sì) e i dati personali della brigata (predefinito no).
+  Ogni titolare sceglie la propria soglia.
+- Non si scrive ciò che non si può leggere.
+
+### Turni da pubblicare
+- Finché non premi Pubblica, la brigata non vede quel periodo: puoi generare,
+  rifare e sistemare senza che nessuno legga una bozza. Si può anche nascondere
+  di nuovo.
+
+### Interfaccia
+- La barra in alto non si deforma più: i pulsanti non vanno a capo dentro se
+  stessi e tutti i controlli hanno la stessa altezza.
+- Lingua come due sigle IT|EN in alto a destra.
+- Il pulsante "Il tuo nome" sparisce: è il nome stesso a essere cliccabile.
+- Su telefono l'intestazione si stringe, per lasciare schermo alla griglia turni.
+
 ## [1.4.0] — Primo rilascio, installabile sul telefono
 
 La prima versione pubblicata davvero. Da qui si prova in cucina.
