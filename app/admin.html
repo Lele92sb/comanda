@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comanda — Console</title>
+
+<!-- Nessun manifesto e nessuna icona da schermata Home: questa pagina non si
+     installa. È uno strumento che si apre da un segnalibro, non un'app che sta
+     sul telefono di qualcuno accanto a quella vera. -->
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#1d1b18">
+
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="brand"><span class="mark"></span>Console</div>
+    <div class="sub">Amministrazione della piattaforma</div>
+    <div id="staging-badge" class="badge-ambiente hidden">⚠ AMBIENTE DI TEST — dati separati da quelli reali</div>
+    <div id="account-bar">
+      <div class="who">
+        <span id="ab-email"></span>
+        <span class="role-badge">amministratore</span>
+      </div>
+      <div class="acts">
+        <button id="ab-app">Torna all'app</button>
+        <button id="ab-logout">Esci</button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs"></nav>
+
+  <main>
+    <section class="view" id="view-numeri">
+      <h2 class="section-title">Numeri</h2>
+      <p class="section-sub">Il colpo d'occhio sulla piattaforma</p>
+      <div class="stat-grid" id="num-stats"></div>
+      <div class="panel">
+        <h3>Cucine per stato</h3>
+        <div id="num-stati"></div>
+      </div>
+      <div class="panel">
+        <h3>Nuove iscrizioni</h3>
+        <p class="small-note mt-0">Cucine e account creati, giorno per giorno.</p>
+        <div id="num-iscrizioni"></div>
+      </div>
+      <p class="small-note" id="num-nota"></p>
+    </section>
+
+    <section class="view" id="view-cucine">
+      <h2 class="section-title">Cucine</h2>
+      <p class="section-sub">Chi c'è, da quando, e a che punto è</p>
+      <div class="panel">
+        <div class="grid2">
+          <input type="text" id="cu-cerca" placeholder="Cerca per nome o id">
+          <select id="cu-stato">
+            <option value="">tutti gli stati</option>
+            <option value="trial">in prova</option>
+            <option value="active">attive</option>
+            <option value="suspended">sospese</option>
+            <option value="cancellate">cancellate</option>
+          </select>
+        </div>
+      </div>
+      <div id="cu-lista"></div>
+      <button class="btn ghost full mt-3 hidden" id="cu-altre">Carica altre</button>
+    </section>
+
+    <section class="view" id="view-account">
+      <h2 class="section-title">Account</h2>
+      <p class="section-sub">Chi ha un accesso, e in quali cucine</p>
+      <div class="panel">
+        <input type="text" id="ac-cerca" placeholder="Cerca per email o id">
+      </div>
+      <div id="ac-lista"></div>
+      <button class="btn ghost full mt-3 hidden" id="ac-altre">Carica altre</button>
+    </section>
+
+    <section class="view" id="view-errori">
+      <h2 class="section-title">Errori</h2>
+      <p class="section-sub">Cosa si rompe a casa dei clienti</p>
+      <div class="panel">
+        <div class="grid2">
+          <select id="er-giorni">
+            <option value="1">ultime 24 ore</option>
+            <option value="7" selected>ultimi 7 giorni</option>
+            <option value="30">ultimi 30 giorni</option>
+            <option value="90">ultimi 90 giorni</option>
+          </select>
+          <input type="text" id="er-versione" placeholder="Versione, es. 1.5.0">
+        </div>
+      </div>
+      <div id="er-gruppi"></div>
+      <div id="er-dettaglio"></div>
+    </section>
+
+    <section class="view" id="view-registro">
+      <h2 class="section-title">Registro</h2>
+      <p class="section-sub">Ogni azione amministrativa, in ordine di tempo</p>
+      <p class="small-note mt-0">Il registro si aggiunge e basta: non si modifica e non si cancella,
+        nemmeno con la chiave di servizio.</p>
+      <div id="re-lista"></div>
+      <button class="btn ghost full mt-3 hidden" id="re-altre">Carica altre</button>
+    </section>
+  </main>
+</div>
+
+<!-- Schermata d'accesso: copre tutto finché non si sa chi sei, e resta su
+     se non sei amministratore della piattaforma. -->
+<div class="overlay show" id="gate">
+  <div class="sheet">
+    <div class="logo"><span class="mark"></span>Console</div>
+    <div id="gate-badge" class="badge-ambiente hidden">⚠ AMBIENTE DI TEST — dati separati da quelli reali</div>
+    <p class="lead" id="gate-lead">Avvio…</p>
+    <div id="gate-error" class="gate-error hidden"></div>
+    <div id="gate-body"></div>
+  </div>
+</div>
+
+<!-- Scheda di una cucina: metadati, membri, azioni. -->
+<div class="overlay" id="scheda">
+  <div class="sheet">
+    <div class="logo"><span class="mark"></span>Cucina</div>
+    <p class="lead" id="scheda-nome"></p>
+    <div id="scheda-error" class="gate-error hidden"></div>
+    <div id="scheda-body"></div>
+    <button class="btn ghost full mt-5" id="scheda-close">Chiudi</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module" src="./src/admin/main.js"></script>
+</body>
+</html>

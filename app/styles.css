@@ -236,6 +236,11 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .btn.ghost:hover{border-color:var(--copper);}
 .btn.small{padding:6px 10px;font-size:11.5px;}
 .btn.full{width:100%;}
+/* Il pulsante che fa una cosa da cui non si torna indietro. Rosso pieno, non
+   un'etichetta rossa su fondo chiaro: deve distinguersi da un'altezza di
+   braccio, non da vicino con calma. */
+.btn.danger{background:var(--alert);color:var(--paper);}
+.btn.danger:hover{background:#c04b36;}
 
 .chip-toggle{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
 .chip-toggle button{border:1px solid var(--line-strong);background:transparent;color:var(--paper);font-family:var(--font-mono);font-size:10.5px;padding:5px 9px;border-radius:20px;}

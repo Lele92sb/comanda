@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const { version } = JSON.parse(readFileSync('./package.json', 'utf8'));
 
@@ -27,6 +28,17 @@ export default defineConfig({
   build: {
     outDir: '../dist',
     emptyOutDir: true,
+    // Due pagine, non una. La console di amministrazione è una rotta a sé
+    // (/admin.html) e non una scheda dell'app: chi apre l'app per fare i turni
+    // non deve avere sotto il pollice il pulsante che sospende una cucina.
+    // Senza questo elenco Vite costruirebbe solo index.html e la console non
+    // finirebbe nel pacchetto.
+    rollupOptions: {
+      input: {
+        index: resolve(import.meta.dirname, 'app/index.html'),
+        admin: resolve(import.meta.dirname, 'app/admin.html'),
+      },
+    },
     // Le mappe servono a leggere gli errori veri quando arriveranno dagli
     // utenti: senza, in produzione si vedono solo righe minificate.
     sourcemap: true,
