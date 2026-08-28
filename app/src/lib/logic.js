@@ -290,6 +290,15 @@ function computeShifts(staffList, staffingNeeds, options){
 
     staffList.forEach(s=>{
       if(!assigned[s.id][day]){
+        // Chi non ha nessuna stazione non può coprire niente: un turno di
+        // lavoro senza stazione è un turno finto — conta nelle ore pianificate
+        // e fa scattare i falsi avvisi di sforamento contrattuale, ma non
+        // copre nessun servizio. Resta a riposo, e la quota NON si consuma.
+        // Il controllo sta QUI, dentro `if(!assigned...)`, e non più in alto:
+        // così cade dopo l'applicazione delle richieste approvate, e ferie e
+        // malattie di chi non ha stazioni restano F e M invece di diventare R.
+        // Nella griglia la persona resta visibile: si assegna a mano.
+        if(!(s.stations && s.stations.length)){ assigned[s.id][day] = REST_CODE; return; }
         // Chi ha chiesto solo certi servizi non può ricevere qui un turno
         // qualsiasi pescato dalla quota: meglio lasciarlo a riposo.
         const vincolo = constraintFor(constraints, s.id, day);
@@ -338,7 +347,12 @@ function computeShifts(staffList, staffingNeeds, options){
     newShifts[s.id] = {};
     days.forEach(day=> newShifts[s.id][day] = { code: assigned[s.id][day]||'', stationId: stationAssign[s.id][day]||null, extra: !!extraFlag[s.id][day] });
   });
-  return { newShifts, shortfalls, extras };
+  // Chi il generatore non ha potuto pianificare, e perché. Va detto nel
+  // riepilogo: senza, resta da intuire da una fila di R nella griglia.
+  const nonPianificabili = staffList
+    .filter(s=> !(s.stations && s.stations.length))
+    .map(s=> ({staffId:s.id, staffName:s.name, motivo:'nessuna stazione'}));
+  return { newShifts, shortfalls, extras, nonPianificabili };
 }
 
 // ----------------------------------------------------------------------------
@@ -362,7 +376,13 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
     extras.push(...res.extras);
   });
 
-  return { newShifts, shortfalls, extras };
+  // Non dipende dalla settimana: si calcola una volta sola, altrimenti la
+  // stessa persona comparirebbe nel riepilogo una volta per settimana.
+  const nonPianificabili = staffList
+    .filter(s=> !(s.stations && s.stations.length))
+    .map(s=> ({staffId:s.id, staffName:s.name, motivo:'nessuna stazione'}));
+
+  return { newShifts, shortfalls, extras, nonPianificabili };
 }
 
 export {

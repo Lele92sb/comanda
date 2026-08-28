@@ -413,3 +413,102 @@ test('gli altri giorni restano liberi: un impegno altrove non blocca la settiman
   SETT.filter((_,i)=>i!==1).forEach(d=>
     assert.equal(newShifts['m1'][d].code, 'P', `il ${d} Marco doveva essere disponibile`));
 });
+
+/* ===================== CHI NON HA STAZIONI ASSEGNATE =====================
+   Una persona senza nessuna stazione non può coprire niente. Prima di questa
+   correzione il motore le assegnava comunque i turni della sua quota, con
+   stationId a null: turni finti, che contano nelle ore pianificate e nei
+   controlli di sforamento contrattuale ma non coprono nessun servizio.
+   Il caso non è raro: nasce da solo cancellando una stazione (turni/stazioni.js
+   toglie l'id dalle persone che ce l'avevano, e chi ne aveva una sola resta
+   senza). Resta però VISIBILE nella griglia, per l'assegnazione a mano. */
+
+const GIORNI7 = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+
+test('chi non ha stazioni non riceve mai un turno di lavoro', () => {
+  const staff = [
+    { id:'x', name:'Senza stazioni', stations:[], weeklyQuota:[{count:7,codes:['P']}] },
+    { id:'y', name:'Collega',        stations:['a'], weeklyQuota:[{count:7,codes:['P']}] },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const { newShifts } = computeShifts(staff, needs, {config:BASE});
+  GIORNI7.forEach(d=>{
+    const cell = newShifts['x'][d];
+    assert.equal(cell.code, 'R', `il ${d} è stato assegnato un turno che non copre nulla`);
+    assert.equal(cell.stationId, null);
+    assert.equal(cell.extra, false);
+  });
+});
+
+test('chi non ha stazioni resta a riposo anche con una richiesta di singolo servizio', () => {
+  // Il ramo del vincolo "solo pranzo" è separato da quello libero: aveva lo
+  // stesso difetto, e riguarda proprio le persone più delicate da pianificare.
+  const staff = [
+    { id:'x', name:'Senza stazioni', stations:[], weeklyQuota:[{count:7,codes:['P']}] },
+    { id:'y', name:'Collega',        stations:['a'], weeklyQuota:[{count:7,codes:['P']}] },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const soloPranzo = {}; GIORNI7.forEach(d=>{ soloPranzo[d] = {services:['pranzo']}; });
+  const { newShifts } = computeShifts(staff, needs,
+    {config:BASE, constraints:{x: soloPranzo}});
+  GIORNI7.forEach(d=> assert.equal(newShifts['x'][d].code, 'R',
+    `il ${d} il vincolo di singolo servizio ha fatto passare un turno fantasma`));
+});
+
+test('una richiesta approvata vale anche per chi non ha stazioni', () => {
+  // Ordine delle operazioni: i vincoli si applicano PRIMA. Se il controllo
+  // sulle stazioni li precedesse, ferie e malattie diventerebbero riposi e
+  // sparirebbero dal prospetto.
+  const staff = [{ id:'x', name:'Senza stazioni', stations:[], weeklyQuota:[{count:7,codes:['P']}] }];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  ['F','M'].forEach(codice=>{
+    const vincoli = {}; GIORNI7.slice(0,5).forEach(d=>{ vincoli[d] = {blocked:codice}; });
+    const { newShifts } = computeShifts(staff, needs, {config:BASE, constraints:{x:vincoli}});
+    GIORNI7.slice(0,5).forEach(d=> assert.equal(newShifts['x'][d].code, codice,
+      `il ${d} doveva restare ${codice}, non diventare riposo`));
+    GIORNI7.slice(5).forEach(d=> assert.equal(newShifts['x'][d].code, 'R'));
+  });
+});
+
+test('chi non ha stazioni resta comunque nella griglia, con un codice per ogni giorno', () => {
+  // Decisione presa: resta visibile per l'assegnazione a mano. Fissa anche
+  // l'invariante "ogni cella ha un codice" per il caso senza stazioni, che
+  // sceglierlo vuoto romperebbe.
+  const staff = [{ id:'x', name:'Senza stazioni', stations:[], weeklyQuota:[{count:7,codes:['P']}] }];
+  const { newShifts } = computeShifts(staff, { colazione:[], pranzo:[], cena:[] }, {config:BASE});
+  assert.equal(Object.keys(newShifts['x']).length, 7);
+  GIORNI7.forEach(d=> assert.ok(newShifts['x'][d].code, `manca il codice del ${d}`));
+});
+
+test('chi non ha stazioni non toglie copertura a nessun altro', () => {
+  const brigata = [
+    { id:'a1', name:'A1', stations:['a'], weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}] },
+    { id:'a2', name:'A2', stations:['a'], weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}] },
+    { id:'b1', name:'B1', stations:['b'], weeklyQuota:[{count:5,codes:['S']},{count:2,codes:['R']}] },
+  ];
+  const senza = { id:'x', name:'Senza stazioni', stations:[], weeklyQuota:[{count:7,codes:['P','S']}] };
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[{stationId:'b',count:1}] };
+  for(let i=0;i<50;i++){
+    const con  = computeShifts(brigata.concat([senza]), needs, {config:BASE});
+    const solo = computeShifts(brigata, needs, {config:BASE});
+    assert.equal(con.shortfalls.length, solo.shortfalls.length,
+      'la presenza di chi non ha stazioni ha cambiato le scoperture');
+    assert.equal(con.extras.length, solo.extras.length,
+      'la presenza di chi non ha stazioni ha cambiato i turni oltre quota');
+  }
+});
+
+test('chi non è pianificabile viene dichiarato, non lasciato da intuire', () => {
+  const staff = [
+    { id:'x', name:'Senza stazioni', stations:[], weeklyQuota:[{count:7,codes:['P']}] },
+    { id:'y', name:'Collega',        stations:['a'], weeklyQuota:[{count:7,codes:['P']}] },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const r = computeShifts(staff, needs, {config:BASE});
+  assert.equal(r.nonPianificabili.length, 1);
+  assert.equal(r.nonPianificabili[0].staffId, 'x');
+  // Su un mese la persona va nominata una volta sola, non una per settimana.
+  const dates = monthDates(new Date(2026, 8, 1));
+  const m = computeShiftsForDates(staff, needs, {config:BASE, dates});
+  assert.equal(m.nonPianificabili.length, 1);
+});
