@@ -1833,3 +1833,327 @@ begin
 end;
 $$;
 grant execute on function public.admin_leggi_contenuto(uuid, text) to authenticated;
+
+
+-- ############################################################################
+-- ############################################################################
+--
+--   8. VERIFICA MANUALE — da eseguire dopo aver applicato questo file
+--
+--   Chi ha scritto questo file NON ha potuto eseguirlo: nessuna credenziale
+--   del database, ed è giusto così. Quindi tutto quello che sta sopra, per
+--   ora, è scritto e non provato. Questa sezione è il modo di provarlo.
+--
+--   Va fatta UNA VOLTA, dopo l'applicazione, sul database di PROVA prima che
+--   su quello vero. Ogni passo dice cosa ci si deve aspettare: se il risultato
+--   è diverso, FERMARSI — quello è un buco, non un dettaglio.
+--
+--   Le prove col browser si fanno dalla console degli strumenti per
+--   sviluppatori, con l'app aperta e l'accesso fatto. L'app espone apposta
+--   `window.__comanda.db`: serve esattamente a provare ad aggirare le
+--   protezioni come farebbe qualcuno in malafede.
+--
+-- ############################################################################
+-- ############################################################################
+
+
+-- ============================================================================
+-- 8.0 — NOMINARE IL PRIMO AMMINISTRATORE
+--
+-- Questo è l'unico modo. Non c'è nessuna chiamata dell'app che lo faccia, e
+-- non deve essercene: si passa da qui, dal SQL Editor di Supabase, che è
+-- raggiungibile solo da chi possiede il progetto.
+--
+-- Prima si guarda che l'account esista (l'email è quella con cui si entra
+-- nell'app), poi lo si nomina. Due passi, non uno: così se l'email è scritta
+-- male ci si accorge PRIMA di aver inserito una riga che non serve a niente.
+-- ============================================================================
+
+-- Passo 1 — trovare l'account. Deve restituire ESATTAMENTE UNA riga.
+--   select id, email, created_at from auth.users
+--    where lower(email) = lower('TUA-EMAIL@esempio.it');
+--
+-- Passo 2 — nominarlo. Rieseguibile: se è già amministratore non cambia nulla.
+--   insert into public.platform_admins (user_id, email, nota)
+--   select u.id, u.email, 'primo amministratore, nominato a mano'
+--     from auth.users u
+--    where lower(u.email) = lower('TUA-EMAIL@esempio.it')
+--   on conflict (user_id) do nothing;
+--
+-- Passo 3 — controllare. Deve restituire una riga, con la tua email.
+--   select user_id, email, created_at from public.platform_admins;
+--
+-- Per TOGLIERE un amministratore:
+--   delete from public.platform_admins
+--    where lower(email) = lower('EMAIL-DA-TOGLIERE@esempio.it');
+--
+-- Attenzione: togliere l'ultimo amministratore chiude la console a tutti. I
+-- dati restano, l'app dei clienti continua a funzionare, e si rientra
+-- rifacendo il passo 2 da qui. Non è un disastro, è una serata persa.
+
+
+-- ============================================================================
+-- 8.1 — PROVE DA UTENTE NORMALE (nessun amministratore)
+--
+-- Da fare con un account che NON è in platform_admins. Aprire l'app, entrare,
+-- aprire la console del browser e incollare un blocco alla volta.
+--
+-- Il senso: un utente qualsiasi non deve ottenere NIENTE da nessuna funzione
+-- amministrativa, e non deve poter diventare amministratore in nessun modo.
+-- ============================================================================
+
+-- (a) "Sono amministratore?" — deve rispondere false, non un errore.
+--   await window.__comanda.db.rpc('is_platform_admin')
+--   ATTESO: { data: false, error: null }
+
+-- (b) Leggere la tabella degli amministratori.
+--   await window.__comanda.db.from('platform_admins').select('*')
+--   ATTESO: nessuna riga. Con RLS attiva e zero policy la tabella è vuota per
+--           chi non è il proprietario del database. Un elenco di righe qui
+--           sarebbe un buco grave: direbbe chi amministra la piattaforma.
+
+-- (c) NOMINARSI AMMINISTRATORE — la prova che conta più di tutte.
+--   const io = window.__comanda.utente.id;
+--   await window.__comanda.db.from('platform_admins').insert({ user_id: io, email: 'x@x.it' })
+--   ATTESO: error, e nessuna riga inserita. Ricontrollare poi con (a): deve
+--           ancora rispondere false.
+
+-- (d) Le funzioni di lettura.
+--   for (const f of ['admin_numeri','admin_cucine','admin_account','admin_registro',
+--                    'admin_errori_gruppi','admin_iscrizioni']) {
+--     const r = await window.__comanda.db.rpc(f, {});
+--     console.log(f, r.error ? ('ERRORE ' + r.error.message) : ('DATI ' + JSON.stringify(r.data)));
+--   }
+--   ATTESO: tutte ERRORE, e il messaggio deve essere
+--           "Non sei amministratore della piattaforma".
+--           Nessuna deve restituire dati, nemmeno un elenco vuoto.
+
+-- (e) Le funzioni che agiscono — con l'id di una cucina di cui sei TITOLARE,
+--     quindi nel caso migliore possibile per chi attacca.
+--   const k = window.__comanda.cucina.id;
+--   for (const [f, a] of [
+--     ['admin_set_stato', { p_kitchen: k, p_stato: 'active' }],
+--     ['admin_set_ai', { p_kitchen: k, p_limite: 999999 }],
+--     ['admin_set_prova', { p_kitchen: k, p_scadenza: '2099-01-01' }],
+--     ['admin_cancella_cucina', { p_kitchen: k }],
+--     ['admin_apri_assistenza', { p_kitchen: k, p_motivo: 'provo ad entrare dove non devo' }],
+--     ['admin_leggi_contenuto', { p_kitchen: k, p_key: 'recipes' }],
+--   ]) {
+--     const r = await window.__comanda.db.rpc(f, a);
+--     console.log(f, r.error ? ('ERRORE ' + r.error.message) : ('RIUSCITA ' + JSON.stringify(r.data)));
+--   }
+--   ATTESO: tutte ERRORE "Non sei amministratore della piattaforma".
+--   POI RICONTROLLARE, ed è la parte che si dimentica:
+--     select status, ai_limit, trial_ends_at, deleted_at from public.kitchens where id = '...';
+--   ATTESO: identici a prima. Un errore restituito non basta: conta che il
+--           dato non si sia mosso.
+
+-- (f) Le funzioni interne, quelle non concesse a nessuno.
+--   for (const f of ['admin_scrivi_registro','admin_rifiuta','admin_bersaglio',
+--                    'assistenza_attiva','pc_somma','admin_titolari_rimasti',
+--                    'admin_cursore_valido','consume_ai_call']) {
+--     const r = await window.__comanda.db.rpc(f, {});
+--     console.log(f, r.error ? ('ERRORE ' + r.error.message) : 'RAGGIUNGIBILE');
+--   }
+--   ATTESO: tutte ERRORE. Se una risulta RAGGIUNGIBILE, il grant è sbagliato:
+--           admin_scrivi_registro raggiungibile significa poter riempire il
+--           registro di righe false, che è come cancellarlo.
+
+-- (g) Il registro e gli errori: sono tabelle con la sola policy di lettura per
+--     gli amministratori.
+--   await window.__comanda.db.from('admin_audit').select('*')
+--   await window.__comanda.db.from('app_errors').select('*')
+--   await window.__comanda.db.from('kitchen_stats').select('*')
+--   await window.__comanda.db.from('platform_counters').select('*')
+--   ATTESO: nessuna riga in nessuna delle quattro.
+--     admin_audit e app_errors hanno la policy di lettura, che non ti riguarda;
+--     kitchen_stats e platform_counters non hanno policy affatto.
+--   PERCHÉ CONTA: kitchen_stats dice quanto pesano i dati di ogni cliente e
+--   quando lo ha usato l'ultima volta. È il ritratto commerciale di tutti i
+--   concorrenti messi in fila.
+
+-- (h) Scrivere nel registro o negli errori.
+--   await window.__comanda.db.from('admin_audit').insert({
+--     admin_id: window.__comanda.utente.id, azione: 'finta', esito: 'ok' })
+--   await window.__comanda.db.from('app_errors').insert({ messaggio: 'finto' })
+--   ATTESO: error su entrambe. Nessuna policy di insert su nessuna delle due.
+
+-- (i) L'accesso di assistenza visto dal cliente.
+--   await window.__comanda.db.rpc('assistenza_sulla_cucina',
+--        { p_kitchen: window.__comanda.cucina.id })
+--   ATTESO da TITOLARE: un elenco (vuoto se non è mai stata assistita).
+--   ATTESO da EDITOR o VIEWER: errore "Solo chi gestisce la cucina...".
+--   Poi con l'id di una cucina di cui NON fai parte: errore. Provalo davvero:
+--   è la differenza fra "il titolare vede gli accessi sulla sua cucina" e
+--   "chiunque vede chi è stato assistito".
+
+
+-- ============================================================================
+-- 8.2 — LE STESSE PROVE PER OGNI RUOLO
+--
+-- CLAUDE.md lo dice per una ragione già pagata: un buco è sfuggito perché
+-- erano stati provati solo i due estremi.
+--
+-- Rifare TUTTO il blocco 8.1 tre volte, con tre account diversi nella stessa
+-- cucina: uno owner, uno editor, uno viewer. Il risultato atteso è lo stesso
+-- per tutti e tre — non cambia niente, perché nessuno dei tre ruoli di cucina
+-- ha a che vedere con l'amministrazione della piattaforma. È esattamente
+-- questo che si sta verificando.
+--
+-- E una volta per ogni combinazione delle due impostazioni della cucina
+-- (editor_vede_costi × editor_vede_personali): quattro combinazioni. Non
+-- dovrebbero contare nulla qui, ed è la ragione per cui vanno provate.
+-- ============================================================================
+
+
+-- ============================================================================
+-- 8.3 — PROVE DA AMMINISTRATORE
+--
+-- Ora con l'account nominato al punto 8.0, sulla pagina /admin.
+-- ============================================================================
+
+-- (a) La console si apre, i numeri si vedono.
+--   ATTESO: /admin mostra Numeri, Cucine, Account, Errori, Registro.
+--   Se mostra "Questa pagina non è per te", la nomina non ha funzionato:
+--   ricontrollare il passo 8.0 e RIFARE L'ACCESSO (il ruolo si legge dal
+--   token, che va rinnovato).
+
+-- (b) Un'azione lascia una riga nel registro. Cambiare lo stato di una cucina
+--     di prova dalla console, poi:
+--   select quando, admin_email, azione, cucina_nome, esito, dettagli
+--     from public.admin_audit order by quando desc limit 5;
+--   ATTESO: una riga 'stato', esito 'ok', con dettagli {"da":...,"a":...}.
+
+-- (c) Un rifiuto per regola si registra ANCH'ESSO. Su una cucina con UN SOLO
+--     titolare, provare a declassarlo dalla console.
+--   ATTESO a schermo: "È l'unico titolare: la cucina resterebbe senza nessuno
+--                      che possa gestirla."
+--   ATTESO nel registro: una riga 'ruolo' con esito 'rifiutato' e il motivo.
+--   ATTESO nei dati: select role from public.kitchen_members where ... → ancora 'owner'.
+
+-- (d) Il trasferimento di proprietà non declassa nessuno che non sia stato
+--     nominato. Su una cucina con due titolari, trasferire al secondo
+--     lasciando VUOTO il campo del vecchio titolare.
+--   ATTESO: due titolari, non uno. Nessuno declassato a sorpresa.
+
+-- (e) La rimozione definitiva pretende due cose.
+--   Provare "Elimina definitivamente" su una cucina NON cancellata:
+--     ATTESO: "Prima va cancellata (passo reversibile), poi eliminata."
+--   Cancellarla, poi scrivere un nome sbagliato nella conferma:
+--     ATTESO: "Il nome scritto non coincide con quello della cucina."
+--   Poi col nome giusto:
+--     ATTESO: sparisce; e nel registro resta la riga 'eliminazione', con il
+--             nome della cucina e quanti byte aveva. Verificarlo:
+--     select * from public.admin_audit where azione = 'eliminazione';
+
+-- (f) L'accesso di assistenza si vede dall'altra parte. Aprirne uno su una
+--     cucina di prova, poi entrare nell'app COME TITOLARE di quella cucina e
+--     aprire "Squadra".
+--   ATTESO: il riquadro "Accessi dell'assistenza", con il motivo scritto e
+--           l'avviso che uno è in corso.
+--   Se non compare, la parte che rende onesto tutto il meccanismo non funziona.
+
+-- (g) Senza accesso di assistenza non si leggono i contenuti.
+--   select public.admin_leggi_contenuto('<id cucina senza assistenza>', 'recipes');
+--   ATTESO: {"ok": false, "motivo": "Serve un accesso di assistenza in corso..."}
+--   Con l'accesso aperto: i dati, E una riga 'assistenza_lettura' nel registro
+--   per OGNI sezione letta. Leggerne due e contare le righe: devono essere due.
+
+
+-- ============================================================================
+-- 8.4 — IL REGISTRO NON SI TOCCA, NEMMENO DA QUI
+--
+-- Queste si eseguono nel SQL Editor, cioè col massimo dei permessi possibili.
+-- È il punto: le policy le scavalca la chiave di servizio, il trigger no.
+-- ============================================================================
+
+--   update public.admin_audit set azione = 'niente' where id = (select min(id) from public.admin_audit);
+--   ATTESO: ERRORE "Il registro delle azioni amministrative non si modifica e non si cancella"
+--
+--   delete from public.admin_audit where id = (select min(id) from public.admin_audit);
+--   ATTESO: lo stesso errore.
+--
+--   truncate public.admin_audit;
+--   ATTESO: lo stesso errore.
+--
+-- Se una delle tre riesce, il trigger non c'è o è stato tolto: rimetterlo
+-- prima di andare avanti, perché senza di quello il registro racconta solo
+-- quello che a qualcuno faceva comodo lasciarci.
+
+
+-- ============================================================================
+-- 8.5 — I NUMERI SI MUOVONO DA SOLI
+--
+-- I contatori valgono solo se restano veri. Queste prove si fanno una volta e
+-- poi si rifanno il giorno che qualcuno tocca i trigger.
+-- ============================================================================
+
+--   select * from public.platform_counters order by chiave;
+--   ATTESO: cucine_vive uguale a  select count(*) from public.kitchens where deleted_at is null;
+--           e la somma degli 'stato:*' uguale a cucine_vive.
+--
+-- Poi, dall'app: creare una cucina di prova e rifare la query.
+--   ATTESO: cucine_vive +1, stato:trial +1.
+-- Salvarci dentro qualcosa (aggiungere un ingrediente), poi:
+--   select byte_dati, sezioni, ultima_scrittura, membri_owner
+--     from public.kitchen_stats where kitchen_id = '<id>';
+--   ATTESO: byte_dati > 0, sezioni > 0, ultima_scrittura di adesso, membri_owner = 1.
+-- Sospenderla dalla console e rifare la prima query.
+--   ATTESO: stato:trial -1, stato:suspended +1, cucine_vive invariato.
+-- Cancellarla (passo reversibile):
+--   ATTESO: cucine_vive -1, cucine_cancellate +1.
+-- Eliminarla definitivamente:
+--   ATTESO: cucine_cancellate -1, e nessuna riga rimasta in kitchen_stats.
+--           Se l'eliminazione fallisce con un errore di chiave esterna sulle
+--           statistiche, i trigger stanno reinserendo righe durante la
+--           cancellazione a catena: è il caso che i trigger qui sopra evitano
+--           aggiornando e basta in DELETE, e va verificato che lo facciano.
+--
+-- Se i conti non tornano (per esempio dopo un ripristino da backup), si
+-- rifanno da zero rieseguendo questo file: il blocco di riempimento in fondo
+-- alla sezione 3 li ricostruisce contando davvero.
+
+
+-- ============================================================================
+-- 8.6 — L'IMPAGINAZIONE NON SALTA E NON RIPETE
+--
+-- La logica del cursore è già provata dai test automatici (tests/admin-console.test.js,
+-- compreso il caso di righe con lo stesso istante). Qui si verifica che il
+-- database faccia la sua parte: che il confronto di riga usi l'indice e non
+-- perda niente.
+-- ============================================================================
+
+--   -- prima pagina
+--   select id, created_at from jsonb_to_recordset(public.admin_cucine(null, null, false, 2, null, null))
+--     as x(id uuid, created_at timestamptz);
+--   -- seconda pagina: si passano data E id dell'ULTIMA riga della prima
+--   select id, created_at from jsonb_to_recordset(
+--     public.admin_cucine(null, null, false, 2, '<created_at ultima>', '<id ultima>'))
+--     as x(id uuid, created_at timestamptz);
+--   ATTESO: nessun id ripetuto fra le due, e continuando fino alla fine si
+--           ottengono tutte le cucine, una volta ciascuna. Confrontare il
+--           totale con  select count(*) from public.kitchens where deleted_at is null;
+--
+--   -- e che l'indice venga davvero usato:
+--   explain analyze select * from public.kitchens
+--     where (created_at, id) < (now(), '00000000-0000-0000-0000-000000000000')
+--     order by created_at desc, id desc limit 25;
+--   ATTESO: "Index Scan using kitchens_creata_idx". Se compare "Seq Scan" con
+--           un ordinamento, l'indice non c'è: a poche cucine non si nota, ed è
+--           proprio per questo che va guardato adesso.
+
+
+-- ============================================================================
+-- 8.7 — CHE NON ESCA NIENTE DI TROPPO
+--
+-- L'ultima, e la più facile da saltare.
+-- ============================================================================
+
+--   select public.admin_cucine();
+--   select public.admin_cucina('<id di una cucina con dati veri>');
+--   Leggere la risposta INTERA, con calma.
+--   ATTESO: nomi di cucine, date, conteggi, byte, email degli ACCOUNT.
+--   NON DEVE ESSERCI: nessun nome di ricetta, nessun prezzo, nessun fornitore,
+--   nessun numero di telefono, nessun nome della brigata preso dai dati della
+--   cucina. Se ci fosse, la separazione fra metadati e contenuti è saltata, e
+--   con lei tutta la ragione dell'accesso di assistenza.
