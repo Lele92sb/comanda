@@ -30,6 +30,7 @@ import './assistente/chat.js';
 import './core/backup.js';
 import * as stato from './core/state.js';
 import { LINGUE, caricaLingua, lingua, t, traduciMarkup } from './core/lingua.ts';
+import { raccogliErrori } from './core/errori.ts';
 
 /* ============================= DIAGNOSTICA =============================
    I moduli non lasciano più niente su window, ed è giusto così. Ma senza un
@@ -94,6 +95,13 @@ Cloud.onConflict = function(key){
 };
 
 (async function init(){
+  // Per primo: un errore durante l'avvio è quello che conta di più, ed è
+  // proprio quello che si perderebbe attivando la raccolta più tardi.
+  raccogliErrori(() => ({
+    cucinaId: Cloud.kitchen?.id,
+    utenteId: Cloud.user?.id,
+  }));
+
   // La lingua si sceglie prima di disegnare qualsiasi cosa: altrimenti la
   // schermata d'accesso comparirebbe in italiano e cambierebbe sotto gli occhi.
   await preparaLingua();
