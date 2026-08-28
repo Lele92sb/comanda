@@ -2,6 +2,55 @@
 
 Tutte le modifiche rilevanti all'app, versione per versione.
 
+## [1.4.0] — Primo rilascio, installabile sul telefono
+
+La prima versione pubblicata davvero. Da qui si prova in cucina.
+
+### Si installa come un'app
+- Manifesto e icone: da telefono, "Aggiungi a schermata Home" crea un'icona
+  vera che apre l'app a schermo pieno, senza barra del browser. Funziona su
+  Android e su iPhone.
+
+### Struttura, in vista di più persone che ci lavorano
+- Da un file di 2.851 righe a 30 moduli per dominio, il più grande di 367.
+  Le dipendenze non sono state indovinate ma calcolate: 222 collegamenti.
+- Build con Vite, TypeScript sui moduli dove la correttezza conta di più.
+- Supabase e node-forge diventano dipendenze installate invece di due
+  `<script>` verso CDN esterni: l'avvio non dipende più da server di terzi.
+- Design system: 33 token, utilità e componenti al posto di 142 stili scritti
+  a mano dentro l'HTML.
+- Dialoghi dell'app al posto di `confirm()` e `prompt()` del browser, che in
+  alcuni contesti venivano soppressi lasciando il pulsante apparentemente rotto.
+
+### Fatture
+- Import diviso in tre strati, i primi due puri e coperti da 23 test. Da lì
+  escono i prezzi d'acquisto su cui si calcola il food cost, e non erano
+  testati da niente.
+- La partita IVA resta testo: come numero, `01234567890` diventava
+  `1234567890` e il fornitore non veniva più riconosciuto.
+- Il fornitore si riconosce dalla partita IVA, non dal nome.
+- Le fatture già importate vengono saltate, riconosciute dall'impronta del
+  contenuto anche se il file è stato rinominato.
+- Le voci di servizio (trasporto, imballo, CONAI) non diventano più
+  ingredienti, ma vengono dichiarate nel resoconto.
+- Un'importazione si può annullare: prezzi ripristinati, fattura
+  reimportabile, e quello che hai corretto a mano dopo resta com'è.
+- Pronto per le fonti automatiche: aggiungerne una significa scrivere un file
+  che rispetti l'interfaccia `FonteFatture`.
+
+### Lingue
+- Italiano e inglese, con selettore IT/EN in alto a destra. La lingua si
+  rileva dal browser e la scelta viene ricordata.
+- La chiave di traduzione è la frase italiana: se una traduzione manca compare
+  l'italiano, non un codice.
+
+### Affidabilità
+- Raccolta degli errori: errori non gestiti e promesse rifiutate arrivano al
+  server con versione e browser. Lo stesso errore viene mandato una volta sola.
+- La pipeline ora è test → tipi → import → build → pubblica. Il controllo
+  sugli import nasce da tre errori introdotti in sviluppo che né il
+  compilatore né il bundler vedevano.
+
 ## [1.3.0] — Turni: servizi su misura, mese, richieste, più cucine
 
 ### Servizi e tipi di turno definiti da te

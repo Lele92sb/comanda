@@ -1,0 +1,17 @@
+{
+  "name": "Comanda — l'app dello chef",
+  "short_name": "Comanda",
+  "description": "Ricettario con food cost reale, brigata, turni e assistente AI.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1d1b18",
+  "theme_color": "#1d1b18",
+  "lang": "it",
+  "icons": [
+    { "src": "/icone/icona-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icone/icona-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icone/icona-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

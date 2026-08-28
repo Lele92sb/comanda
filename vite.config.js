@@ -8,7 +8,10 @@ const { version } = JSON.parse(readFileSync('./package.json', 'utf8'));
 // convenzione di Pages e non passa da qui.
 export default defineConfig({
   root: 'app',
-  publicDir: false,
+  // Quello che sta in app/public finisce nella radice del sito così com'è:
+  // icone e manifesto devono restare a un indirizzo fisso, perché il telefono
+  // li cerca lì quando installi l'app.
+  publicDir: 'public',
   // La versione finisce nel codice: quando un cliente segnala un problema,
   // la prima domanda è "quale versione stai usando".
   define: { __VERSIONE__: JSON.stringify(version) },
