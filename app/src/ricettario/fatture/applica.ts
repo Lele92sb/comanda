@@ -8,7 +8,8 @@
 // sovrascrivere il prezzo dell'ingrediente sbagliato.
 // ============================================================================
 import { leggiFatturaXML, unitaDaFattura } from './leggi.ts';
-import type { DocumentoFattura } from './tipi.ts';
+import { èRigaDiServizio } from './servizi.ts';
+import type { DocumentoFattura, Importazione } from './tipi.ts';
 
 export interface Fornitore {
   id: string; name: string; piva?: string;
@@ -25,12 +26,15 @@ export interface DatiCorrenti {
   ingredienti: Ingrediente[];
   /** Id dei documenti già importati: impedisce di rifare due volte lo stesso. */
   giaImportati: string[];
+  /** Traccia di ogni importazione, per poterla annullare. */
+  storico: Importazione[];
 }
 
 export interface Modifiche {
   fornitori: Fornitore[];
   ingredienti: Ingrediente[];
   giaImportati: string[];
+  storico: Importazione[];
   creati: Ingrediente[];
   resoconto: string[];
   fornitoriNuovi: number;
@@ -38,6 +42,8 @@ export interface Modifiche {
   ingredientiAggiornati: number;
   scartati: number;
   saltatiPerchéGiàImportati: number;
+  /** Righe riconosciute come servizio e non importate come merce. */
+  righeDiServizio: number;
 }
 
 /**
@@ -58,14 +64,16 @@ export function applicaFatture(
   documenti: DocumentoFattura[],
   dati: DatiCorrenti,
   nuovoId: () => string,
+  adesso: () => string = () => new Date().toISOString(),
 ): Modifiche {
   const fornitori = dati.fornitori.map(f => ({ ...f }));
   const ingredienti = dati.ingredienti.map(i => ({ ...i }));
   const giaImportati = [...dati.giaImportati];
+  const storico = [...dati.storico];
   const creati: Ingrediente[] = [];
   const resoconto: string[] = [];
   let fornitoriNuovi = 0, ingredientiNuovi = 0, ingredientiAggiornati = 0;
-  let scartati = 0, saltatiPerchéGiàImportati = 0;
+  let scartati = 0, saltatiPerchéGiàImportati = 0, righeDiServizio = 0;
 
   for (const doc of documenti) {
     if (giaImportati.includes(doc.id)) {
@@ -80,6 +88,12 @@ export function applicaFatture(
       continue;
     }
 
+    // Traccia di cosa fa QUESTO documento, per poterlo annullare da solo.
+    const traccia: Importazione = {
+      id: doc.id, quando: adesso(), etichetta: doc.etichetta,
+      fornitore: fattura.fornitore.nome, creati: [], aggiornati: [],
+    };
+
     let fornitore = trovaFornitore(fornitori, fattura.fornitore.piva, fattura.fornitore.nome);
     if (!fornitore) {
       fornitore = {
@@ -89,10 +103,18 @@ export function applicaFatture(
       };
       fornitori.push(fornitore);
       fornitoriNuovi++;
+      traccia.fornitoreCreato = fornitore.id;
       resoconto.push(`+ Nuovo fornitore: ${fornitore.name}`);
     }
 
     for (const riga of fattura.righe) {
+      // Trasporto, imballo, contributo CONAI: non sono merce e in anagrafica
+      // diventerebbero ingredienti fantasma. Si dicono, non si nascondono.
+      if (èRigaDiServizio(riga.descrizione)) {
+        righeDiServizio++;
+        resoconto.push(`· ${riga.descrizione}: voce di servizio, non importata`);
+        continue;
+      }
       const unit = unitaDaFattura(riga.unitaMisura);
       // Lo stesso nome da due fornitori diversi sono due ingredienti diversi:
       // hanno prezzi diversi, ed è giusto poterli confrontare.
@@ -102,6 +124,9 @@ export function applicaFatture(
 
       if (esistente) {
         const prezzoPrima = parseFloat(String(esistente.price)) || 0;
+        traccia.aggiornati.push({
+          id: esistente.id, prezzoPrima: esistente.price, unitaPrima: esistente.unit,
+        });
         esistente.price = riga.prezzoUnitario;
         esistente.unit = unit;
         ingredientiAggiornati++;
@@ -116,17 +141,19 @@ export function applicaFatture(
         };
         ingredienti.push(nuovo);
         creati.push(nuovo);
+        traccia.creati.push(nuovo.id);
         ingredientiNuovi++;
         resoconto.push(`+ ${riga.descrizione} (€ ${riga.prezzoUnitario.toFixed(3)}/${unit})`);
       }
     }
 
     giaImportati.push(doc.id);
+    storico.push(traccia);
   }
 
   return {
-    fornitori, ingredienti, giaImportati, creati, resoconto,
+    fornitori, ingredienti, giaImportati, storico, creati, resoconto,
     fornitoriNuovi, ingredientiNuovi, ingredientiAggiornati,
-    scartati, saltatiPerchéGiàImportati,
+    scartati, saltatiPerchéGiàImportati, righeDiServizio,
   };
 }

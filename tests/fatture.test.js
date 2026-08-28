@@ -119,7 +119,7 @@ import { applicaFatture } from '../app/src/ricettario/fatture/applica.ts';
 
 let contatore = 0;
 const nuovoId = () => 'id' + (++contatore);
-const vuoto = () => ({ fornitori: [], ingredienti: [], giaImportati: [] });
+const vuoto = () => ({ fornitori: [], ingredienti: [], giaImportati: [], storico: [] });
 const doc = (id, xml) => ({ id, xml, etichetta: id });
 
 test('la prima importazione crea fornitore e ingredienti', () => {
@@ -137,7 +137,8 @@ test('la stessa fattura importata due volte non duplica niente', () => {
   // giorno sullo stesso periodo.
   const primo = applicaFatture([doc('f1', fattura())], vuoto(), nuovoId);
   const secondo = applicaFatture([doc('f1', fattura())], {
-    fornitori: primo.fornitori, ingredienti: primo.ingredienti, giaImportati: primo.giaImportati,
+    fornitori: primo.fornitori, ingredienti: primo.ingredienti,
+    giaImportati: primo.giaImportati, storico: primo.storico,
   }, nuovoId);
   assert.equal(secondo.saltatiPerchéGiàImportati, 1);
   assert.equal(secondo.ingredientiNuovi, 0);
@@ -152,7 +153,8 @@ test('una fattura nuova dello stesso fornitore aggiorna il prezzo, non duplica',
       <Quantita>10</Quantita><UnitaMisura>KG</UnitaMisura><PrezzoUnitario>3.00</PrezzoUnitario>
     </DettaglioLinee>` });
   const secondo = applicaFatture([doc('f2', rincaro)], {
-    fornitori: primo.fornitori, ingredienti: primo.ingredienti, giaImportati: primo.giaImportati,
+    fornitori: primo.fornitori, ingredienti: primo.ingredienti,
+    giaImportati: primo.giaImportati, storico: primo.storico,
   }, nuovoId);
   assert.equal(secondo.ingredientiNuovi, 0);
   assert.equal(secondo.ingredientiAggiornati, 1);
@@ -167,7 +169,8 @@ test('il fornitore è riconosciuto dalla partita IVA anche se cambia la grafia d
   const primo = applicaFatture([doc('f1', fattura())], vuoto(), nuovoId);
   const secondo = applicaFatture(
     [doc('f2', fattura({ denominazione: 'ORTOFRUTTA ROSSI S.R.L.' }))],
-    { fornitori: primo.fornitori, ingredienti: primo.ingredienti, giaImportati: primo.giaImportati },
+    { fornitori: primo.fornitori, ingredienti: primo.ingredienti,
+      giaImportati: primo.giaImportati, storico: primo.storico },
     nuovoId);
   assert.equal(secondo.fornitoriNuovi, 0, 'la partita IVA coincide: è lo stesso fornitore');
   assert.equal(secondo.fornitori.length, 1);
@@ -179,7 +182,8 @@ test('lo stesso prodotto da due fornitori resta due ingredienti distinti', () =>
   const altro = fattura({ denominazione: 'Mercato Bianchi Spa' })
     .replace('01234567890', '09876543210');
   const secondo = applicaFatture([doc('f2', altro)], {
-    fornitori: primo.fornitori, ingredienti: primo.ingredienti, giaImportati: primo.giaImportati,
+    fornitori: primo.fornitori, ingredienti: primo.ingredienti,
+    giaImportati: primo.giaImportati, storico: primo.storico,
   }, nuovoId);
   assert.equal(secondo.fornitoriNuovi, 1);
   assert.equal(secondo.ingredientiNuovi, 1);
@@ -200,4 +204,126 @@ test('i dati di partenza non vengono modificati: la funzione è pura', () => {
   assert.equal(dati.fornitori.length, 0);
   assert.equal(dati.ingredienti.length, 0);
   assert.equal(dati.giaImportati.length, 0);
+});
+
+/* ===================== RIGHE DI SERVIZIO ===================== */
+
+import { èRigaDiServizio } from '../app/src/ricettario/fatture/servizi.ts';
+
+test('le voci di servizio vengono riconosciute', () => {
+  ['Trasporto', 'Trasporto refrigerato', 'Imballo', 'Spese di trasporto',
+   'Contributo CONAI', 'Cauzione bancali', 'Bollo', 'Arrotondamento',
+   'Costi di consegna', 'Sconto'
+  ].forEach(d => assert.equal(èRigaDiServizio(d), true, `"${d}" doveva essere servizio`));
+});
+
+test('la merce vera non viene scambiata per servizio', () => {
+  // Nel dubbio si importa: scartare della merce fa sparire un costo dal food
+  // cost, importare una voce di troppo è solo un fastidio.
+  ['Pomodoro San Marzano DOP', 'Gambero rosso di Mazara', 'Vongole veraci',
+   'Bollito misto di carne', 'Cassata siciliana',
+   'Trasportino per aragoste vive', 'Riso Carnaroli invecchiato 12 mesi',
+   'Spese pazze IGP', 'Casse di mele Golden'
+  ].forEach(d => assert.equal(èRigaDiServizio(d), false, `"${d}" NON doveva essere servizio`));
+});
+
+test('le righe di servizio non entrano in anagrafica ma finiscono nel resoconto', () => {
+  const righe = `<DettaglioLinee><Descrizione>Merluzzo fresco</Descrizione><Quantita>5</Quantita><UnitaMisura>KG</UnitaMisura><PrezzoUnitario>14.00</PrezzoUnitario></DettaglioLinee>
+                 <DettaglioLinee><Descrizione>Trasporto refrigerato</Descrizione><UnitaMisura>NR</UnitaMisura><PrezzoUnitario>25.00</PrezzoUnitario></DettaglioLinee>
+                 <DettaglioLinee><Descrizione>Contributo CONAI</Descrizione><UnitaMisura>NR</UnitaMisura><PrezzoUnitario>0.50</PrezzoUnitario></DettaglioLinee>`;
+  const m = applicaFatture([doc('f1', fattura({ righe }))], vuoto(), nuovoId);
+  assert.equal(m.ingredientiNuovi, 1, 'solo il merluzzo è merce');
+  assert.equal(m.righeDiServizio, 2);
+  assert.equal(m.ingredienti[0].name, 'Merluzzo fresco');
+  // Non spariscono in silenzio: se il riconoscimento sbaglia, si vede.
+  assert.ok(m.resoconto.some(r => r.includes('Trasporto refrigerato') && r.includes('servizio')));
+});
+
+/* ===================== ANNULLARE UN'IMPORTAZIONE ===================== */
+
+import { annullaImportazione } from '../app/src/ricettario/fatture/annulla.ts';
+
+test('annullare toglie ciò che l\'importazione aveva creato', () => {
+  const m = applicaFatture([doc('f1', fattura())], vuoto(), nuovoId);
+  assert.equal(m.storico.length, 1);
+
+  const a = annullaImportazione(m.storico[0], {
+    fornitori: m.fornitori, ingredienti: m.ingredienti,
+    giaImportati: m.giaImportati, storico: m.storico,
+  });
+  assert.equal(a.ingredientiRimossi, 1);
+  assert.equal(a.fornitoriRimossi, 1);
+  assert.equal(a.ingredienti.length, 0);
+  assert.equal(a.fornitori.length, 0);
+  // Tolta l'impronta, la fattura si può reimportare corretta.
+  assert.equal(a.giaImportati.length, 0);
+  assert.equal(a.storico.length, 0);
+});
+
+test('annullare riporta indietro i prezzi che aveva cambiato', () => {
+  const primo = applicaFatture([doc('f1', fattura())], vuoto(), nuovoId);
+  const rincaro = fattura({ righe: `<DettaglioLinee>
+      <Descrizione>Pomodoro San Marzano DOP</Descrizione>
+      <Quantita>10</Quantita><UnitaMisura>KG</UnitaMisura><PrezzoUnitario>9.99</PrezzoUnitario>
+    </DettaglioLinee>` });
+  const secondo = applicaFatture([doc('f2', rincaro)], {
+    fornitori: primo.fornitori, ingredienti: primo.ingredienti,
+    giaImportati: primo.giaImportati, storico: primo.storico,
+  }, nuovoId);
+  assert.equal(secondo.ingredienti[0].price, 9.99);
+
+  const traccia = secondo.storico.find(s => s.id === 'f2');
+  const a = annullaImportazione(traccia, {
+    fornitori: secondo.fornitori, ingredienti: secondo.ingredienti,
+    giaImportati: secondo.giaImportati, storico: secondo.storico,
+  });
+  assert.equal(a.prezziRipristinati, 1);
+  assert.equal(a.ingredienti[0].price, 2.4, 'il prezzo torna quello di prima');
+  assert.equal(a.ingredienti.length, 1, 'l\'ingrediente non va cancellato: non l\'aveva creato questa fattura');
+  assert.ok(a.giaImportati.includes('f1'), 'la prima fattura resta importata');
+});
+
+test('il fornitore resta se ha ancora ingredienti collegati', () => {
+  // Due fatture dello stesso fornitore: annullando la prima, il fornitore
+  // serve ancora agli ingredienti della seconda.
+  const primo = applicaFatture([doc('f1', fattura())], vuoto(), nuovoId);
+  const altraMerce = fattura({ righe: `<DettaglioLinee>
+      <Descrizione>Basilico genovese</Descrizione><Quantita>2</Quantita>
+      <UnitaMisura>KG</UnitaMisura><PrezzoUnitario>8.00</PrezzoUnitario>
+    </DettaglioLinee>` });
+  const secondo = applicaFatture([doc('f2', altraMerce)], {
+    fornitori: primo.fornitori, ingredienti: primo.ingredienti,
+    giaImportati: primo.giaImportati, storico: primo.storico,
+  }, nuovoId);
+
+  const a = annullaImportazione(secondo.storico.find(s => s.id === 'f1'), {
+    fornitori: secondo.fornitori, ingredienti: secondo.ingredienti,
+    giaImportati: secondo.giaImportati, storico: secondo.storico,
+  });
+  assert.equal(a.fornitoriRimossi, 0);
+  assert.equal(a.fornitori.length, 1);
+  assert.ok(a.lasciateComeStavano.some(x => x.includes('ha ancora ingredienti')));
+});
+
+test('annullare non calpesta un ingrediente eliminato a mano dopo', () => {
+  const m = applicaFatture([doc('f1', fattura())], vuoto(), nuovoId);
+  // lo chef lo elimina per conto suo
+  const senza = m.ingredienti.filter(i => i.name !== 'Pomodoro San Marzano DOP');
+  const a = annullaImportazione(m.storico[0], {
+    fornitori: m.fornitori, ingredienti: senza,
+    giaImportati: m.giaImportati, storico: m.storico,
+  });
+  assert.equal(a.ingredientiRimossi, 0, 'non c\'era più niente da togliere');
+  assert.equal(a.ingredienti.length, 0);
+});
+
+test('i dati di partenza non vengono modificati dall\'annullamento', () => {
+  const m = applicaFatture([doc('f1', fattura())], vuoto(), nuovoId);
+  const dati = {
+    fornitori: m.fornitori, ingredienti: m.ingredienti,
+    giaImportati: m.giaImportati, storico: m.storico,
+  };
+  annullaImportazione(m.storico[0], dati);
+  assert.equal(dati.ingredienti.length, 1);
+  assert.equal(dati.fornitori.length, 1);
 });

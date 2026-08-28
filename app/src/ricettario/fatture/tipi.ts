@@ -60,6 +60,25 @@ export interface FatturaLetta {
   data: string;
 }
 
+/**
+ * Traccia di un'importazione, tenuta per poterla annullare.
+ * Senza questo, una fattura entrata sbagliata resta dentro per sempre: i
+ * prezzi vecchi non si sanno più, e l'impronta impedisce di reimportarla.
+ */
+export interface Importazione {
+  /** Impronta del documento: è anche la chiave che ne impedisce il doppione. */
+  id: string;
+  quando: string;
+  etichetta: string;
+  fornitore: string;
+  /** Id degli ingredienti nati da questa importazione. */
+  creati: string[];
+  /** Ingredienti già esistenti, col valore che avevano prima. */
+  aggiornati: { id: string; prezzoPrima: number | string; unitaPrima: string }[];
+  /** Id del fornitore, se è stato creato proprio da questa importazione. */
+  fornitoreCreato?: string;
+}
+
 /** Cosa cambierebbe l'importazione, prima di applicarlo davvero. */
 export interface EsitoImportazione {
   fornitoriNuovi: number;

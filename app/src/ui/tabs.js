@@ -1,3 +1,4 @@
+import { renderStoricoImportazioni } from '../ricettario/fatture.js';
 import { renderChat } from '../assistente/chat.js';
 import { renderKB } from '../assistente/conoscenza.js';
 import { renderSuppliers } from '../ricettario/fornitori.js';
@@ -39,6 +40,7 @@ export function initTabs(){
       if(b.dataset.sub==='subricette') renderSubrecipes();
       if(b.dataset.sub==='piatti') renderDishes();
       if(b.dataset.sub==='fornitori') renderSuppliers();
+      if(b.dataset.sub==='fatture') renderStoricoImportazioni();
     });
   });
   document.getElementById('turni-subtabs').querySelectorAll('button').forEach(b=>{
