@@ -324,10 +324,29 @@ body.readonly main label.btn{opacity:0.45;}
       <p class="section-sub">Pianificazione, partite, fabbisogno e generazione automatica</p>
       <nav class="subtabs" id="turni-subtabs">
         <button data-sub="piano" class="active">Pianificazione</button>
+        <button data-sub="servizi">Servizi e turni</button>
         <button data-sub="stazioni">Stazioni</button>
         <button data-sub="fabbisogno">Fabbisogno</button>
         <button data-sub="quote">Quote per persona</button>
       </nav>
+
+      <div class="subview" id="turnisub-servizi">
+        <div class="panel">
+          <h3>I servizi della giornata</h3>
+          <p class="small-note" style="margin-top:0;">I momenti in cui la cucina lavora. Colazione, pranzo e cena sono solo un punto di partenza: aggiungi aperitivo, brunch, lunch o quello che serve nel tuo locale.</p>
+          <div class="grid2" style="margin-bottom:10px;">
+            <input type="text" id="service-name-input" placeholder="Nome servizio, es. Aperitivo">
+            <button class="btn" id="service-add-btn">+ Aggiungi servizio</button>
+          </div>
+          <div id="service-list"></div>
+        </div>
+        <div class="panel">
+          <h3>I tipi di turno</h3>
+          <p class="small-note" style="margin-top:0;">Ogni turno ha una sigla (quella che vedrai nella griglia), un orario, le ore che vale, e i servizi che copre. Un turno che copre <b>due servizi</b> è lo spezzato: una persona sola ne chiude due.</p>
+          <div id="shifttype-list"></div>
+          <button class="btn ghost small full" id="shifttype-add-btn" style="margin-top:10px;">+ Aggiungi tipo di turno</button>
+        </div>
+      </div>
 
       <div class="subview active" id="turnisub-piano">
         <button class="btn full" id="btn-generate-shifts" style="margin-bottom:14px;">🎲 Genera turni della settimana</button>
@@ -463,14 +482,31 @@ function p7mArrayBufferToXmlText(arrayBuffer){
 }
 
 /* ============================= STATE ============================= */
-const STORE_KEYS = ['ingredients','subrecipes','recipes','menus','staff','shifts','knowledge','chatHistory','wellbeing','suppliers','stations','staffingNeeds'];
-let state = { ingredients:[], subrecipes:[], recipes:[], menus:[], staff:[], shifts:{}, knowledge:[], chatHistory:[], wellbeing:[], suppliers:[], stations:[], staffingNeeds:{colazione:[],pranzo:[],cena:[]} };
+const STORE_KEYS = ['ingredients','subrecipes','recipes','menus','staff','shifts','knowledge','chatHistory','wellbeing','suppliers','stations','staffingNeeds','services','shiftTypes'];
+let state = { ingredients:[], subrecipes:[], recipes:[], menus:[], staff:[], shifts:{}, knowledge:[], chatHistory:[], wellbeing:[], suppliers:[], stations:[], staffingNeeds:{}, services:[], shiftTypes:[] };
 
 const ALLERGENS = ["Glutine","Crostacei","Uova","Pesce","Arachidi","Soia","Latte","Frutta a guscio","Sedano","Senape","Sesamo","Solfiti","Lupini","Molluschi"];
-// DAYS, TURNO_DEF, WORKING_CODES, SERVICES, SERVICE_LABELS, CODE_TO_SERVICES, SERVICE_CODES, MAIN_CODE,
-// shuffleArray, buildStaffPools, computeShifts arrivano da logic.js (condiviso con la test suite).
-const { DAYS, TURNO_DEF, WORKING_CODES, SERVICES, SERVICE_LABELS, CODE_TO_SERVICES, SERVICE_CODES, MAIN_CODE,
-        shuffleArray, buildStaffPools, computeShifts } = window;
+// DAYS, SPECIAL_CODES, buildShiftConfig, computeShifts... arrivano da logic.js
+// (condiviso con la test suite).
+const { DAYS, SPECIAL_CODES, REST_CODE, DEFAULT_SERVICES, DEFAULT_SHIFT_TYPES,
+        buildShiftConfig, shuffleArray, buildStaffPools, computeShifts } = window;
+
+// I servizi e i turni non sono più fissi: ogni cucina ha i suoi. Questa funzione
+// ricalcola le tabelle di consultazione a partire dalla configurazione salvata,
+// e va richiamata ogni volta che servizi o tipi di turno cambiano.
+let SHIFT_CFG = buildShiftConfig(null, null);
+function refreshShiftConfig(){
+  SHIFT_CFG = buildShiftConfig(state.services, state.shiftTypes);
+  return SHIFT_CFG;
+}
+// Scorciatoie leggibili nel resto dell'app. Sono funzioni, non costanti, perché
+// il loro contenuto cambia quando lo chef modifica la configurazione.
+const SERVICES       = () => SHIFT_CFG.serviceIds;
+const SERVICE_LABEL  = id => SHIFT_CFG.serviceLabels[id] || id;
+const TURNO_DEF      = () => SHIFT_CFG.turnoDef;
+const WORKING_CODES  = () => SHIFT_CFG.workingCodes;
+const CODE_LABEL     = code => (SHIFT_CFG.turnoDef[code] || {label: code||'—'}).label;
+const CODE_HOURS     = code => (SHIFT_CFG.turnoDef[code] || {hours:0}).hours || 0;
 
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 
@@ -526,7 +562,20 @@ function migrateData(){
       cena: [...(old.S||[]), ...(old.SP||[])],
     };
   }
-  SERVICES.forEach(sv=>{ if(!state.staffingNeeds[sv]) state.staffingNeeds[sv]=[]; });
+  // Servizi e tipi di turno erano cablati nel codice: chi ha già dati si
+  // ritroverebbe la configurazione vuota, quindi gli si ricrea quella di prima.
+  // Da qui in poi sono modificabili come qualsiasi altro dato della cucina.
+  if(!state.services || !state.services.length){
+    state.services = DEFAULT_SERVICES.map(s=>({...s}));
+  }
+  if(!state.shiftTypes || !state.shiftTypes.length){
+    state.shiftTypes = DEFAULT_SHIFT_TYPES.map(t=>({id:uid(), ...t}));
+  }
+  state.shiftTypes.forEach(t=>{ if(!t.id) t.id = uid(); });
+  refreshShiftConfig();
+
+  if(!state.staffingNeeds) state.staffingNeeds = {};
+  SERVICES().forEach(sv=>{ if(!state.staffingNeeds[sv]) state.staffingNeeds[sv]=[]; });
 }
 
 function toast(msg){
@@ -568,6 +617,7 @@ function initTabs(){
       document.querySelectorAll('#turni-subtabs button').forEach(x=>x.classList.toggle('active', x===b));
       document.querySelectorAll('#view-turni .subview').forEach(v=>v.classList.toggle('active', v.id==='turnisub-'+b.dataset.sub));
       if(b.dataset.sub==='piano'){ renderTurni(); renderOreExtra(); }
+      if(b.dataset.sub==='servizi'){ renderServices(); renderShiftTypes(); }
       if(b.dataset.sub==='stazioni') renderStations();
       if(b.dataset.sub==='fabbisogno') renderNeeds();
       if(b.dataset.sub==='quote') renderQuotas();
@@ -761,7 +811,7 @@ function renderDashboard(){
   shiftsEl.innerHTML = todayShifts.length
     ? todayShifts.map(t=>{
         const st = state.stations.find(s=>s.id===t.stationId);
-        return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;"><span>${esc(t.name)}</span><span style="font-family:var(--font-mono);color:var(--copper-light);">${TURNO_DEF[t.code].label}${st?' · '+esc(st.name):''}</span></div>`;
+        return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;"><span>${esc(t.name)}</span><span style="font-family:var(--font-mono);color:var(--copper-light);">${esc(CODE_LABEL(t.code))}${st?' · '+esc(st.name):''}</span></div>`;
       }).join('')
     : `<div class="empty">Nessun turno assegnato per oggi (${todayKey})</div>`;
 }
@@ -1493,10 +1543,10 @@ function renderTurni(){
             ${DAYS.map(d=>{
               const cell = (state.shifts[s.id]||{})[d] || {code:'', stationId:null};
               const qualified = (s.stations&&s.stations.length) ? state.stations.filter(st=>s.stations.includes(st.id)) : state.stations;
-              const showStation = WORKING_CODES.includes(cell.code) && qualified.length>0;
+              const showStation = WORKING_CODES().includes(cell.code) && qualified.length>0;
               return `<td class="${cell.extra?'extra-cell':''}" ${cell.extra?'title="Turno extra: assegnato oltre la quota di questa persona per coprire il fabbisogno"':''}>
                 <select class="shift-select ${cell.code}" data-staff="${s.id}" data-day="${d}">
-                  ${Object.keys(TURNO_DEF).map(code=>`<option value="${code}" ${cell.code===code?'selected':''}>${code||'—'}</option>`).join('')}
+                  ${Object.keys(TURNO_DEF()).map(code=>`<option value="${code}" ${cell.code===code?'selected':''}>${code||'—'}</option>`).join('')}
                 </select>
                 ${showStation ? `<select class="shift-station" data-staff="${s.id}" data-day="${d}" style="margin-top:3px;">
                   <option value="">stazione</option>
@@ -1516,7 +1566,7 @@ function renderTurni(){
       const staffId = sel.dataset.staff, day = sel.dataset.day, val = sel.value;
       state.shifts[staffId] = state.shifts[staffId] || {};
       const prev = state.shifts[staffId][day] || {code:'', stationId:null};
-      state.shifts[staffId][day] = { code:val, stationId: WORKING_CODES.includes(val) ? prev.stationId : null };
+      state.shifts[staffId][day] = { code:val, stationId: WORKING_CODES().includes(val) ? prev.stationId : null };
       save('shifts');
       renderTurni(); renderOreExtra(); renderDashboard();
     });
@@ -1529,12 +1579,12 @@ function renderTurni(){
       renderDashboard();
     });
   });
-  document.getElementById('turni-legend').innerHTML = Object.entries(TURNO_DEF).filter(([c])=>c).map(([c,v])=>`${v.label}`).join(' · ');
+  document.getElementById('turni-legend').innerHTML = Object.entries(TURNO_DEF()).filter(([c])=>c).map(([c,v])=>esc(v.label)).join(' · ');
 }
 function weeklyExtraFromTurni(){
   return state.staff.map(s=>{
     const days = state.shifts[s.id] || {};
-    const totalHours = DAYS.reduce((sum,d)=> sum + (TURNO_DEF[(days[d]||{}).code||''].hours||0), 0);
+    const totalHours = DAYS.reduce((sum,d)=> sum + CODE_HOURS((days[d]||{}).code||''), 0);
     const contracted = parseFloat(s.hours)||0;
     const extra = Math.max(0, totalHours - contracted);
     const under = contracted>0 ? Math.max(0, contracted-totalHours) : 0;
@@ -1559,6 +1609,144 @@ function renderOreExtra(){
     </table>
   `;
 }
+
+/* ============================= TURNI: servizi e tipi di turno ============================= */
+// Ricalcola le tabelle derivate e ridisegna tutto ciò che dipende dai servizi:
+// una sigla cambiata qui si vede subito nella griglia, nel fabbisogno e nelle quote.
+function afterShiftConfigChange(){
+  refreshShiftConfig();
+  SERVICES().forEach(sv=>{ if(!state.staffingNeeds[sv]) state.staffingNeeds[sv]=[]; });
+  renderServices(); renderShiftTypes(); renderNeeds(); renderQuotas(); renderTurni(); renderOreExtra();
+}
+
+function renderServices(){
+  const el = document.getElementById('service-list');
+  if(!state.services.length){ el.innerHTML = `<div class="empty">Nessun servizio: la cucina non ha momenti di lavoro definiti.</div>`; return; }
+  el.innerHTML = state.services.map((sv,i)=>{
+    const usato = state.shiftTypes.filter(t=>(t.services||[]).includes(sv.id)).map(t=>t.code);
+    return `
+    <div class="staff-card">
+      <div style="min-width:0;">
+        <input type="text" class="sv-name" data-id="${esc(sv.id)}" value="${esc(sv.name)}" style="font-weight:600;">
+        <div class="contact">${usato.length ? 'coperto dai turni: '+esc(usato.join(', ')) : '⚠ nessun turno lo copre'}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <button class="btn ghost small sv-up" data-i="${i}" ${i===0?'disabled':''}>▲</button>
+        <button class="btn ghost small sv-del" data-id="${esc(sv.id)}" style="color:var(--alert);">Elimina</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.sv-name').forEach(inp=>inp.addEventListener('change', ()=>{
+    const sv = state.services.find(x=>x.id===inp.dataset.id);
+    const nome = inp.value.trim();
+    if(!nome){ toast('Il servizio deve avere un nome'); renderServices(); return; }
+    sv.name = nome; save('services'); afterShiftConfigChange(); toast('Servizio rinominato');
+  }));
+  el.querySelectorAll('.sv-up').forEach(b=>b.addEventListener('click', ()=>{
+    const i = parseInt(b.dataset.i);
+    [state.services[i-1], state.services[i]] = [state.services[i], state.services[i-1]];
+    save('services'); afterShiftConfigChange();
+  }));
+  el.querySelectorAll('.sv-del').forEach(b=>b.addEventListener('click', ()=>{
+    const sv = state.services.find(x=>x.id===b.dataset.id);
+    const turni = state.shiftTypes.filter(t=>(t.services||[]).includes(sv.id));
+    const righe = (state.staffingNeeds[sv.id]||[]).length;
+    if(!confirm(`Eliminare il servizio "${sv.name}"?\n\n`
+      + (turni.length ? `Verrà tolto da ${turni.length} tipo/i di turno (${turni.map(t=>t.code).join(', ')}).\n` : '')
+      + (righe ? `Verranno perse ${righe} righe di fabbisogno.\n` : '')
+      + '\nI turni già assegnati nella griglia restano come sono.')) return;
+    state.services = state.services.filter(x=>x.id!==sv.id);
+    state.shiftTypes.forEach(t=>{ t.services = (t.services||[]).filter(x=>x!==sv.id); });
+    delete state.staffingNeeds[sv.id];
+    save('services'); save('shiftTypes'); save('staffingNeeds');
+    afterShiftConfigChange(); toast('Servizio eliminato');
+  }));
+}
+
+document.getElementById('service-add-btn').addEventListener('click', ()=>{
+  const inp = document.getElementById('service-name-input');
+  const nome = inp.value.trim();
+  if(!nome){ toast('Serve un nome'); return; }
+  state.services.push({ id: uid(), name: nome });
+  save('services'); inp.value = '';
+  afterShiftConfigChange(); toast('Servizio aggiunto');
+});
+
+function renderShiftTypes(){
+  const el = document.getElementById('shifttype-list');
+  if(!state.shiftTypes.length){ el.innerHTML = `<div class="empty">Nessun tipo di turno: il generatore non ha niente da assegnare.</div>`; return; }
+  el.innerHTML = state.shiftTypes.map(t=>`
+    <div class="panel" style="background:var(--bg-elev2);padding:12px;margin-bottom:10px;">
+      <div class="grid3">
+        <div><label>Sigla</label><input type="text" class="st-code" data-id="${esc(t.id)}" value="${esc(t.code)}" maxlength="4" style="text-transform:uppercase;"></div>
+        <div><label>Orario</label><input type="text" class="st-label" data-id="${esc(t.id)}" value="${esc(t.label)}" placeholder="es. 9:00–17:00"></div>
+        <div><label>Ore</label><input type="number" step="0.5" min="0" class="st-hours" data-id="${esc(t.id)}" value="${t.hours}"></div>
+      </div>
+      <label>Servizi coperti</label>
+      <div class="chip-toggle st-services" data-id="${esc(t.id)}">
+        ${state.services.map(sv=>`<button type="button" data-sv="${esc(sv.id)}" class="${(t.services||[]).includes(sv.id)?'on':''}">${esc(sv.name)}</button>`).join('')
+          || '<span class="small-note">Crea prima i servizi</span>'}
+      </div>
+      ${(t.services||[]).length>1 ? `<p class="small-note" style="margin-top:4px;">Turno spezzato: una persona sola copre ${(t.services||[]).length} servizi.</p>` : ''}
+      ${!(t.services||[]).length ? `<p class="small-note" style="margin-top:4px;color:var(--alert);">⚠ Non copre nessun servizio: il generatore non lo userà mai.</p>` : ''}
+      <button class="btn ghost small st-del" data-id="${esc(t.id)}" style="margin-top:8px;color:var(--alert);">Elimina turno</button>
+    </div>`).join('');
+
+  const salva = ()=>{ save('shiftTypes'); afterShiftConfigChange(); };
+
+  el.querySelectorAll('.st-code').forEach(inp=>inp.addEventListener('change', ()=>{
+    const t = state.shiftTypes.find(x=>x.id===inp.dataset.id);
+    const nuovo = inp.value.trim().toUpperCase();
+    if(!nuovo){ toast('La sigla non può essere vuota'); renderShiftTypes(); return; }
+    if(SPECIAL_CODES[nuovo]){ toast(`"${nuovo}" è riservata (${SPECIAL_CODES[nuovo].label})`); renderShiftTypes(); return; }
+    if(state.shiftTypes.some(x=>x.id!==t.id && x.code===nuovo)){ toast(`La sigla "${nuovo}" è già usata`); renderShiftTypes(); return; }
+    // La sigla è salvata dentro i turni già assegnati e dentro le quote: va
+    // propagata, altrimenti quei dati puntano a un turno che non esiste più.
+    const vecchio = t.code;
+    t.code = nuovo;
+    Object.values(state.shifts).forEach(giorni=>{
+      Object.values(giorni).forEach(cell=>{ if(cell && cell.code===vecchio) cell.code = nuovo; });
+    });
+    state.staff.forEach(s=>(s.weeklyQuota||[]).forEach(g=>{
+      g.codes = (g.codes||[]).map(c=> c===vecchio ? nuovo : c);
+    }));
+    save('shifts'); save('staff'); salva();
+    toast(`Sigla aggiornata ovunque: ${vecchio} → ${nuovo}`);
+  }));
+  el.querySelectorAll('.st-label').forEach(inp=>inp.addEventListener('change', ()=>{
+    state.shiftTypes.find(x=>x.id===inp.dataset.id).label = inp.value.trim(); salva();
+  }));
+  el.querySelectorAll('.st-hours').forEach(inp=>inp.addEventListener('change', ()=>{
+    state.shiftTypes.find(x=>x.id===inp.dataset.id).hours = parseFloat(inp.value)||0; salva();
+  }));
+  el.querySelectorAll('.st-services button').forEach(b=>b.addEventListener('click', ()=>{
+    const t = state.shiftTypes.find(x=>x.id===b.closest('.st-services').dataset.id);
+    const sv = b.dataset.sv;
+    t.services = t.services || [];
+    if(t.services.includes(sv)) t.services = t.services.filter(x=>x!==sv);
+    else t.services.push(sv);
+    salva();
+  }));
+  el.querySelectorAll('.st-del').forEach(b=>b.addEventListener('click', ()=>{
+    const t = state.shiftTypes.find(x=>x.id===b.dataset.id);
+    const inQuota = state.staff.filter(s=>(s.weeklyQuota||[]).some(g=>(g.codes||[]).includes(t.code)));
+    if(!confirm(`Eliminare il turno "${t.code} · ${t.label}"?\n\n`
+      + (inQuota.length ? `È usato nelle quote di: ${inQuota.map(s=>s.name).join(', ')}.\n` : '')
+      + 'I turni già assegnati nella griglia restano, ma la sigla non sarà più selezionabile.')) return;
+    state.shiftTypes = state.shiftTypes.filter(x=>x.id!==t.id);
+    state.staff.forEach(s=>(s.weeklyQuota||[]).forEach(g=>{ g.codes = (g.codes||[]).filter(c=>c!==t.code); }));
+    save('shiftTypes'); save('staff'); salva(); toast('Tipo di turno eliminato');
+  }));
+}
+
+document.getElementById('shifttype-add-btn').addEventListener('click', ()=>{
+  // Prima sigla libera: si cambia subito, ma non blocca chi vuole solo aggiungere.
+  let code = 'T1', n = 1;
+  while(state.shiftTypes.some(t=>t.code===code) || SPECIAL_CODES[code]) code = 'T'+(++n);
+  state.shiftTypes.push({ id: uid(), code, label:'da compilare', hours: 8, services: [] });
+  save('shiftTypes'); afterShiftConfigChange(); toast('Turno aggiunto — dagli una sigla e i servizi');
+});
 
 /* ============================= TURNI: stazioni ============================= */
 function renderStations(){
@@ -1592,11 +1780,11 @@ document.getElementById('station-add-btn').addEventListener('click', ()=>{
 function renderNeeds(){
   const el = document.getElementById('needs-panel');
   if(!state.stations.length){ el.innerHTML = `<div class="empty">Crea prima le stazioni.</div>`; return; }
-  el.innerHTML = SERVICES.map(sv=>{
+  el.innerHTML = SERVICES().map(sv=>{
     const rows = state.staffingNeeds[sv]||[];
     return `
     <div class="panel">
-      <h3>${SERVICE_LABELS[sv]}</h3>
+      <h3>${esc(SERVICE_LABEL(sv))}</h3>
       <div id="needs-rows-${sv}">
         ${rows.map((r,i)=>`
           <div class="ing-row" data-i="${i}" style="grid-template-columns:2fr 1fr auto;">
@@ -1628,7 +1816,8 @@ function renderNeeds(){
 }
 
 /* ============================= TURNI: quote settimanali per persona ============================= */
-const QUOTA_CODES = ['C','P','S','SP','R'];
+// Codici selezionabili in una quota: i turni di lavoro configurati, più il Riposo.
+const QUOTA_CODES = () => WORKING_CODES().concat([REST_CODE]);
 function renderQuotas(){
   const el = document.getElementById('quota-panel');
   if(!state.staff.length){ el.innerHTML = `<div class="empty">Aggiungi prima persone alla brigata.</div>`; return; }
@@ -1651,7 +1840,7 @@ function renderQuotas(){
               <button type="button" class="q-rm" data-staff="${s.id}" data-i="${i}">✕ Rimuovi gruppo</button>
             </div>
             <div class="chip-toggle q-codes" data-staff="${s.id}" data-i="${i}">
-              ${QUOTA_CODES.map(c=>`<button type="button" data-c="${c}" class="${(g.codes||[]).includes(c)?'on':''}">${c}</button>`).join('')}
+              ${QUOTA_CODES().map(c=>`<button type="button" data-c="${esc(c)}" title="${esc(CODE_LABEL(c))}" class="${(g.codes||[]).includes(c)?'on':''}">${esc(c)}</button>`).join('')}
             </div>
             <p class="small-note" style="margin-top:4px;">Se selezioni più codici (es. P e S), ad ogni turno di questo gruppo verrà scelto casualmente uno dei due.</p>
           </div>`).join('')}
@@ -1712,7 +1901,7 @@ function generateRandomShifts(){
   const unqualified = state.staff.filter(s=> !(s.stations&&s.stations.length));
   if(unqualified.length){ toast('Attenzione: senza stazioni assegnate, '+unqualified.map(s=>s.name).join(', ')+' non potranno coprire nessun fabbisogno'); }
 
-  const { newShifts, shortfalls, extras } = computeShifts(state.staff, state.staffingNeeds);
+  const { newShifts, shortfalls, extras } = computeShifts(state.staff, state.staffingNeeds, {config: refreshShiftConfig()});
   state.shifts = newShifts;
   save('shifts');
   renderTurni(); renderOreExtra(); renderDashboard();
@@ -1732,7 +1921,7 @@ function generateRandomShifts(){
       const st = state.stations.find(x=>x.id===sf.stationId);
       const key = sf.day;
       byDay[key] = byDay[key] || [];
-      byDay[key].push(`${SERVICE_LABELS[sf.service]} · ${st?st.name:'—'} (mancano ${sf.missing})`);
+      byDay[key].push(`${esc(SERVICE_LABEL(sf.service))} · ${st?st.name:'—'} (mancano ${sf.missing})`);
     });
     html += `<div class="alert-box">⚠ Anche assegnando turni extra, restano postazioni scoperte perché nessun qualificato è libero quel giorno:<br>` +
       Object.entries(byDay).map(([day,lines])=>`<b>${day}</b>: ${lines.join(' · ')}`).join('<br>') +
