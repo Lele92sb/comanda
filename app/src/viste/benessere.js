@@ -31,7 +31,7 @@ export function renderWbSummary(){
   el.innerHTML = Object.entries(byStaff).map(([id,tot])=>{
     const name = (state.staff.find(s=>s.id===id)||{}).name || '—';
     const over = tot>48;
-    return `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;"><span>${esc(name)}</span><span style="font-family:var(--font-mono);color:${over?'var(--alert)':'var(--sage)'};">${tot.toFixed(1)}h ${over?'⚠':'✓'}</span></div>`;
+    return `<div class="list-row"><span>${esc(name)}</span><span class="mono" style="color:${over?'var(--alert)':'var(--sage)'};">${tot.toFixed(1)}h ${over?'⚠':'✓'}</span></div>`;
   }).join('');
 }
 export function renderWbTips(){

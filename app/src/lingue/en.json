@@ -107,5 +107,9 @@
   "Piatti in ricettario": "Dishes on file",
   "Persone in brigata": "People on the team",
   "Menu attivi": "Active menus",
-  "Nessun turno assegnato per oggi ({giorno})": "No shifts scheduled for today ({giorno})"
+  "Nessun turno assegnato per oggi ({giorno})": "No shifts scheduled for today ({giorno})",
+  "titolare": "owner",
+  "può modificare": "can edit",
+  "sola lettura": "read only",
+  "Cambia il tuo nome": "Change your name"
 }

@@ -38,7 +38,7 @@ export function renderDashboard(){
   shiftsEl.innerHTML = todayShifts.length
     ? todayShifts.map(t=>{
         const st = state.stations.find(s=>s.id===t.stationId);
-        return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;"><span>${esc(t.name)}</span><span style="font-family:var(--font-mono);color:var(--copper-light);">${esc(CODE_LABEL(t.code))}${st?' · '+esc(st.name):''}</span></div>`;
+        return `<div class="list-row"><span>${esc(t.name)}</span><span class="mono text-accent">${esc(CODE_LABEL(t.code))}${st?' · '+esc(st.name):''}</span></div>`;
       }).join('')
     : `<div class="empty">${esc(t('Nessun turno assegnato per oggi ({giorno})',
         {giorno: parseISO(todayKey).toLocaleDateString(lingua(), {weekday:'long', day:'numeric', month:'long'})}))}</div>`;

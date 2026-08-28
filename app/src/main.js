@@ -49,15 +49,21 @@ window.__comanda = {
 
 /* ============================= LINGUA ============================= */
 async function preparaLingua(){
-  const sel = document.getElementById('ab-lingua');
-  sel.innerHTML = LINGUE.map(l =>
-    `<option value="${l.codice}" ${l.codice===lingua()?'selected':''}>${l.nome}</option>`).join('');
-  sel.addEventListener('change', async e => {
-    await caricaLingua(e.target.value);
+  const box = document.getElementById('ab-lingua');
+  // Due sigle affiancate invece di un menu: con due sole lingue, un menu
+  // costerebbe un clic in più e occuperebbe il triplo dello spazio.
+  box.innerHTML = LINGUE.map(l =>
+    `<button type="button" data-lingua="${l.codice}" title="${esc(l.nome)}"
+             aria-pressed="${l.codice===lingua()}">${l.codice.toUpperCase()}</button>`).join('');
+
+  box.querySelectorAll('[data-lingua]').forEach(b => b.addEventListener('click', async () => {
+    if(b.dataset.lingua === lingua()) return;
+    await caricaLingua(b.dataset.lingua);
     // Ricarico invece di ritradurre a caldo: mezza app è disegnata da
     // JavaScript, e ridisegnarla pezzo per pezzo lascerebbe testi misti.
     location.reload();
-  });
+  }));
+
   await caricaLingua(lingua());
   traduciMarkup();
   document.documentElement.lang = lingua();

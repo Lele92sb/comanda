@@ -1,3 +1,4 @@
+import { t } from '../core/lingua.ts';
 import { chiediTesto, conferma, esc, toast } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
 import { startApp } from '../main.js';
@@ -162,18 +163,23 @@ export function renderAccountBar(){
   // continuo, e passare dalla schermata iniziale ogni volta è una tortura.
   const sel = document.getElementById('ab-kitchen-sel');
   const nome = document.getElementById('ab-kitchen');
-  if(Cloud.memberships.length > 1){
+  // La visibilità passa dalle classi: .hidden è marcata !important e uno
+  // style.display non riuscirebbe a scavalcarla.
+  const piùCucine = Cloud.memberships.length > 1;
+  if(piùCucine){
     sel.innerHTML = Cloud.memberships.map(m=>
       `<option value="${esc(m.kitchen.id)}" ${m.kitchen.id===Cloud.kitchen.id?'selected':''}>${esc(m.kitchen.name)}</option>`).join('');
-    sel.style.display = ''; nome.style.display = 'none';
   } else {
-    sel.style.display = 'none'; nome.style.display = '';
     nome.textContent = Cloud.kitchen.name;
   }
+  sel.classList.toggle('hidden', !piùCucine);
+  nome.classList.toggle('hidden', piùCucine);
+
   // Il nome scelto, se c'è: l'email è lunga e non dice niente a colpo d'occhio.
   document.getElementById('ab-email').textContent = Cloud.myDisplayName || Cloud.user.email;
   const badge = document.getElementById('ab-role');
-  badge.textContent = Cloud.role==='owner' ? 'titolare' : (Cloud.role==='editor' ? 'può modificare' : 'sola lettura');
+  badge.textContent = Cloud.role==='owner' ? t('titolare')
+                    : (Cloud.role==='editor' ? t('può modificare') : t('sola lettura'));
   badge.className = 'role-badge' + (Cloud.role==='viewer' ? ' viewer' : '');
   document.getElementById('ab-team').classList.toggle('hidden', !Cloud.isOwner());
 }

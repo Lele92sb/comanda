@@ -135,8 +135,11 @@
 .prose{font-size:var(--text-md);line-height:1.6;}
 
 /* Riga di un elenco semplice (turni di oggi, ore per persona): etichetta a
-   sinistra, valore a destra, separate da una linea. */
-.list-row{display:flex;justify-content:space-between;padding:var(--space-1) 0;border-bottom:1px solid var(--line);font-size:var(--text-md);}
+   sinistra, valore a destra, separate da una linea.
+   Il gap non è decorativo: su schermo stretto il valore va a capo e senza
+   spazio si attacca al nome — "MarcoP · Pranzo 9:00". */
+.list-row{display:flex;justify-content:space-between;gap:var(--space-3);
+  padding:var(--space-1) 0;border-bottom:1px solid var(--line);font-size:var(--text-md);}
 
 /* Codice da leggere o dettare a voce (invito, sigla). */
 .code-inline{font-family:var(--font-mono);font-size:15px;letter-spacing:2px;color:var(--copper-light);}
@@ -326,11 +329,66 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .role-badge.viewer{background:rgba(140,122,78,0.2);color:var(--brass);}
 .invite-code{font-family:var(--font-mono);font-size:17px;letter-spacing:3px;background:var(--bg-elev2);border:1px dashed var(--copper);border-radius:6px;padding:12px;text-align:center;color:var(--copper-light);margin:8px 0;}
 
-#account-bar{display:none;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;}
-#account-bar .who{font-family:var(--font-mono);font-size:10.5px;color:var(--brass);display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
-#account-bar .acts{display:flex;gap:6px;}
-#account-bar button{background:transparent;border:1px solid var(--line-strong);color:var(--brass);font-family:var(--font-mono);font-size:10px;letter-spacing:0.5px;text-transform:uppercase;padding:4px 9px;border-radius:20px;}
+#account-bar{display:none;justify-content:space-between;align-items:center;gap:var(--space-3);margin-top:var(--space-2);flex-wrap:wrap;}
+#account-bar .who{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--brass);display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;min-width:0;}
+#account-bar .acts{display:flex;align-items:center;gap:var(--space-1);flex-wrap:wrap;}
+/* Altezza unica per ogni controllo della barra: select, pulsanti e sigle
+   della lingua. Senza, ognuno prende la sua e la fila risulta storta. */
+#account-bar button,
+#account-bar select,
+#account-bar .lingua-scelta{ height:26px; box-sizing:border-box; }
+
+#account-bar button{
+  background:transparent;border:1px solid var(--line-strong);color:var(--brass);
+  font-family:var(--font-mono);font-size:10px;letter-spacing:0.5px;text-transform:uppercase;
+  padding:0 10px;border-radius:var(--radius-pill);
+  /* Senza questo l'etichetta va a capo dentro il pulsante e la barra si
+     sfascia: "Cambia cucina" diventava due righe dentro un bottone tondo. */
+  white-space:nowrap;line-height:1;
+}
 #account-bar button:hover{border-color:var(--copper);color:var(--paper);}
+
+/* Il selettore della cucina non deve prendersi tutta la riga come gli altri
+   select dell'app: qui sta in una barra, non in un modulo. */
+#account-bar select{
+  width:auto;max-width:190px;padding:0 8px;font-size:var(--text-xs);
+  font-family:var(--font-mono);border-radius:var(--radius-pill);
+}
+
+/* Il nome è cliccabile: la matita lo dice senza bisogno di un'etichetta. */
+#account-bar .ab-nome{
+  text-transform:none;letter-spacing:0;border-color:transparent;
+  display:inline-flex;align-items:center;gap:5px;padding:0 8px;max-width:220px;
+}
+#account-bar .ab-nome #ab-email{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#account-bar .ab-nome .matita{opacity:0.5;font-size:11px;}
+#account-bar .ab-nome:hover{border-color:var(--line-strong);}
+#account-bar .ab-nome:hover .matita{opacity:1;}
+
+/* Lingua: due sigle affiancate, non un menu a tendina. Sono due opzioni, e
+   un menu per due opzioni costa un clic in più per niente. */
+.lingua-scelta{display:inline-flex;border:1px solid var(--line-strong);border-radius:var(--radius-pill);overflow:hidden;}
+.lingua-scelta button{
+  border:none !important;border-radius:0 !important;padding:0 9px !important;
+  min-width:34px;text-align:center;height:100% !important;
+}
+.lingua-scelta button + button{border-left:1px solid var(--line-strong) !important;}
+.lingua-scelta button[aria-pressed="true"]{background:var(--copper);color:#1d1b18;font-weight:700;}
+.lingua-scelta button[aria-pressed="true"]:hover{color:#1d1b18;}
+
+/* Sul telefono l'intestazione è appiccicata in alto e ruba schermo alla
+   griglia dei turni, che è quello che la brigata viene a guardare. Qui si
+   stringe: meno aria e controlli più piccoli. */
+@media (max-width:560px){
+  header.top{padding:14px 16px 10px;}
+  header.top .brand{font-size:21px;}
+  header.top .sub{display:none;}
+  #account-bar{gap:var(--space-2);margin-top:var(--space-2);}
+  #account-bar button, #account-bar select, #account-bar .lingua-scelta{height:24px;}
+  #account-bar button{padding:0 8px;font-size:9.5px;}
+  #account-bar select{max-width:150px;}
+  #account-bar .ab-nome{max-width:150px;}
+}
 
 /* In sola lettura i comandi di modifica restano visibili ma spenti: chi guarda
    capisce che quella funzione esiste, e che a lui non è concessa. */

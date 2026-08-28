@@ -16,17 +16,22 @@
     <div id="staging-badge" style="display:none;font-family:var(--font-mono);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#1d1b18;background:var(--copper-light);padding:3px 8px;border-radius:20px;margin-top:6px;font-weight:700;" data-t>⚠ AMBIENTE DI TEST — dati separati da quelli reali</div>
     <div id="account-bar">
       <div class="who">
-        <select id="ab-kitchen-sel" style="display:none;width:auto;padding:3px 6px;font-size:11px;"></select>
+        <select id="ab-kitchen-sel" class="hidden"></select>
         <span id="ab-kitchen"></span>
         <span id="ab-role" class="role-badge"></span>
-        <span id="ab-email"></span>
+        <!-- Il nome è il pulsante: cliccarlo lo cambia. Un pulsante separato
+             "Il tuo nome" non diceva a cosa servisse. -->
+        <button id="ab-rename" class="ab-nome" title="Cambia il tuo nome" data-t-title>
+          <span id="ab-email"></span><span class="matita" aria-hidden="true">✎</span>
+        </button>
       </div>
       <div class="acts">
-        <select id="ab-lingua" title="Lingua" data-t-title></select>
-        <button id="ab-rename" data-t>Il tuo nome</button>
         <button id="ab-team" class="hidden" data-t>Squadra</button>
         <button id="ab-switch" data-t>Cambia cucina</button>
         <button id="ab-logout" data-t>Esci</button>
+        <!-- Ultimo a destra: è la posizione dove si cerca, ed è una scelta
+             che si fa una volta e poi si dimentica. -->
+        <div class="lingua-scelta" id="ab-lingua" role="group" aria-label="Lingua"></div>
       </div>
     </div>
   </header>
