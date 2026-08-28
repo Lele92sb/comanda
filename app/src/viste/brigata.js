@@ -101,7 +101,7 @@ async function openStaffForm(existing){
         <option value="">— nessuno: le richieste le inserisci tu per lui —</option>
         ${membri.map(m=>`<option value="${esc(m.user_id)}" ${s.userId===m.user_id?'selected':''}>${esc(m.display_name||m.email||'membro')}</option>`).join('')}
       </select>
-      <p class="small-note">Collegando la persona al suo account potrà inviare da sola ferie e richieste di riposo.</p>` : ''}
+      <p class="small-note">Collega questa persona al suo account per farle inviare da sola ferie e richieste di riposo, e per prendere la sua email da lì. Chi non ha un account resta in brigata e nei turni comunque: lascia "nessuno" e le richieste le inserisci tu per lui.</p>` : ''}
       <div class="row gap-3 mt-4">
         <button class="btn" id="s-save">Salva</button>
         <button class="btn ghost" id="s-cancel">Annulla</button>
@@ -110,6 +110,21 @@ async function openStaffForm(existing){
   `;
   document.querySelectorAll('#s-stations button').forEach(b=> b.addEventListener('click', ()=> b.classList.toggle('on')));
   document.getElementById('s-cancel').addEventListener('click', ()=> holder.innerHTML='');
+  // L'email di chi ha un account nella cucina è già qui: la porta
+  // Cloud.listMembers() insieme al nome, e il database la manda solo al
+  // titolare (policy members_select). Si compila da sola SOLO se il campo è
+  // vuoto: quella scritta a mano vince sempre, e staccare l'account non
+  // cancella niente. Si riempie alla selezione e non al salvataggio, così il
+  // titolare la vede comparire e può correggerla prima di salvare.
+  const selUser = document.getElementById('s-user');
+  if(selUser) selUser.addEventListener('change', ()=>{
+    const campoEmail = document.getElementById('s-email');
+    if(campoEmail.value.trim()) return;
+    const m = membri.find(x=>x.user_id === selUser.value);
+    if(!m || !m.email) return;
+    campoEmail.value = m.email;
+    toast('Email presa dall\'account collegato');
+  });
   document.getElementById('s-save').addEventListener('click', ()=>{
     const name = document.getElementById('s-name').value.trim();
     if(!name){ toast('Serve un nome'); return; }
