@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite build && wrangler pages dev dist --port 4173",
-    "test": "node --test tests/*.test.js",
+    "test": "node --experimental-strip-types --test tests/*.test.js",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",
+    "fast-xml-parser": "^5.11.1",
     "node-forge": "^1.4.0"
   },
   "type": "module"

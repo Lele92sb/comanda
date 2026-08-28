@@ -1,8 +1,8 @@
 import { Cloud, storageGet, storageSet } from '../lib/cloud.js';
 import { DAYS, DEFAULT_SERVICES, DEFAULT_SHIFT_TYPES, buildShiftConfig, monthDates, parseISO, weekDates } from '../lib/logic.js';
 /* ============================= STATE ============================= */
-export const STORE_KEYS = ['ingredients','subrecipes','recipes','menus','staff','shifts','knowledge','chatHistory','wellbeing','suppliers','stations','staffingNeeds','services','shiftTypes'];
-export let state = { ingredients:[], subrecipes:[], recipes:[], menus:[], staff:[], shifts:{}, knowledge:[], chatHistory:[], wellbeing:[], suppliers:[], stations:[], staffingNeeds:{}, services:[], shiftTypes:[] };
+export const STORE_KEYS = ['ingredients','subrecipes','recipes','menus','staff','shifts','knowledge','chatHistory','wellbeing','suppliers','stations','staffingNeeds','services','shiftTypes','importedInvoices'];
+export let state = { ingredients:[], subrecipes:[], recipes:[], menus:[], staff:[], shifts:{}, knowledge:[], chatHistory:[], wellbeing:[], suppliers:[], stations:[], staffingNeeds:{}, services:[], shiftTypes:[], importedInvoices:[] };
 
 export const ALLERGENS = ["Glutine","Crostacei","Uova","Pesce","Arachidi","Soia","Latte","Frutta a guscio","Sedano","Senape","Sesamo","Solfiti","Lupini","Molluschi"];
 // Periodo mostrato nella pianificazione: una settimana o un mese, ancorato a una

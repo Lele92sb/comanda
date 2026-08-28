@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    // Introduzione graduale: il JavaScript esistente convive con i moduli
+    // TypeScript nuovi, e non viene controllato finché non lo si converte.
+    // Convertire tutto in un colpo solo produrrebbe centinaia di errori da
+    // sistemare alla cieca, invece che modulo per modulo mentre ci si lavora.
+    "allowJs": true,
+    "checkJs": false,
+
+    "noEmit": true,
+    // I moduli si importano col percorso reale, estensione compresa: è ciò che
+    // il browser e Node caricano davvero, e toglie di mezzo la magia della
+    // risoluzione implicita.
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "types": ["vite/client"]
+  },
+  "include": ["app/src", "tests", "functions", "vite.config.js"]
+}
