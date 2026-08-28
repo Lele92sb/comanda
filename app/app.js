@@ -410,13 +410,13 @@ function renderIngredients(){
     return `
     <div class="staff-card">
       <div>
-        <div style="font-weight:600;">${esc(ing.name)} ${incomplete?'<span class="tag" style="background:var(--alert-soft);color:var(--alert);">prezzo mancante</span>':''}${ing.yieldEstimated?'<span class="tag" style="background:var(--sage-soft);color:var(--sage);">resa stimata AI</span>':''}</div>
+        <div class="bold">${esc(ing.name)} ${incomplete?'<span class="tag alert" >prezzo mancante</span>':''}${ing.yieldEstimated?'<span class="tag ok" >resa stimata AI</span>':''}</div>
         <div class="contact">${esc(ing.supplier||'—')} · € ${(parseFloat(ing.price)||0).toFixed(3)}/${esc(ing.unit)} acquisto · resa ${ing.yieldPct||100}% · scarto ${(100-(parseFloat(ing.yieldPct)||100)).toFixed(0)}%</div>
-        <div class="contact" style="color:var(--copper-light);">costo effettivo: € ${eff.toFixed(3)}/${esc(ing.unit)}</div>
+        <div class="contact text-accent" >costo effettivo: € ${eff.toFixed(3)}/${esc(ing.unit)}</div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:6px;">
+      <div class="col">
         <button class="btn ghost small" data-edit="${ing.id}">Modifica</button>
-        <button class="btn ghost small" data-del="${ing.id}" style="color:var(--alert);">Elimina</button>
+        <button class="btn ghost small text-alert" data-del="${ing.id}">Elimina</button>
       </div>
     </div>`;
   }).join('');
@@ -449,7 +449,7 @@ function openIngForm(existing){
         <div><label>Resa / parte edibile (%)</label><input type="number" step="1" min="1" max="100" id="i-yield" value="${ing.yieldPct}"></div>
       </div>
       <p class="small-note" id="i-preview">Costo effettivo: —</p>
-      <div style="display:flex;gap:10px;margin-top:10px;">
+      <div class="row gap-3 mt-3">
         <button class="btn" id="i-save">Salva</button>
         <button class="btn ghost" id="i-cancel">Annulla</button>
       </div>
@@ -496,14 +496,14 @@ function renderSuppliers(){
   el.innerHTML = state.suppliers.map(s=>`
     <div class="staff-card">
       <div>
-        <div style="font-weight:600;">${esc(s.name)}</div>
+        <div class="bold">${esc(s.name)}</div>
         <div class="contact">${s.piva? 'P.IVA '+esc(s.piva):''}</div>
         <div class="contact">${s.phone? '📞 '+esc(s.phone):''}${s.phone&&s.email?' · ':''}${s.email? '✉ '+esc(s.email):''}</div>
         <div class="contact">${esc(s.address||'')}</div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:6px;">
+      <div class="col">
         <button class="btn ghost small" data-edit="${s.id}">Modifica</button>
-        <button class="btn ghost small" data-del="${s.id}" style="color:var(--alert);">Elimina</button>
+        <button class="btn ghost small text-alert" data-del="${s.id}">Elimina</button>
       </div>
     </div>`).join('');
   el.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=> openSupplierForm(state.suppliers.find(s=>s.id===b.dataset.edit))));
@@ -525,7 +525,7 @@ function openSupplierForm(existing){
       </div>
       <label>Email</label><input type="email" id="sup-email" value="${esc(s.email)}">
       <label>Indirizzo</label><input type="text" id="sup-address" value="${esc(s.address)}">
-      <div style="display:flex;gap:10px;margin-top:14px;">
+      <div class="row gap-3 mt-4">
         <button class="btn" id="sup-save">Salva</button>
         <button class="btn ghost" id="sup-cancel">Annulla</button>
       </div>
@@ -703,15 +703,15 @@ function openSubForm(existing, prefill){
       <input type="text" id="sb-name" value="${esc(sub.name)}">
       <label>Componenti</label>
       <div id="sb-items"></div>
-      <button class="btn ghost small" id="sb-add-item" type="button" style="margin-top:4px;">+ Componente</button>
-      <div class="grid2" style="margin-top:10px;">
+      <button class="btn ghost small mt-1" id="sb-add-item" type="button">+ Componente</button>
+      <div class="grid2 mt-3" >
         <div><label>Resa finale (quantità ottenuta dopo cottura/lavorazione)</label><input type="number" step="0.001" id="sb-yieldqty" value="${sub.yieldQty}"></div>
         <div><label>Unità resa</label><select id="sb-yieldunit"><option value="kg" ${sub.yieldUnit==='kg'?'selected':''}>kg</option><option value="l" ${sub.yieldUnit==='l'?'selected':''}>l</option><option value="pz" ${sub.yieldUnit==='pz'?'selected':''}>pz</option></select></div>
       </div>
       <label>Note (procedimento, calo peso previsto, ecc.)</label>
       <textarea id="sb-notes">${esc(sub.notes)}</textarea>
       <p class="small-note" id="sb-preview">—</p>
-      <div style="display:flex;gap:10px;margin-top:10px;">
+      <div class="row gap-3 mt-3">
         <button class="btn" id="sb-save">Salva sub-ricetta</button>
         <button class="btn ghost" id="sb-cancel">Annulla</button>
       </div>
@@ -818,7 +818,7 @@ function openDishForm(existing, prefill){
       <div class="chip-toggle" id="d-allergens">${ALLERGENS.map(a=>`<button type="button" data-a="${a}" class="${(d.allergens||[]).includes(a)?'on':''}">${a}</button>`).join('')}</div>
       <label>Componenti (ingredienti e/o sub-ricette — digita per cercare)</label>
       <div id="d-items"></div>
-      <button class="btn ghost small" id="d-add-item" type="button" style="margin-top:4px;">+ Componente</button>
+      <button class="btn ghost small mt-1" id="d-add-item" type="button">+ Componente</button>
       <label>Prezzo di vendita effettivo (€)</label>
       <input type="number" step="0.01" id="d-price" value="${d.priceActual}">
       <p class="small-note" id="d-preview">—</p>
@@ -828,8 +828,8 @@ function openDishForm(existing, prefill){
       <textarea id="d-notes">${esc(d.notes||'')}</textarea>
       <label>Foto del piatto (opzionale)</label>
       <input type="file" id="d-photo-input" accept="image/*">
-      <div id="d-photo-preview">${d.photo? `<img src="${d.photo}" style="max-width:140px;border-radius:6px;margin-top:8px;display:block;">`:''}</div>
-      <div style="display:flex;gap:10px;margin-top:14px;">
+      <div id="d-photo-preview">${d.photo? `<img src="${d.photo}" class="thumb">`:''}</div>
+      <div class="row gap-3 mt-4">
         <button class="btn" id="d-save">Salva piatto</button>
         <button class="btn ghost" id="d-cancel">Annulla</button>
       </div>
@@ -839,7 +839,7 @@ function openDishForm(existing, prefill){
   document.getElementById('d-photo-input').addEventListener('change', async (e)=>{
     const file = e.target.files[0]; if(!file) return;
     photoData = await resizeImageToDataUrl(file, 500, 0.7);
-    document.getElementById('d-photo-preview').innerHTML = `<img src="${photoData}" style="max-width:140px;border-radius:6px;margin-top:8px;display:block;">`;
+    document.getElementById('d-photo-preview').innerHTML = `<img src="${photoData}" class="thumb">`;
   });
   const itemsContainer = document.getElementById('d-items');
   renderItemRows(itemsContainer, items, null);
@@ -925,7 +925,7 @@ document.getElementById('btn-photo-sub').addEventListener('click', ()=>{ ocrTarg
 document.getElementById('dish-photo-input').addEventListener('change', async (e)=>{
   const file = e.target.files[0]; if(!file) return;
   const statusEl = document.getElementById('ocr-status');
-  statusEl.style.display='block';
+  statusEl.classList.remove('hidden');
   statusEl.textContent = 'Sto leggendo la ricetta dalla foto…';
   try{
     const dataUrl = await resizeImageToDataUrl(file, 1500, 0.85);
@@ -962,7 +962,7 @@ document.getElementById('dish-photo-input').addEventListener('change', async (e)
       return {kind:'ingredient', refId:match.id, qty:qtyFinale, unit:itemUnit};
     }).filter(Boolean);
     if(createdCount) await save('ingredients');
-    statusEl.style.display='none';
+    statusEl.classList.add('hidden');
     const subTarget = ocrTarget === 'sub';
     switchTab('ricette');
     document.querySelectorAll('#ricette-subtabs button').forEach(x=>x.classList.toggle('active', x.dataset.sub===(subTarget?'subricette':'piatti')));
@@ -980,7 +980,7 @@ document.getElementById('dish-photo-input').addEventListener('change', async (e)
   }catch(err){
     statusEl.textContent = err.userFacing ? err.message
       : 'Non sono riuscito a leggere la ricetta dalla foto. Riprova con una foto più a fuoco.';
-    setTimeout(()=> statusEl.style.display='none', 6000);
+    setTimeout(()=> statusEl.classList.add('hidden'), 6000);
   }
   e.target.value = '';
 });
@@ -1021,7 +1021,7 @@ document.getElementById('btn-new-menu').addEventListener('click', ()=>{
       <input type="text" id="m-name" placeholder="es. Menu degustazione estivo">
       <label>Seleziona le portate</label>
       <div class="chip-toggle" id="m-recipes">${state.recipes.map(r=>`<button type="button" data-id="${r.id}">${esc(r.name)}</button>`).join('')}</div>
-      <div style="display:flex;gap:10px;margin-top:14px;">
+      <div class="row gap-3 mt-4">
         <button class="btn" id="m-save">Salva menu</button>
         <button class="btn ghost" id="m-cancel">Annulla</button>
       </div>
@@ -1045,14 +1045,14 @@ function renderStaffList(){
   el.innerHTML = state.staff.map(s=>`
     <div class="staff-card">
       <div>
-        <div style="font-weight:600;">${esc(s.name)}</div>
+        <div class="bold">${esc(s.name)}</div>
         <div class="contact">${esc(s.role)} · ${s.hours||'—'}h/sett contrattuali</div>
         <div class="contact">${s.phone? '📞 '+esc(s.phone):''}${s.phone&&s.email?' · ':''}${s.email? '✉ '+esc(s.email):''}</div>
         <div class="contact">🍳 ${(s.stations&&s.stations.length) ? s.stations.map(id=>{ const st=state.stations.find(x=>x.id===id); return st?esc(st.name):null; }).filter(Boolean).join(', ') : 'nessuna stazione assegnata'}</div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:6px;">
+      <div class="col">
         <button class="btn ghost small" data-edit="${s.id}">Modifica</button>
-        <button class="btn ghost small" data-del="${s.id}" style="color:var(--alert);">Rimuovi</button>
+        <button class="btn ghost small text-alert" data-del="${s.id}">Rimuovi</button>
       </div>
     </div>
   `).join('');
@@ -1103,7 +1103,7 @@ async function openStaffForm(existing){
         ${membri.map(m=>`<option value="${esc(m.user_id)}" ${s.userId===m.user_id?'selected':''}>${esc(m.display_name||m.email||'membro')}</option>`).join('')}
       </select>
       <p class="small-note">Collegando la persona al suo account potrà inviare da sola ferie e richieste di riposo.</p>` : ''}
-      <div style="display:flex;gap:10px;margin-top:14px;">
+      <div class="row gap-3 mt-4">
         <button class="btn" id="s-save">Salva</button>
         <button class="btn ghost" id="s-cancel">Annulla</button>
       </div>
@@ -1139,7 +1139,7 @@ function renderTurni(){
   el.innerHTML = `
     <div class="shift-scroll">
     <table class="shift-table">
-      <thead><tr><th class="name-col" style="text-align:left;">Persona</th>${dates.map(d=>{
+      <thead><tr><th class="name-col left" >Persona</th>${dates.map(d=>{
         const g = dayName(d), weekend = (g==='Sab'||g==='Dom');
         return `<th class="${d===oggi?'today':''} ${weekend?'weekend':''}">${g}<br>${parseISO(d).getDate()}</th>`;
       }).join('')}</tr></thead>
@@ -1155,7 +1155,7 @@ function renderTurni(){
                 <select class="shift-select ${cell.code}" data-staff="${s.id}" data-day="${d}">
                   ${Object.keys(TURNO_DEF()).map(code=>`<option value="${code}" ${cell.code===code?'selected':''}>${code||'—'}</option>`).join('')}
                 </select>
-                ${showStation ? `<select class="shift-station" data-staff="${s.id}" data-day="${d}" style="margin-top:3px;">
+                ${showStation ? `<select class="shift-station mt-1" data-staff="${s.id}" data-day="${d}">
                   <option value="">stazione</option>
                   ${qualified.map(st=>`<option value="${st.id}" ${cell.stationId===st.id?'selected':''}>${esc(st.name)}</option>`).join('')}
                 </select>`:''}
@@ -1237,13 +1237,13 @@ function renderServices(){
     const usato = state.shiftTypes.filter(t=>(t.services||[]).includes(sv.id)).map(t=>t.code);
     return `
     <div class="staff-card">
-      <div style="min-width:0;">
-        <input type="text" class="sv-name" data-id="${esc(sv.id)}" value="${esc(sv.name)}" style="font-weight:600;">
+      <div class="wrap-anywhere">
+        <input type="text" class="sv-name bold" data-id="${esc(sv.id)}" value="${esc(sv.name)}">
         <div class="contact">${usato.length ? 'coperto dai turni: '+esc(usato.join(', ')) : '⚠ nessun turno lo copre'}</div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:4px;">
+      <div class="col">
         <button class="btn ghost small sv-up" data-i="${i}" ${i===0?'disabled':''}>▲</button>
-        <button class="btn ghost small sv-del" data-id="${esc(sv.id)}" style="color:var(--alert);">Elimina</button>
+        <button class="btn ghost small sv-del text-alert" data-id="${esc(sv.id)}">Elimina</button>
       </div>
     </div>`;
   }).join('');
@@ -1279,7 +1279,7 @@ function renderServices(){
 function renderCopiaConfig(){
   const panel = document.getElementById('copia-config-panel');
   const altre = Cloud.enabled ? Cloud.altreCucine() : [];
-  panel.style.display = altre.length ? 'block' : 'none';
+  panel.classList.toggle('hidden', !altre.length);
   if(!altre.length) return;
   document.getElementById('copia-da').innerHTML =
     altre.map(k=>`<option value="${esc(k.id)}">${esc(k.name)}</option>`).join('');
@@ -1321,9 +1321,9 @@ function renderShiftTypes(){
   const el = document.getElementById('shifttype-list');
   if(!state.shiftTypes.length){ el.innerHTML = `<div class="empty">Nessun tipo di turno: il generatore non ha niente da assegnare.</div>`; return; }
   el.innerHTML = state.shiftTypes.map(t=>`
-    <div class="panel" style="background:var(--bg-elev2);padding:12px;margin-bottom:10px;">
+    <div class="panel subpanel" >
       <div class="grid3">
-        <div><label>Sigla</label><input type="text" class="st-code" data-id="${esc(t.id)}" value="${esc(t.code)}" maxlength="4" style="text-transform:uppercase;"></div>
+        <div><label>Sigla</label><input type="text" class="st-code upper" data-id="${esc(t.id)}" value="${esc(t.code)}" maxlength="4"></div>
         <div><label>Orario</label><input type="text" class="st-label" data-id="${esc(t.id)}" value="${esc(t.label)}" placeholder="es. 9:00–17:00"></div>
         <div><label>Ore</label><input type="number" step="0.5" min="0" class="st-hours" data-id="${esc(t.id)}" value="${t.hours}"></div>
       </div>
@@ -1332,9 +1332,9 @@ function renderShiftTypes(){
         ${state.services.map(sv=>`<button type="button" data-sv="${esc(sv.id)}" class="${(t.services||[]).includes(sv.id)?'on':''}">${esc(sv.name)}</button>`).join('')
           || '<span class="small-note">Crea prima i servizi</span>'}
       </div>
-      ${(t.services||[]).length>1 ? `<p class="small-note" style="margin-top:4px;">Turno spezzato: una persona sola copre ${(t.services||[]).length} servizi.</p>` : ''}
-      ${!(t.services||[]).length ? `<p class="small-note" style="margin-top:4px;color:var(--alert);">⚠ Non copre nessun servizio: il generatore non lo userà mai.</p>` : ''}
-      <button class="btn ghost small st-del" data-id="${esc(t.id)}" style="margin-top:8px;color:var(--alert);">Elimina turno</button>
+      ${(t.services||[]).length>1 ? `<p class="small-note mt-1" >Turno spezzato: una persona sola copre ${(t.services||[]).length} servizi.</p>` : ''}
+      ${!(t.services||[]).length ? `<p class="small-note mt-1 text-alert" >⚠ Non copre nessun servizio: il generatore non lo userà mai.</p>` : ''}
+      <button class="btn ghost small st-del mt-2 text-alert" data-id="${esc(t.id)}">Elimina turno</button>
     </div>`).join('');
 
   const salva = ()=>{ save('shiftTypes'); afterShiftConfigChange(); };
@@ -1398,8 +1398,8 @@ function renderStations(){
   if(!state.stations.length){ el.innerHTML = `<div class="empty">Nessuna stazione ancora.</div>`; return; }
   el.innerHTML = state.stations.map(st=>`
     <div class="staff-card">
-      <div style="font-weight:600;">${esc(st.name)}</div>
-      <button class="btn ghost small" data-del="${st.id}" style="color:var(--alert);">Elimina</button>
+      <div class="bold">${esc(st.name)}</div>
+      <button class="btn ghost small text-alert" data-del="${st.id}">Elimina</button>
     </div>`).join('');
   el.querySelectorAll('[data-del]').forEach(b=>{
     b.addEventListener('click', ()=>{
@@ -1439,7 +1439,7 @@ function renderNeeds(){
             <button type="button" class="need-rm" data-sv="${sv}" data-i="${i}">✕</button>
           </div>`).join('')}
       </div>
-      <button class="btn ghost small" data-addneed="${sv}" type="button" style="margin-top:4px;">+ Riga</button>
+      <button class="btn ghost small mt-1" data-addneed="${sv}" type="button">+ Riga</button>
     </div>`;
   }).join('');
   el.querySelectorAll('[data-addneed]').forEach(b=>{
@@ -1470,7 +1470,7 @@ function renderQuotas(){
     const total = quota.reduce((sum,g)=>sum+(parseInt(g.count)||0),0);
     return `
     <div class="panel">
-      <h3>${esc(s.name)} <span class="small-note" style="display:inline;">— totale ${total}/7</span></h3>
+      <h3>${esc(s.name)} <span class="small-note inline" >— totale ${total}/7</span></h3>
       <label>Stazioni qualificate</label>
       <div class="chip-toggle staff-station-chips" data-staff="${s.id}">
         ${state.stations.map(st=>`<button type="button" data-st="${st.id}" class="${(s.stations||[]).includes(st.id)?'on':''}">${esc(st.name)}</button>`).join('') || '<span class="small-note">Nessuna stazione creata</span>'}
@@ -1478,7 +1478,7 @@ function renderQuotas(){
       <label>Gruppi di turni</label>
       <div id="quota-groups-${s.id}">
         ${quota.map((g,i)=>`
-          <div class="panel" style="background:var(--bg-elev2);padding:10px;">
+          <div class="panel subpanel" >
             <div class="grid2">
               <input type="number" class="q-count" data-staff="${s.id}" data-i="${i}" value="${g.count}" min="0" placeholder="n. turni">
               <button type="button" class="q-rm" data-staff="${s.id}" data-i="${i}">✕ Rimuovi gruppo</button>
@@ -1486,10 +1486,10 @@ function renderQuotas(){
             <div class="chip-toggle q-codes" data-staff="${s.id}" data-i="${i}">
               ${QUOTA_CODES().map(c=>`<button type="button" data-c="${esc(c)}" title="${esc(CODE_LABEL(c))}" class="${(g.codes||[]).includes(c)?'on':''}">${esc(c)}</button>`).join('')}
             </div>
-            <p class="small-note" style="margin-top:4px;">Se selezioni più codici (es. P e S), ad ogni turno di questo gruppo verrà scelto casualmente uno dei due.</p>
+            <p class="small-note mt-1" >Se selezioni più codici (es. P e S), ad ogni turno di questo gruppo verrà scelto casualmente uno dei due.</p>
           </div>`).join('')}
       </div>
-      <button class="btn ghost small" data-addgroup="${s.id}" type="button" style="margin-top:6px;">+ Gruppo di turni</button>
+      <button class="btn ghost small mt-2" data-addgroup="${s.id}" type="button">+ Gruppo di turni</button>
     </div>`;
   }).join('');
 
@@ -1597,7 +1597,7 @@ async function renderRichieste(){
       state.staff.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')
       || '<option value="">Nessuno in brigata</option>'}</select>`;
   } else if(mia){
-    whoEl.innerHTML = `<p class="small-note" style="margin-top:0;">Richiesta a nome di <b>${esc(mia.name)}</b>.</p>`;
+    whoEl.innerHTML = `<p class="small-note mt-0" >Richiesta a nome di <b>${esc(mia.name)}</b>.</p>`;
   } else {
     whoEl.innerHTML = `<div class="alert-box">Non risulti collegato a nessuna persona della brigata: chiedi a chi gestisce la cucina di collegarti, così potrai inviare le tue richieste.</div>`;
   }
@@ -1629,16 +1629,16 @@ async function renderRichieste(){
                 : '<span class="role-badge viewer">in attesa</span>';
     return `
       <div class="staff-card">
-        <div style="min-width:0;">
-          <div style="font-weight:600;">${esc(nomeBrigata(r.staff_id))} — ${esc(dettaglio)}</div>
+        <div class="wrap-anywhere">
+          <div class="bold">${esc(nomeBrigata(r.staff_id))} — ${esc(dettaglio)}</div>
           <div class="contact">${esc(periodo)}${r.nota? ' · '+esc(r.nota):''}</div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+        <div class="col end">
           ${badge}
           ${sonoTitolare && r.stato==='in_attesa' ? `
             <button class="btn small req-ok" data-id="${esc(r.id)}">Approva</button>
             <button class="btn ghost small req-no" data-id="${esc(r.id)}">Rifiuta</button>` : ''}
-          <button class="btn ghost small req-del" data-id="${esc(r.id)}" style="color:var(--alert);">Elimina</button>
+          <button class="btn ghost small req-del text-alert" data-id="${esc(r.id)}">Elimina</button>
         </div>
       </div>`;
   };
@@ -1659,7 +1659,7 @@ async function renderRichieste(){
 }
 
 document.getElementById('req-tipo').addEventListener('change', e=>{
-  document.getElementById('req-servizi-wrap').style.display = e.target.value==='servizio' ? 'block' : 'none';
+  document.getElementById('req-servizi-wrap').classList.toggle('hidden', e.target.value!=='servizio');
 });
 document.getElementById('req-servizi').addEventListener('click', e=>{
   if(e.target.dataset.sv) e.target.classList.toggle('on');
@@ -1870,7 +1870,7 @@ async function sendChat(){
   save('chatHistory');
   input.value='';
   renderChat();
-  document.getElementById('chat-typing').style.visibility='visible';
+  document.getElementById('chat-typing').classList.remove('invisible');
   try{
     const data = await Cloud.ai({
       task: 'chat',
@@ -1882,7 +1882,7 @@ async function sendChat(){
   }catch(e){
     state.chatHistory.push({role:'assistant', content: e.userFacing ? e.message : 'C\'è stato un problema di connessione. Riprova tra poco.'});
   }
-  document.getElementById('chat-typing').style.visibility='hidden';
+  document.getElementById('chat-typing').classList.add('invisible');
   save('chatHistory');
   renderChat();
 }
@@ -1927,12 +1927,12 @@ const gateErr = document.getElementById('gate-error');
 function gateRender(lead, html){
   document.getElementById('gate-lead').textContent = lead;
   document.getElementById('gate-body').innerHTML = html;
-  gateErr.style.display = 'none';
+  gateErr.classList.add('hidden');
   gateEl.classList.add('show');
 }
 function gateError(msg){
   gateErr.textContent = msg;
-  gateErr.style.display = 'block';
+  gateErr.classList.remove('hidden');
 }
 // Gli errori tecnici di Supabase sono in inglese: in cucina non servono a nessuno.
 function humanError(e){
@@ -1955,11 +1955,11 @@ function screenSignIn(mode){
     <input type="email" id="g-email" autocomplete="email" placeholder="nome@ristorante.it">
     <label>Password</label>
     <input type="password" id="g-pass" autocomplete="${isNew?'new-password':'current-password'}" placeholder="${isNew?'almeno 6 caratteri':''}">
-    <button class="btn full" id="g-submit" style="margin-top:16px;">${isNew?'Crea account':'Entra'}</button>
-    <div style="text-align:center;margin-top:10px;">
+    <button class="btn full mt-4" id="g-submit">${isNew?'Crea account':'Entra'}</button>
+    <div class="center mt-3">
       <button class="gate-switch" id="g-switch">${isNew?'Ho già un account, accedi':'Non ho un account, creane uno'}</button>
     </div>
-    ${isNew?'':'<div style="text-align:center;"><button class="gate-switch" id="g-forgot">Ho dimenticato la password</button></div>'}
+    ${isNew?'':'<div class="center"><button class="gate-switch" id="g-forgot">Ho dimenticato la password</button></div>'}
   `);
 
   const submit = async ()=>{
@@ -1973,9 +1973,9 @@ function screenSignIn(mode){
         const { needsConfirmation } = await Cloud.signUp(email, pass);
         if(needsConfirmation){
           gateRender('Controlla la posta', `
-            <p style="font-size:13.5px;line-height:1.6;">Ti abbiamo inviato un'email a <b>${esc(email)}</b>.
+            <p class="prose">Ti abbiamo inviato un'email a <b>${esc(email)}</b>.
             Aprila e conferma l'indirizzo, poi torna qui e accedi.</p>
-            <button class="btn full" id="g-back" style="margin-top:16px;">Torna all'accesso</button>`);
+            <button class="btn full mt-4" id="g-back">Torna all'accesso</button>`);
           document.getElementById('g-back').addEventListener('click', ()=>screenSignIn('signin'));
           return;
         }
@@ -2010,25 +2010,25 @@ function screenKitchens(){
 
   gateRender(Cloud.memberships.length ? 'Scegli la cucina' : 'Nessuna cucina, ancora', `
     ${rows}
-    <div class="panel" style="margin-top:18px;">
+    <div class="panel mt-4" >
       <h3>Apri una nuova cucina</h3>
       <label>Nome della cucina</label>
       <input type="text" id="g-kname" placeholder="es. Trattoria del Porto">
       <label>Come ti chiamano in cucina</label>
       <input type="text" id="g-myname" placeholder="es. Emanuele, chef">
-      <button class="btn full" id="g-create" style="margin-top:12px;">Crea cucina</button>
+      <button class="btn full mt-3" id="g-create">Crea cucina</button>
     </div>
     <div class="panel">
       <h3>Entra con un codice d'invito</h3>
-      <p class="small-note" style="margin-top:0;">Te lo dà chi gestisce la cucina.</p>
+      <p class="small-note mt-0" >Te lo dà chi gestisce la cucina.</p>
       <label>Codice</label>
       <input type="text" id="g-code" placeholder="ABCD2345" style="text-transform:uppercase;letter-spacing:2px;">
       <label>Come ti chiamano in cucina</label>
       <input type="text" id="g-joinname" placeholder="es. Marco, secondo">
-      <p class="small-note" style="margin-top:4px;">Serve a chi gestisce la cucina per riconoscerti nell'elenco della squadra.</p>
-      <button class="btn ghost full" id="g-join" style="margin-top:10px;">Entra nella cucina</button>
+      <p class="small-note mt-1" >Serve a chi gestisce la cucina per riconoscerti nell'elenco della squadra.</p>
+      <button class="btn ghost full mt-3" id="g-join">Entra nella cucina</button>
     </div>
-    <div style="text-align:center;"><button class="gate-switch" id="g-out">Esci dall'account</button></div>
+    <div class="center"><button class="gate-switch" id="g-out">Esci dall'account</button></div>
   `);
 
   gateEl.querySelectorAll('.kitchen-row').forEach(b=>{
@@ -2054,9 +2054,9 @@ function screenBlocked(reason){
     ? 'Questa cucina è sospesa. I dati sono al sicuro e tornano disponibili appena viene riattivata.'
     : 'Il periodo di prova di questa cucina è terminato. I dati sono al sicuro e tornano disponibili appena viene attivata.';
   gateRender('Accesso sospeso', `
-    <p style="font-size:13.5px;line-height:1.6;">${testo}</p>
-    <button class="btn ghost full" id="g-other" style="margin-top:16px;">Scegli un'altra cucina</button>
-    <div style="text-align:center;"><button class="gate-switch" id="g-out2">Esci dall'account</button></div>
+    <p class="prose">${testo}</p>
+    <button class="btn ghost full mt-4" id="g-other">Scegli un'altra cucina</button>
+    <div class="center"><button class="gate-switch" id="g-out2">Esci dall'account</button></div>
   `);
   document.getElementById('g-other').addEventListener('click', ()=>{ Cloud.kitchen=null; screenKitchens(); });
   document.getElementById('g-out2').addEventListener('click', async ()=>{ await Cloud.signOut(); screenSignIn('signin'); });
@@ -2094,7 +2094,7 @@ function renderAccountBar(){
   const badge = document.getElementById('ab-role');
   badge.textContent = Cloud.role==='owner' ? 'titolare' : (Cloud.role==='editor' ? 'può modificare' : 'sola lettura');
   badge.className = 'role-badge' + (Cloud.role==='viewer' ? ' viewer' : '');
-  document.getElementById('ab-team').style.display = Cloud.isOwner() ? 'inline-block' : 'none';
+  document.getElementById('ab-team').classList.toggle('hidden', !Cloud.isOwner());
 }
 
 // I comandi di navigazione e l'assistente personale restano usabili anche in
@@ -2143,7 +2143,7 @@ function scadenzaTesto(iso){
 async function openTeam(){
   teamEl.classList.add('show');
   document.getElementById('team-kitchen').textContent = Cloud.kitchen.name;
-  document.getElementById('team-error').style.display = 'none';
+  document.getElementById('team-error').classList.add('hidden');
   document.getElementById('team-body').innerHTML = '<div class="empty">Carico…</div>';
   try{
     const [members, invites] = await Promise.all([Cloud.listMembers(), Cloud.listInvites()]);
@@ -2155,11 +2155,11 @@ async function openTeam(){
           const io = m.user_id === Cloud.user.id;
           const nome = m.display_name || m.email || 'Senza nome';
           return `
-          <div class="panel" style="background:var(--bg-elev2);padding:12px;margin-bottom:10px;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
-              <div style="min-width:0;">
-                <div style="font-weight:600;overflow-wrap:anywhere;">${esc(nome)}</div>
-                <div class="contact" style="overflow-wrap:anywhere;">${esc(m.email||'')}${
+          <div class="panel subpanel" >
+            <div class="row top between gap-3">
+              <div class="wrap-anywhere">
+                <div class="bold wrap-anywhere">${esc(nome)}</div>
+                <div class="contact wrap-anywhere" >${esc(m.email||'')}${
                   io ? ' · sei tu' : ' · dal ' + new Date(m.created_at).toLocaleDateString('it-IT')}</div>
               </div>
               ${io
@@ -2170,17 +2170,17 @@ async function openTeam(){
                      <option value="owner"  ${m.role==='owner'?'selected':''}>titolare</option>
                    </select>`}
             </div>
-            <div class="grid2" style="margin-top:8px;">
+            <div class="grid2 mt-2" >
               <input type="text" class="tm-name" data-u="${esc(m.user_id)}"
                      value="${esc(m.display_name||'')}" placeholder="nome in cucina, es. Marco secondo">
-              ${io ? '' : `<button class="btn ghost small tm-rm" data-u="${esc(m.user_id)}"
-                           data-n="${esc(nome)}" style="color:var(--alert);">Rimuovi dalla cucina</button>`}
+              ${io ? '' : `<button class="btn ghost small tm-rm text-alert" data-u="${esc(m.user_id)}"
+                           data-n="${esc(nome)}">Rimuovi dalla cucina</button>`}
             </div>
           </div>`;}).join('')}
       </div>
       <div class="panel">
         <h3>Invita qualcuno</h3>
-        <p class="small-note" style="margin-top:0;">Genera un codice e daglielo: lo inserisce al primo accesso ed entra con il permesso che scegli tu. Vale per una persona sola. Permesso e durata restano modificabili anche dopo averlo consegnato.</p>
+        <p class="small-note mt-0" >Genera un codice e daglielo: lo inserisce al primo accesso ed entra con il permesso che scegli tu. Vale per una persona sola. Permesso e durata restano modificabili anche dopo averlo consegnato.</p>
         <div class="grid2">
           <div>
             <label>Permesso</label>
@@ -2191,19 +2191,19 @@ async function openTeam(){
             <select id="inv-days">${DURATA_OPTIONS(14)}</select>
           </div>
         </div>
-        <button class="btn small full" id="inv-create" style="margin-top:12px;">Genera codice</button>
+        <button class="btn small full mt-3" id="inv-create">Genera codice</button>
         <div id="team-new-code"></div>
 
-        ${pending.length ? `<label style="margin-top:16px;">Codici ancora validi</label>` + pending.map(i=>`
-          <div class="panel" style="background:var(--bg-elev2);padding:10px;margin-bottom:8px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-              <span style="font-family:var(--font-mono);font-size:15px;letter-spacing:2px;color:var(--copper-light);">${esc(i.code)}</span>
-              <span style="display:flex;align-items:center;gap:8px;">
-                <span class="small-note" style="margin:0;">${esc(scadenzaTesto(i.expires_at))}</span>
+        ${pending.length ? `<label class="mt-4">Codici ancora validi</label>` + pending.map(i=>`
+          <div class="panel subpanel" >
+            <div class="row middle between">
+              <span class="code-inline">${esc(i.code)}</span>
+              <span class="row middle">
+                <span class="small-note m-0" >${esc(scadenzaTesto(i.expires_at))}</span>
                 <button class="rm tm-revoke" data-c="${esc(i.code)}" title="Annulla il codice">✕</button>
               </span>
             </div>
-            <div class="grid2" style="margin-top:8px;">
+            <div class="grid2 mt-2" >
               <select class="inv-edit-role" data-c="${esc(i.code)}">${ROLE_OPTIONS(i.role)}</select>
               <select class="inv-edit-days" data-c="${esc(i.code)}">
                 <option value="">— cambia validità —</option>${DURATA_OPTIONS()}
@@ -2220,7 +2220,7 @@ async function openTeam(){
           giorni === 'mai' ? null : giorni
         );
         document.getElementById('team-new-code').innerHTML =
-          `<div class="invite-code">${esc(code)}</div><p class="small-note" style="margin-top:0;">Annotalo ora: lo trovi anche nell'elenco qui sotto, ma è più comodo dettarlo subito.</p>`;
+          `<div class="invite-code">${esc(code)}</div><p class="small-note mt-0" >Annotalo ora: lo trovi anche nell'elenco qui sotto, ma è più comodo dettarlo subito.</p>`;
       }catch(e){ teamError(e); }
     });
     teamEl.querySelectorAll('.inv-edit-role').forEach(sel=>sel.addEventListener('change', async ()=>{
@@ -2260,7 +2260,7 @@ async function openTeam(){
 }
 function teamError(e){
   const el = document.getElementById('team-error');
-  el.textContent = humanError(e); el.style.display = 'block';
+  el.textContent = humanError(e); el.classList.remove('hidden');
 }
 
 document.getElementById('ab-kitchen-sel').addEventListener('change', e=>{
@@ -2293,8 +2293,8 @@ async function startApp(){
     await loadAll();
   }catch(e){
     gateRender('Dati non raggiungibili', `
-      <p style="font-size:13.5px;line-height:1.6;">${esc(humanError(e))}</p>
-      <button class="btn full" id="g-retry" style="margin-top:16px;">Riprova</button>`);
+      <p class="prose">${esc(humanError(e))}</p>
+      <button class="btn full mt-4" id="g-retry">Riprova</button>`);
     document.getElementById('g-retry').addEventListener('click', ()=>location.reload());
     return;
   }
@@ -2321,6 +2321,6 @@ Cloud.onConflict = function(key){
     if(signedIn) return afterSignIn();
     screenSignIn('signin');
   }catch(e){
-    gateRender('Avvio non riuscito', `<p style="font-size:13.5px;line-height:1.6;">${esc(humanError(e))}</p>`);
+    gateRender('Avvio non riuscito', `<p class="prose">${esc(humanError(e))}</p>`);
   }
 })();

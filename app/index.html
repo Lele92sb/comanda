@@ -23,7 +23,7 @@
       </div>
       <div class="acts">
         <button id="ab-rename">Il tuo nome</button>
-        <button id="ab-team" style="display:none;">Squadra</button>
+        <button id="ab-team" class="hidden">Squadra</button>
         <button id="ab-switch">Cambia cucina</button>
         <button id="ab-logout">Esci</button>
       </div>
@@ -41,12 +41,12 @@
       <div class="panel"><h3>Turni di oggi</h3><div id="dash-shifts"></div></div>
       <div class="panel">
         <h3>Backup dati</h3>
-        <p class="small-note" id="backup-note" style="margin-top:0;">I dati restano salvati nel browser che stai usando ora. Se cambi browser, dispositivo, o svuoti la cache, li perdi — esporta un backup ogni tanto per stare tranquillo.</p>
-        <div style="display:flex;gap:10px;">
-          <button class="btn small" id="btn-export" style="flex:1;">⬇ Esporta backup</button>
-          <label class="btn ghost small" id="btn-import" for="import-file-input" style="flex:1;text-align:center;">⬆ Importa backup</label>
+        <p class="small-note mt-0" id="backup-note">I dati restano salvati nel browser che stai usando ora. Se cambi browser, dispositivo, o svuoti la cache, li perdi — esporta un backup ogni tanto per stare tranquillo.</p>
+        <div class="row gap-3">
+          <button class="btn small grow" id="btn-export">⬇ Esporta backup</button>
+          <label class="btn ghost small grow center" id="btn-import" for="import-file-input">⬆ Importa backup</label>
         </div>
-        <input type="file" id="import-file-input" accept=".json" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;">
+        <input type="file" id="import-file-input" accept=".json" class="file-hidden">
       </div>
     </section>
 
@@ -60,35 +60,35 @@
         <button data-sub="fornitori">Fornitori</button>
         <button data-sub="fatture">Fatture</button>
       </nav>
-      <input type="file" id="dish-photo-input" accept="image/*" capture="environment" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;">
-      <div id="ocr-status" class="small-note" style="display:none;"></div>
+      <input type="file" id="dish-photo-input" accept="image/*" capture="environment" class="file-hidden">
+      <div id="ocr-status" class="small-note hidden" ></div>
 
       <div class="subview active" id="sub-ingredienti">
-        <button class="btn full" id="btn-new-ing" style="margin-bottom:14px;">+ Nuovo ingrediente</button>
+        <button class="btn full mb-4" id="btn-new-ing">+ Nuovo ingrediente</button>
         <div id="ing-form-holder"></div>
         <div id="ing-list"></div>
       </div>
 
       <div class="subview" id="sub-subricette">
-        <div style="display:flex;gap:8px;margin-bottom:14px;">
-          <button class="btn" id="btn-new-sub" style="flex:1;">+ Nuova sub-ricetta</button>
-          <label class="btn ghost" id="btn-photo-sub" for="dish-photo-input" style="flex:1;text-align:center;">📷 Da foto ricetta</label>
+        <div class="row mb-4">
+          <button class="btn grow" id="btn-new-sub">+ Nuova sub-ricetta</button>
+          <label class="btn ghost grow center" id="btn-photo-sub" for="dish-photo-input">📷 Da foto ricetta</label>
         </div>
         <div id="subr-form-holder"></div>
         <div id="subr-list"></div>
       </div>
 
       <div class="subview" id="sub-piatti">
-        <div style="display:flex;gap:8px;margin-bottom:14px;">
-          <button class="btn" id="btn-new-dish" style="flex:1;">+ Nuovo piatto</button>
-          <label class="btn ghost" id="btn-photo-dish" for="dish-photo-input" style="flex:1;text-align:center;">📷 Da foto ricetta</label>
+        <div class="row mb-4">
+          <button class="btn grow" id="btn-new-dish">+ Nuovo piatto</button>
+          <label class="btn ghost grow center" id="btn-photo-dish" for="dish-photo-input">📷 Da foto ricetta</label>
         </div>
         <div id="dish-form-holder"></div>
         <div id="dish-list"></div>
       </div>
 
       <div class="subview" id="sub-fornitori">
-        <button class="btn full" id="btn-new-supplier" style="margin-bottom:14px;">+ Nuovo fornitore</button>
+        <button class="btn full mb-4" id="btn-new-supplier">+ Nuovo fornitore</button>
         <div id="supplier-form-holder"></div>
         <div id="supplier-list"></div>
       </div>
@@ -96,11 +96,11 @@
       <div class="subview" id="sub-fatture">
         <div class="panel">
           <h3>Importa fatture elettroniche</h3>
-          <p class="small-note" style="margin-top:0;">Carica uno o più file XML o XML firmato (.p7m) — formato FatturaPA — scaricati dal cassetto fiscale o dal tuo gestionale. L'app legge fornitore e prodotti (estraendo il contenuto dal file firmato, senza verificarne la firma) e aggiorna anagrafica ingredienti e fornitori da sola.</p>
+          <p class="small-note mt-0" >Carica uno o più file XML o XML firmato (.p7m) — formato FatturaPA — scaricati dal cassetto fiscale o dal tuo gestionale. L'app legge fornitore e prodotti (estraendo il contenuto dal file firmato, senza verificarne la firma) e aggiorna anagrafica ingredienti e fornitori da sola.</p>
           <p class="small-note">Il download giornaliero automatico dal cassetto fiscale richiede un'integrazione con backend proprio (SPID/CNS + servizio schedulato) che questa app, essendo un prototipo lato browser, non può eseguire in sicurezza: qui il passaggio di caricare i file resta manuale, ma la lettura e l'aggiornamento dell'anagrafica sono completamente automatici.</p>
           <input type="file" id="invoice-input" accept=".xml,.p7m" multiple>
-          <button class="btn small" id="invoice-import-btn" style="margin-top:10px;">Importa fatture</button>
-          <div id="invoice-log" style="margin-top:14px;"></div>
+          <button class="btn small mt-3" id="invoice-import-btn">Importa fatture</button>
+          <div id="invoice-log" class="mt-4"></div>
         </div>
       </div>
     </section>
@@ -108,7 +108,7 @@
     <section class="view" id="view-menu">
       <h2 class="section-title">Menu Builder</h2>
       <p class="section-sub">Componi il menu, controlla food cost medio e margine</p>
-      <button class="btn full" id="btn-new-menu" style="margin-bottom:16px;">+ Nuovo menu</button>
+      <button class="btn full mb-4" id="btn-new-menu">+ Nuovo menu</button>
       <div id="menu-form-holder"></div>
       <div id="menu-list"></div>
     </section>
@@ -116,7 +116,7 @@
     <section class="view" id="view-brigata">
       <h2 class="section-title">Brigata</h2>
       <p class="section-sub">Anagrafica dello staff di cucina</p>
-      <button class="btn full" id="btn-new-staff" style="margin-bottom:16px;">+ Aggiungi persona</button>
+      <button class="btn full mb-4" id="btn-new-staff">+ Aggiungi persona</button>
       <div id="staff-form-holder"></div>
       <div id="staff-list"></div>
     </section>
@@ -135,16 +135,16 @@
       <div class="subview" id="turnisub-servizi">
         <div class="panel">
           <h3>I servizi della giornata</h3>
-          <p class="small-note" style="margin-top:0;">I momenti in cui la cucina lavora. Colazione, pranzo e cena sono solo un punto di partenza: aggiungi aperitivo, brunch, lunch o quello che serve nel tuo locale.</p>
-          <div class="grid2" style="margin-bottom:10px;">
+          <p class="small-note mt-0" >I momenti in cui la cucina lavora. Colazione, pranzo e cena sono solo un punto di partenza: aggiungi aperitivo, brunch, lunch o quello che serve nel tuo locale.</p>
+          <div class="grid2 mb-3" >
             <input type="text" id="service-name-input" placeholder="Nome servizio, es. Aperitivo">
             <button class="btn" id="service-add-btn">+ Aggiungi servizio</button>
           </div>
           <div id="service-list"></div>
         </div>
-        <div class="panel" id="copia-config-panel" style="display:none;">
+        <div class="panel hidden" id="copia-config-panel">
           <h3>Copia da un'altra cucina</h3>
-          <p class="small-note" style="margin-top:0;">Se i tuoi locali lavorano in modo simile, prendi servizi, tipi di turno e stazioni da uno già impostato invece di riscrivere tutto.</p>
+          <p class="small-note mt-0" >Se i tuoi locali lavorano in modo simile, prendi servizi, tipi di turno e stazioni da uno già impostato invece di riscrivere tutto.</p>
           <div class="grid2">
             <select id="copia-da"></select>
             <button class="btn" id="copia-btn">Copia qui</button>
@@ -152,9 +152,9 @@
         </div>
         <div class="panel">
           <h3>I tipi di turno</h3>
-          <p class="small-note" style="margin-top:0;">Ogni turno ha una sigla (quella che vedrai nella griglia), un orario, le ore che vale, e i servizi che copre. Un turno che copre <b>due servizi</b> è lo spezzato: una persona sola ne chiude due.</p>
+          <p class="small-note mt-0" >Ogni turno ha una sigla (quella che vedrai nella griglia), un orario, le ore che vale, e i servizi che copre. Un turno che copre <b>due servizi</b> è lo spezzato: una persona sola ne chiude due.</p>
           <div id="shifttype-list"></div>
-          <button class="btn ghost small full" id="shifttype-add-btn" style="margin-top:10px;">+ Aggiungi tipo di turno</button>
+          <button class="btn ghost small full mt-3" id="shifttype-add-btn">+ Aggiungi tipo di turno</button>
         </div>
       </div>
 
@@ -171,20 +171,20 @@
             <button id="period-today">Oggi</button>
           </div>
         </div>
-        <button class="btn full" id="btn-generate-shifts" style="margin-bottom:14px;">🎲 Genera turni del periodo</button>
-        <div id="generate-log" style="margin-bottom:14px;"></div>
+        <button class="btn full mb-4" id="btn-generate-shifts">🎲 Genera turni del periodo</button>
+        <div id="generate-log" class="mb-4"></div>
         <div class="panel" id="turni-panel"></div>
         <p class="small-note" id="turni-legend"></p>
         <div class="panel">
           <h3>Ore extra del periodo</h3>
-          <p class="small-note" style="margin-top:0;">Calcolate dal planning del periodo mostrato sopra, rapportate alle ore contrattuali di ciascuno.</p>
+          <p class="small-note mt-0" >Calcolate dal planning del periodo mostrato sopra, rapportate alle ore contrattuali di ciascuno.</p>
           <div id="ore-extra-table"></div>
         </div>
       </div>
 
       <div class="subview" id="turnisub-stazioni">
-        <p class="small-note" style="margin-top:0;">Le partite/reparti di cucina (es. Cucina calda, Pasticceria, Plonge...).</p>
-        <div class="grid2" style="margin-bottom:10px;">
+        <p class="small-note mt-0" >Le partite/reparti di cucina (es. Cucina calda, Pasticceria, Plonge...).</p>
+        <div class="grid2 mb-3" >
           <input type="text" id="station-name-input" placeholder="Nome stazione, es. Griglia">
           <button class="btn" id="station-add-btn">+ Aggiungi stazione</button>
         </div>
@@ -192,12 +192,12 @@
       </div>
 
       <div class="subview" id="turnisub-fabbisogno">
-        <p class="small-note" style="margin-top:0;">Per ciascun servizio (colazione, pranzo, cena), quante persone servono per ogni stazione. Con quale tipo di turno venga coperto il servizio non conta qui — lo decide il generatore in base a quanti turni di ciascun tipo deve fare ogni persona.</p>
+        <p class="small-note mt-0" >Per ciascun servizio (colazione, pranzo, cena), quante persone servono per ogni stazione. Con quale tipo di turno venga coperto il servizio non conta qui — lo decide il generatore in base a quanti turni di ciascun tipo deve fare ogni persona.</p>
         <div id="needs-panel"></div>
       </div>
 
       <div class="subview" id="turnisub-quote">
-        <p class="small-note" style="margin-top:0;">Per ogni persona: quanti turni di ciascun tipo deve fare a settimana (es. 3 Spezzato, 2 Pranzo-o-Cena, 2 Riposo). La somma dovrebbe fare 7.</p>
+        <p class="small-note mt-0" >Per ogni persona: quanti turni di ciascun tipo deve fare a settimana (es. 3 Spezzato, 2 Pranzo-o-Cena, 2 Riposo). La somma dovrebbe fare 7.</p>
         <div id="quota-panel"></div>
       </div>
     </section>
@@ -207,7 +207,7 @@
       <p class="section-sub">Ferie, giorni di riposo e servizi preferiti</p>
       <div class="panel">
         <h3 id="req-form-title">Nuova richiesta</h3>
-        <p class="small-note" style="margin-top:0;" id="req-form-note"></p>
+        <p class="small-note mt-0"  id="req-form-note"></p>
         <div id="req-who"></div>
         <div class="grid2">
           <div><label>Dal giorno</label><input type="date" id="req-dal"></div>
@@ -219,13 +219,13 @@
           <option value="ferie">Ferie</option>
           <option value="servizio">Solo certi servizi</option>
         </select>
-        <div id="req-servizi-wrap" style="display:none;">
+        <div id="req-servizi-wrap" class="hidden">
           <label>Servizi che posso fare in questi giorni</label>
           <div class="chip-toggle" id="req-servizi"></div>
         </div>
         <label>Nota (facoltativa)</label>
         <input type="text" id="req-nota" placeholder="es. visita medica, matrimonio...">
-        <button class="btn full" id="req-add" style="margin-top:12px;">Invia richiesta</button>
+        <button class="btn full mt-3" id="req-add">Invia richiesta</button>
       </div>
       <div class="panel"><h3 id="req-list-title">Richieste</h3><div id="req-list"></div></div>
     </section>
@@ -235,20 +235,20 @@
       <p class="section-sub">Il tuo sous-chef digitale — parla, chiedi consigli, valuta insieme</p>
       <div class="panel">
         <h3>Base di conoscenza</h3>
-        <p class="small-note" style="margin-top:0;">Carica ricette, appunti o file .txt/.md: l'assistente li userà per darti consigli su misura sul tuo stile.</p>
+        <p class="small-note mt-0" >Carica ricette, appunti o file .txt/.md: l'assistente li userà per darti consigli su misura sul tuo stile.</p>
         <textarea id="kb-text" placeholder="Incolla qui una ricetta, una nota tecnica, un appunto..."></textarea>
-        <div class="grid2" style="margin-top:8px;">
+        <div class="grid2 mt-2" >
           <input type="text" id="kb-title" placeholder="Titolo breve (es. Ragù della casa)">
           <input type="file" id="kb-file" accept=".txt,.md">
         </div>
-        <button class="btn small" id="kb-add" style="margin-top:8px;">Aggiungi alla base di conoscenza</button>
-        <div id="kb-list" style="margin-top:12px;"></div>
+        <button class="btn small mt-2" id="kb-add">Aggiungi alla base di conoscenza</button>
+        <div id="kb-list" class="mt-3"></div>
       </div>
       <div class="panel">
         <h3>Conversazione</h3>
         <div class="chat-wrap">
           <div class="chat-log" id="chat-log"></div>
-          <div class="typing" id="chat-typing" style="visibility:hidden;">sta scrivendo…</div>
+          <div class="typing invisible" id="chat-typing">sta scrivendo…</div>
           <div class="chat-input-row">
             <textarea id="chat-input" placeholder="Es. 'Ho seppie, limone e finocchietto, proponimi un piatto per il menu estivo'"></textarea>
             <button class="btn" id="chat-send">Invia</button>
@@ -268,7 +268,7 @@
         </div>
         <label>Ore lavorate</label>
         <input type="number" id="wb-ore" min="0" max="20" step="0.5" placeholder="es. 10.5">
-        <button class="btn small" id="wb-add" style="margin-top:10px;">Registra</button>
+        <button class="btn small mt-3" id="wb-add">Registra</button>
       </div>
       <div class="panel"><h3>Situazione settimanale (ore effettive registrate)</h3><div id="wb-summary"></div></div>
       <div class="panel"><h3>Promemoria</h3><div class="small-note" id="wb-tips" style="font-size:12px;line-height:1.7;"></div></div>
@@ -281,7 +281,7 @@
   <div class="sheet">
     <div class="logo"><span class="mark"></span>Comanda</div>
     <p class="lead" id="gate-lead">Avvio…</p>
-    <div id="gate-error" class="gate-error" style="display:none;"></div>
+    <div id="gate-error" class="gate-error hidden" ></div>
     <div id="gate-body"></div>
   </div>
 </div>
@@ -291,9 +291,9 @@
   <div class="sheet">
     <div class="logo"><span class="mark"></span>Squadra</div>
     <p class="lead" id="team-kitchen"></p>
-    <div id="team-error" class="gate-error" style="display:none;"></div>
+    <div id="team-error" class="gate-error hidden" ></div>
     <div id="team-body"></div>
-    <button class="btn ghost full" id="team-close" style="margin-top:20px;">Torna all'app</button>
+    <button class="btn ghost full mt-5" id="team-close">Torna all'app</button>
   </div>
 </div>
 

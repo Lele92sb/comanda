@@ -24,7 +24,115 @@
   --font-display:'Fraunces',serif;
   --font-mono:'Space Mono',monospace;
   --font-body:'Inter',sans-serif;
+
+  /* --- Spaziature ---------------------------------------------------------
+     Una scala sola per tutta l'app. Prima esistevano margini da 4, 6, 8, 10,
+     12, 14 e 16px scelti caso per caso: sette misure per fare lo stesso
+     mestiere. Qui sono cinque, e ogni distanza nell'app ne usa una. */
+  --space-1:4px;
+  --space-2:8px;
+  --space-3:12px;
+  --space-4:16px;
+  --space-5:24px;
+
+  /* --- Forme --- */
+  --radius-sm:4px;
+  --radius-md:6px;
+  --radius-pill:20px;
+  --shadow-card:0 8px 24px rgba(0,0,0,0.35);
+  --shadow-float:0 6px 20px rgba(0,0,0,0.4);
+
+  /* --- Dimensioni del testo ---
+     xs = etichette e note in monospazio, sm = testo di servizio,
+     md = testo corrente, lg = titoli di riquadro. */
+  --text-xs:10.5px;
+  --text-sm:12px;
+  --text-md:13.5px;
+  --text-lg:16px;
 }
+
+/* ============================================================================
+   UTILITÀ
+   Sostituiscono gli stili che prima erano scritti a mano dentro l'HTML e
+   dentro le stringhe JavaScript: erano 142, ognuno una decisione presa fuori
+   dal sistema, che rendeva inutile cambiare un token qui sopra.
+
+   Perché !important qui: uno stile scritto a mano vinceva SEMPRE su qualsiasi
+   regola del foglio. Una classe no — ".btn.ghost" pesa più di ".text-alert" e
+   la scavalca, e i pulsanti Elimina tornavano bianchi invece che rossi.
+   Le utilità dichiarano di avere l'ultima parola, che è esattamente il
+   comportamento che sostituiscono. Vale solo per questo blocco: i componenti
+   qui sotto restano regole normali, scavalcabili.
+   ============================================================================ */
+
+/* Spaziatura verticale */
+.mt-0{margin-top:0 !important;}
+.mt-1{margin-top:var(--space-1) !important;}
+.mt-2{margin-top:var(--space-2) !important;}
+.mt-3{margin-top:var(--space-3) !important;}
+.mt-4{margin-top:var(--space-4) !important;}
+.mt-5{margin-top:var(--space-5) !important;}
+.mb-0{margin-bottom:0 !important;}
+.mb-2{margin-bottom:var(--space-2) !important;}
+.mb-3{margin-bottom:var(--space-3) !important;}
+.mb-4{margin-bottom:var(--space-4) !important;}
+.m-0{margin:0 !important;}
+
+/* Layout in riga o in colonna, con la stessa scala di distanze.
+   Sostituisce le 53 combinazioni display:flex + gap + flex-direction. */
+.row{display:flex !important;gap:var(--space-2);}
+.row.gap-1{gap:var(--space-1);}
+.row.gap-3{gap:var(--space-3);}
+.row.wrap{flex-wrap:wrap;}
+.row.middle{align-items:center;}
+.row.top{align-items:flex-start;}
+.row.between{justify-content:space-between;}
+.col{display:flex !important;flex-direction:column;gap:var(--space-1);}
+.col.end{align-items:flex-end;}
+.grow{flex:1 !important;}
+.hidden{display:none !important;}
+.inline{display:inline !important;}
+.invisible{visibility:hidden !important;}
+
+/* Testo */
+.mono{font-family:var(--font-mono) !important;}
+.bold{font-weight:600 !important;}
+.center{text-align:center !important;}
+.left{text-align:left !important;}
+.upper{text-transform:uppercase !important;}
+.text-alert{color:var(--alert) !important;}
+.text-accent{color:var(--copper-light) !important;}
+.text-muted{color:var(--brass) !important;}
+.wrap-anywhere{overflow-wrap:anywhere;min-width:0;}
+
+/* ============================================================================
+   COMPONENTI — regole normali, scavalcabili come tutte le altre.
+   ============================================================================ */
+
+/* Riquadro annidato dentro un altro riquadro (gruppo di quote, tipo di turno,
+   scheda persona): stessa resa ovunque invece di sette varianti a mano. */
+.subpanel{background:var(--bg-elev2);padding:var(--space-3);border-radius:var(--radius-md);margin-bottom:var(--space-2);}
+
+/* Campo file nascosto: la scelta file passa da <label for>, non da JavaScript,
+   perché su iOS Safari l'apertura via script non funziona. */
+.file-hidden{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;}
+
+/* Paragrafo discorsivo: le spiegazioni lunghe dentro i riquadri. */
+.prose{font-size:var(--text-md);line-height:1.6;}
+
+/* Riga di un elenco semplice (turni di oggi, ore per persona): etichetta a
+   sinistra, valore a destra, separate da una linea. */
+.list-row{display:flex;justify-content:space-between;padding:var(--space-1) 0;border-bottom:1px solid var(--line);font-size:var(--text-md);}
+
+/* Codice da leggere o dettare a voce (invito, sigla). */
+.code-inline{font-family:var(--font-mono);font-size:15px;letter-spacing:2px;color:var(--copper-light);}
+
+/* Miniatura di un'immagine caricata. */
+.thumb{max-width:140px;border-radius:var(--radius-md);margin-top:var(--space-2);display:block;}
+
+/* Etichette semantiche, sugli stessi colori dei riquadri di avviso. */
+.tag.alert{background:var(--alert-soft);color:var(--alert);}
+.tag.ok{background:var(--sage-soft);color:var(--sage);}
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--paper);font-family:var(--font-body);}
 body{min-height:100vh;-webkit-font-smoothing:antialiased;}
