@@ -2060,6 +2060,32 @@ function readonlyGuard(e){
 const teamEl = document.getElementById('team');
 document.getElementById('team-close').addEventListener('click', ()=>teamEl.classList.remove('show'));
 
+// Durate proposte per i codici d'invito. 'mai' = nessuna scadenza.
+const DURATE_INVITO = [
+  {v:'1', l:'1 giorno'}, {v:'3', l:'3 giorni'}, {v:'7', l:'7 giorni'},
+  {v:'14', l:'14 giorni'}, {v:'30', l:'30 giorni'}, {v:'90', l:'90 giorni'},
+  {v:'mai', l:'senza scadenza'},
+];
+function DURATA_OPTIONS(scelta){
+  return DURATE_INVITO.map(d=>
+    `<option value="${d.v}" ${String(scelta)===d.v?'selected':''}>${d.l}</option>`).join('');
+}
+function ROLE_OPTIONS(scelto){
+  return [['editor','può modificare'],['viewer','sola lettura']].map(([v,l])=>
+    `<option value="${v}" ${scelto===v?'selected':''}>${l}</option>`).join('');
+}
+// Quanto resta, detto come lo direbbe una persona.
+function scadenzaTesto(iso){
+  if(!iso) return 'senza scadenza';
+  const ms = new Date(iso) - new Date();
+  if(ms <= 0) return 'scaduto';
+  const giorni = Math.floor(ms/86400000);
+  if(giorni >= 1) return 'scade tra ' + giorni + (giorni===1 ? ' giorno' : ' giorni');
+  const ore = Math.floor(ms/3600000);
+  if(ore >= 1) return 'scade tra ' + ore + (ore===1 ? ' ora' : ' ore');
+  return 'scade tra meno di un\'ora';
+}
+
 async function openTeam(){
   teamEl.classList.add('show');
   document.getElementById('team-kitchen').textContent = Cloud.kitchen.name;
@@ -2067,7 +2093,7 @@ async function openTeam(){
   document.getElementById('team-body').innerHTML = '<div class="empty">Carico…</div>';
   try{
     const [members, invites] = await Promise.all([Cloud.listMembers(), Cloud.listInvites()]);
-    const pending = invites.filter(i=>!i.used_by && new Date(i.expires_at) > new Date());
+    const pending = invites.filter(Cloud.inviteIsPending);
     document.getElementById('team-body').innerHTML = `
       <div class="panel">
         <h3>Chi lavora su questa cucina</h3>
@@ -2091,25 +2117,58 @@ async function openTeam(){
       </div>
       <div class="panel">
         <h3>Invita qualcuno</h3>
-        <p class="small-note" style="margin-top:0;">Genera un codice e daglielo: lo inserisce al primo accesso ed entra con il ruolo che scegli tu. Vale 14 giorni e una persona sola.</p>
+        <p class="small-note" style="margin-top:0;">Genera un codice e daglielo: lo inserisce al primo accesso ed entra con il permesso che scegli tu. Vale per una persona sola. Permesso e durata restano modificabili anche dopo averlo consegnato.</p>
         <div class="grid2">
-          <button class="btn small" data-inv="editor">Invita: può modificare</button>
-          <button class="btn ghost small" data-inv="viewer">Invita: sola lettura</button>
+          <div>
+            <label>Permesso</label>
+            <select id="inv-role">${ROLE_OPTIONS('editor')}</select>
+          </div>
+          <div>
+            <label>Validità</label>
+            <select id="inv-days">${DURATA_OPTIONS(14)}</select>
+          </div>
         </div>
+        <button class="btn small full" id="inv-create" style="margin-top:12px;">Genera codice</button>
         <div id="team-new-code"></div>
-        ${pending.length ? `<label>Codici ancora validi</label>` + pending.map(i=>`
-          <div class="kb-item">
-            <span class="t" style="font-family:var(--font-mono);letter-spacing:2px;">${esc(i.code)}</span>
-            <span>${i.role==='editor'?'può modificare':'sola lettura'}
-              <button class="rm tm-revoke" data-c="${esc(i.code)}" title="Annulla">✕</button></span>
+
+        ${pending.length ? `<label style="margin-top:16px;">Codici ancora validi</label>` + pending.map(i=>`
+          <div class="panel" style="background:var(--bg-elev2);padding:10px;margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+              <span style="font-family:var(--font-mono);font-size:15px;letter-spacing:2px;color:var(--copper-light);">${esc(i.code)}</span>
+              <span style="display:flex;align-items:center;gap:8px;">
+                <span class="small-note" style="margin:0;">${esc(scadenzaTesto(i.expires_at))}</span>
+                <button class="rm tm-revoke" data-c="${esc(i.code)}" title="Annulla il codice">✕</button>
+              </span>
+            </div>
+            <div class="grid2" style="margin-top:8px;">
+              <select class="inv-edit-role" data-c="${esc(i.code)}">${ROLE_OPTIONS(i.role)}</select>
+              <select class="inv-edit-days" data-c="${esc(i.code)}">
+                <option value="">— cambia validità —</option>${DURATA_OPTIONS()}
+              </select>
+            </div>
           </div>`).join('') : ''}
       </div>`;
 
-    teamEl.querySelectorAll('[data-inv]').forEach(b=>b.addEventListener('click', async ()=>{
+    document.getElementById('inv-create').addEventListener('click', async ()=>{
       try{
-        const code = await Cloud.createInvite(b.dataset.inv);
+        const giorni = document.getElementById('inv-days').value;
+        const code = await Cloud.createInvite(
+          document.getElementById('inv-role').value,
+          giorni === 'mai' ? null : giorni
+        );
         document.getElementById('team-new-code').innerHTML =
-          `<div class="invite-code">${esc(code)}</div><p class="small-note" style="margin-top:0;">Annotalo ora: comparirà nell'elenco qui sotto, ma è più comodo dettarlo subito.</p>`;
+          `<div class="invite-code">${esc(code)}</div><p class="small-note" style="margin-top:0;">Annotalo ora: lo trovi anche nell'elenco qui sotto, ma è più comodo dettarlo subito.</p>`;
+      }catch(e){ teamError(e); }
+    });
+    teamEl.querySelectorAll('.inv-edit-role').forEach(sel=>sel.addEventListener('change', async ()=>{
+      try{ await Cloud.updateInvite(sel.dataset.c, {role: sel.value}); toast('Permesso del codice aggiornato'); }
+      catch(e){ teamError(e); }
+    }));
+    teamEl.querySelectorAll('.inv-edit-days').forEach(sel=>sel.addEventListener('change', async ()=>{
+      if(!sel.value) return;
+      try{
+        await Cloud.updateInvite(sel.dataset.c, {giorni: sel.value === 'mai' ? null : sel.value});
+        openTeam(); toast('Validità aggiornata');
       }catch(e){ teamError(e); }
     }));
     teamEl.querySelectorAll('.tm-role').forEach(sel=>sel.addEventListener('change', async ()=>{

@@ -73,10 +73,17 @@ create table if not exists public.kitchen_invites (
   role       text not null check (role in ('editor','viewer')),
   created_by uuid not null references auth.users(id),
   created_at timestamptz not null default now(),
-  expires_at timestamptz not null default (now() + interval '14 days'),
+  -- Durata decisa da chi invita, modificabile in seguito.
+  -- NULL = nessuna scadenza (il codice resta valido finché non viene usato o annullato).
+  expires_at timestamptz,
   used_by    uuid references auth.users(id),
   used_at    timestamptz
 );
+
+-- Adeguamento per i database creati prima che la scadenza fosse configurabile
+-- (allora era obbligatoria e fissa a 14 giorni). Rieseguibile senza effetti.
+alter table public.kitchen_invites alter column expires_at drop not null;
+alter table public.kitchen_invites alter column expires_at drop default;
 
 -- ----------------------------------------------------------------------------
 -- Ruolo dell'utente corrente in una cucina.
@@ -204,7 +211,10 @@ begin
 
   if inv is null then raise exception 'Codice invito non valido'; end if;
   if inv.used_by is not null then raise exception 'Codice invito già utilizzato'; end if;
-  if inv.expires_at < now() then raise exception 'Codice invito scaduto'; end if;
+  -- expires_at NULL significa "senza scadenza": nessun controllo da fare.
+  if inv.expires_at is not null and inv.expires_at < now() then
+    raise exception 'Codice invito scaduto';
+  end if;
 
   insert into public.kitchen_members (kitchen_id, user_id, role, display_name)
   values (inv.kitchen_id, auth.uid(), inv.role, nullif(trim(coalesce(p_display_name,'')),''))

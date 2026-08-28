@@ -174,14 +174,36 @@ function inviteCode(){
   return Array.from(bytes, b=>alphabet[b % alphabet.length]).join('');
 }
 
-Cloud.createInvite = async function(role){
+// giorni: numero di giorni di validità, oppure null per "senza scadenza".
+Cloud.expiryFromDays = function(giorni){
+  if(giorni === null || giorni === '' || giorni === undefined) return null;
+  const d = new Date();
+  d.setDate(d.getDate() + parseInt(giorni, 10));
+  return d.toISOString();
+};
+
+Cloud.createInvite = async function(role, giorni){
   const code = inviteCode();
   const { data, error } = await Cloud.client.from('kitchen_invites').insert({
-    code, kitchen_id: Cloud.kitchen.id, role, created_by: Cloud.user.id
+    code, kitchen_id: Cloud.kitchen.id, role, created_by: Cloud.user.id,
+    expires_at: Cloud.expiryFromDays(giorni)
   }).select('code');
   if(error) throw error;
   if(!data || !data.length) throw new Error('Non hai i permessi per invitare persone.');
   return code;
+};
+
+// Cambia permesso e/o scadenza di un codice già consegnato: chi lo ha in mano
+// non deve riceverne un altro, quello che ha continua a valere alle nuove
+// condizioni. La nuova durata si conta da adesso, non dalla creazione.
+Cloud.updateInvite = async function(code, campi){
+  const patch = {};
+  if(campi.role) patch.role = campi.role;
+  if('giorni' in campi) patch.expires_at = Cloud.expiryFromDays(campi.giorni);
+  const { data, error } = await Cloud.client
+    .from('kitchen_invites').update(patch).eq('code', code).select('code');
+  if(error) throw error;
+  if(!data || !data.length) throw new Error('Non hai i permessi per modificare questo invito.');
 };
 
 Cloud.listInvites = async function(){
@@ -192,6 +214,13 @@ Cloud.listInvites = async function(){
     .order('created_at', { ascending:false });
   if(error) throw error;
   return data||[];
+};
+
+// Un invito è ancora spendibile se non è stato usato e non è scaduto.
+// expires_at NULL = senza scadenza.
+Cloud.inviteIsPending = function(inv){
+  if(inv.used_by) return false;
+  return !inv.expires_at || new Date(inv.expires_at) > new Date();
 };
 
 Cloud.revokeInvite = async function(code){
