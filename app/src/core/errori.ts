@@ -17,6 +17,10 @@ interface Segnalazione {
   messaggio: string;
   origine: string;
   versione: string;
+  // Quale database sta usando l'app che si è rotta. Senza, le segnalazioni
+  // delle prove e quelle dei clienti finiscono nello stesso mucchio e non si
+  // capisce più quali contino davvero.
+  ambiente: string;
   browser: string;
   cucinaId?: string;
   utenteId?: string;
@@ -50,6 +54,7 @@ async function segnala(e: unknown): Promise<void> {
   const dati: Segnalazione = {
     messaggio, origine,
     versione: __VERSIONE__,
+    ambiente: __AMBIENTE__,
     browser: navigator.userAgent.slice(0, 200),
     ...contesto(),
     quando: new Date().toISOString(),

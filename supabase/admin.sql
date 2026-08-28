@@ -1379,3 +1379,193 @@ begin
 end;
 $$;
 grant execute on function public.admin_elimina_definitivamente(uuid, text) to authenticated;
+
+
+-- ============================================================================
+-- 6. GLI ERRORI CHE SUCCEDONO A CASA DEI CLIENTI
+--
+-- Finora /api/errori scriveva nei log di Cloudflare: si guardano in diretta e
+-- basta, non si interrogano e non si conservano. Un errore che capita di
+-- notte, in una cucina, a una versione vecchia, lì non lo ritrova nessuno.
+--
+-- Chi scrive qui: SOLO il proxy server, con la chiave di servizio. Non c'è
+-- nessuna policy di insert, quindi il browser non può scriverci nemmeno
+-- chiamando l'API a mano — e la funzione server tiene un elenco chiuso di
+-- campi, così non ci finisce dentro niente dei dati di cucina.
+--
+-- L'impronta è calcolata dal database, non dal client: numeri e identificativi
+-- vengono sostituiti con '#' prima di prendere l'impronta, così "riga 412 non
+-- trovata" e "riga 87 non trovata" finiscono nello stesso gruppo invece di
+-- sembrare due problemi diversi.
+-- ============================================================================
+create table if not exists public.app_errors (
+  id        bigint generated always as identity primary key,
+  quando    timestamptz not null default now(),
+  messaggio text not null,
+  origine   text,
+  versione  text,
+  browser   text,
+  ambiente  text,
+  cucina_id uuid,
+  utente_id uuid,
+  paese     text,
+  impronta  text generated always as (
+    md5(
+      regexp_replace(
+        regexp_replace(
+          lower(coalesce(messaggio, '') || ' | ' || coalesce(origine, '')),
+          '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '#', 'g'),
+        '[0-9]+', '#', 'g')
+    )
+  ) stored
+);
+
+create index if not exists app_errors_quando_idx   on public.app_errors (quando desc, id desc);
+create index if not exists app_errors_impronta_idx on public.app_errors (impronta, quando desc);
+create index if not exists app_errors_cucina_idx   on public.app_errors (cucina_id, quando desc);
+create index if not exists app_errors_versione_idx on public.app_errors (versione, quando desc);
+
+alter table public.app_errors enable row level security;
+
+drop policy if exists app_errors_select on public.app_errors;
+create policy app_errors_select on public.app_errors
+  for select using (public.is_platform_admin());
+-- Volutamente assenti: insert, update, delete. Scrive solo la chiave di
+-- servizio dal proxy, che scavalca RLS.
+
+revoke all on table public.app_errors from anon, authenticated;
+grant select on table public.app_errors to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- I gruppi: lo stesso errore ripetuto è UNA cosa da sistemare, non trecento
+-- righe da scorrere. La finestra temporale ha un tetto perché senza, un
+-- parametro sbagliato diventa una scansione di tutta la storia.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_errori_gruppi(
+  p_giorni   integer default 7,
+  p_versione text    default null,
+  p_cucina   uuid    default null,
+  p_limite   integer default 30
+)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+declare
+  v_giorni integer := least(greatest(coalesce(p_giorni, 7), 1), 180);
+  v_limite integer := least(greatest(coalesce(p_limite, 30), 1), 100);
+  v jsonb;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select coalesce(jsonb_agg(to_jsonb(g) order by g.quante desc), '[]'::jsonb) into v
+  from (
+    select e.impronta,
+           count(*)                         as quante,
+           count(distinct e.cucina_id)      as cucine,
+           min(e.quando)                    as prima_volta,
+           max(e.quando)                    as ultima_volta,
+           (array_agg(e.messaggio order by e.quando desc))[1] as messaggio,
+           (array_agg(e.origine   order by e.quando desc))[1] as origine,
+           array_agg(distinct e.versione)   as versioni
+      from public.app_errors e
+     where e.quando > now() - make_interval(days => v_giorni)
+       and (p_versione is null or e.versione = p_versione)
+       and (p_cucina is null or e.cucina_id = p_cucina)
+     group by e.impronta
+     order by count(*) desc
+     limit v_limite
+  ) g;
+
+  return jsonb_build_object('giorni', v_giorni, 'gruppi', v);
+end;
+$$;
+grant execute on function public.admin_errori_gruppi(integer, text, uuid, integer) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Le singole segnalazioni, a chiave. p_impronta apre un gruppo.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_errori(
+  p_impronta    text        default null,
+  p_versione    text        default null,
+  p_cucina      uuid        default null,
+  p_cerca       text        default null,
+  p_giorni      integer     default 7,
+  p_limite      integer     default 50,
+  p_dopo_quando timestamptz default null,
+  p_dopo_id     bigint      default null
+)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+declare
+  v_giorni integer := least(greatest(coalesce(p_giorni, 7), 1), 180);
+  v_limite integer := least(greatest(coalesce(p_limite, 50), 1), 200);
+  v_cerca  text    := nullif(trim(coalesce(p_cerca, '')), '');
+  v jsonb;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+  if (p_dopo_quando is null) <> (p_dopo_id is null) then
+    raise exception 'Cursore incompleto: servono sia la data sia l''id dell''ultima riga vista';
+  end if;
+
+  select coalesce(jsonb_agg(to_jsonb(x) order by x.quando desc, x.id desc), '[]'::jsonb) into v
+  from (
+    select e.* from public.app_errors e
+     where e.quando > now() - make_interval(days => v_giorni)
+       and (p_impronta is null or e.impronta = p_impronta)
+       and (p_versione is null or e.versione = p_versione)
+       and (p_cucina is null or e.cucina_id = p_cucina)
+       and (v_cerca is null or e.messaggio ilike '%' || v_cerca || '%')
+       and (p_dopo_quando is null or (e.quando, e.id) < (p_dopo_quando, p_dopo_id))
+     order by e.quando desc, e.id desc
+     limit v_limite
+  ) x;
+
+  return v;
+end;
+$$;
+grant execute on function public.admin_errori(text, text, uuid, text, integer, integer, timestamptz, bigint) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Potatura. Le segnalazioni vecchie non servono a nessuno e costano spazio.
+-- Qui la cancellazione è ammessa — al contrario del registro, che è la prova
+-- di quello che ha fatto l'amministratore e non si tocca — ma resta un'azione
+-- amministrativa, quindi si scrive nel registro anche lei.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_pulisci_errori(p_giorni integer default 90)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_giorni integer := greatest(coalesce(p_giorni, 90), 7);
+  v_tolte  bigint;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  with tolte as (
+    delete from public.app_errors where quando < now() - make_interval(days => v_giorni)
+    returning 1
+  )
+  select count(*) into v_tolte from tolte;
+
+  perform public.admin_scrivi_registro('pulizia_errori', null, null, null, null, 'ok',
+    jsonb_build_object('piu_vecchie_di_giorni', v_giorni, 'tolte', v_tolte));
+
+  return jsonb_build_object('ok', true, 'tolte', v_tolte);
+end;
+$$;
+grant execute on function public.admin_pulisci_errori(integer) to authenticated;
