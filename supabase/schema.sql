@@ -500,13 +500,19 @@ begin
             from jsonb_array_elements(p_valore) r);
   end if;
 
-  -- BRIGATA: per leggere i turni bastano nome e stazioni. Telefono, email e
-  -- ore contrattuali sono dati da datore di lavoro.
+  -- BRIGATA: per leggere i turni bastano nome, stazioni, quote e se può fare
+  -- extra — sono vincoli di pianificazione. Telefono, email e ore contrattuali
+  -- sono dati da datore di lavoro.
+  -- Attenzione: questo ramo non toglie dei campi, RICOSTRUISCE la persona su una
+  -- lista chiusa. Un vincolo nuovo che non si aggiunge qui arriva undefined a chi
+  -- può modificare, il default lo legge come acceso, e lo stesso generatore dà
+  -- due prospetti diversi a seconda di chi preme il bottone.
   if p_key = 'staff' and senza_person then
     return (select coalesce(jsonb_agg(
       jsonb_build_object('id', s->>'id', 'name', s->>'name', 'role', s->>'role',
                          'stations', coalesce(s->'stations','[]'::jsonb),
-                         'weeklyQuota', coalesce(s->'weeklyQuota','[]'::jsonb))), '[]'::jsonb)
+                         'weeklyQuota', coalesce(s->'weeklyQuota','[]'::jsonb),
+                         'puoFareExtra', coalesce(s->'puoFareExtra','true'::jsonb))), '[]'::jsonb)
             from jsonb_array_elements(p_valore) s);
   end if;
 

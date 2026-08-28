@@ -11,6 +11,7 @@ export function renderStaffList(){
         <div class="contact">${esc(s.role)} · ${s.hours||'—'}h/sett contrattuali</div>
         <div class="contact">${s.phone? '📞 '+esc(s.phone):''}${s.phone&&s.email?' · ':''}${s.email? '✉ '+esc(s.email):''}</div>
         <div class="contact">🍳 ${(s.stations&&s.stations.length) ? s.stations.map(id=>{ const st=state.stations.find(x=>x.id===id); return st?esc(st.name):null; }).filter(Boolean).join(', ') : 'nessuna stazione assegnata'}</div>
+        ${s.puoFareExtra === false ? `<div class="contact">🚫 fuori dai turni extra</div>` : ''}
       </div>
       <div class="col">
         <button class="btn ghost small" data-edit="${s.id}">Modifica</button>
@@ -29,7 +30,7 @@ export function renderStaffList(){
 }
 async function openStaffForm(existing){
   const holder = document.getElementById('staff-form-holder');
-  const s = existing || {id:uid(), name:'', role:'Cuoco', hours:'', phone:'', email:'', stations:[], weeklyQuota:[], userId:null};
+  const s = existing || {id:uid(), name:'', role:'Cuoco', hours:'', phone:'', email:'', stations:[], weeklyQuota:[], puoFareExtra:true, userId:null};
   // Chi ha un account nella cucina, per poter collegare la persona al suo
   // accesso: senza il collegamento non può inviare le proprie richieste.
   let membri = [];
@@ -58,6 +59,10 @@ async function openStaffForm(existing){
         ${state.stations.length ? state.stations.map(st=>`<button type="button" data-st="${st.id}" class="${(s.stations||[]).includes(st.id)?'on':''}">${esc(st.name)}</button>`).join('') : '<span class="small-note">Nessuna stazione creata ancora — puoi crearle in Turni → Stazioni, poi torna qui.</span>'}
       </div>
       <p class="small-note">Usata dal generatore di turni per non mettere in una postazione qualcuno che non la sa coprire.</p>
+      <label class="riga-scelta">
+        <input type="checkbox" id="s-extra" ${s.puoFareExtra !== false ? 'checked' : ''}>
+        <span><b>Può fare turni extra</b><br><span class="contact">Quando il fabbisogno supera le quote della brigata, il generatore può assegnarle un turno oltre la sua quota. Spenta, resta fuori dagli extra: la postazione risulterà scoperta invece che coperta da lei.</span></span>
+      </label>
       ${membri.length ? `
       <label>Account collegato</label>
       <select id="s-user">
@@ -81,6 +86,10 @@ async function openStaffForm(existing){
     const newStaff = { id:s.id, name, role:document.getElementById('s-role').value, hours:document.getElementById('s-hours').value,
       phone:document.getElementById('s-phone').value.trim(), email:document.getElementById('s-email').value.trim(),
       stations, weeklyQuota: s.weeklyQuota||[],
+      // Qui l'oggetto si ricostruisce da zero, non si modifica: ogni campo non
+      // elencato sparisce alla prima Modifica. È il motivo per cui weeklyQuota
+      // è riportata a mano, ed è il motivo per cui puoFareExtra dev'esserci.
+      puoFareExtra: document.getElementById('s-extra').checked,
       userId: userSel ? (userSel.value || null) : (s.userId||null) };
     const idx = state.staff.findIndex(x=>x.id===s.id);
     if(idx>=0) state.staff[idx]=newStaff; else state.staff.push(newStaff);

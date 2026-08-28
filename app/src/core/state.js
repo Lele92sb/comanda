@@ -94,7 +94,10 @@ export function migrateData(){
       }
     });
   });
-  state.staff.forEach(s=>{ if(!s.stations) s.stations=[]; if(!s.weeklyQuota) s.weeklyQuota=[]; });
+  // Chi ha già i dati salvati non ha puoFareExtra: si normalizza in lettura, col
+  // valore che lascia il comportamento identico a prima (acceso). Non è una
+  // migrazione dei dati veri: sul database finisce al primo salvataggio.
+  state.staff.forEach(s=>{ if(!s.stations) s.stations=[]; if(!s.weeklyQuota) s.weeklyQuota=[]; if(s.puoFareExtra === undefined) s.puoFareExtra = true; });
   // vecchio fabbisogno indicizzato per turno (C/P/S/SP) -> nuovo indicizzato per servizio (colazione/pranzo/cena)
   if(state.staffingNeeds && (state.staffingNeeds.C || state.staffingNeeds.P || state.staffingNeeds.S || state.staffingNeeds.SP)){
     const old = state.staffingNeeds;
