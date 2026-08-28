@@ -4,21 +4,53 @@ import { Cloud } from '../lib/cloud.js';
 export function renderStaffList(){
   const el = document.getElementById('staff-list');
   if(!state.staff.length){ el.innerHTML = `<div class="empty">Nessuna persona in brigata ancora.</div>`; return; }
-  el.innerHTML = state.staff.map(s=>`
+  const ultimo = state.staff.length - 1;
+  el.innerHTML = state.staff.map((s,i)=>{
+    const senzaStazioni = !(s.stations && s.stations.length);
+    return `
     <div class="staff-card">
       <div>
         <div class="bold">${esc(s.name)}</div>
         <div class="contact">${esc(s.role)} · ${s.hours||'—'}h/sett contrattuali</div>
         <div class="contact">${s.phone? '📞 '+esc(s.phone):''}${s.phone&&s.email?' · ':''}${s.email? '✉ '+esc(s.email):''}</div>
-        <div class="contact">🍳 ${(s.stations&&s.stations.length) ? s.stations.map(id=>{ const st=state.stations.find(x=>x.id===id); return st?esc(st.name):null; }).filter(Boolean).join(', ') : 'nessuna stazione assegnata'}</div>
+        <div class="contact${senzaStazioni?' text-alert':''}">🍳 ${senzaStazioni
+          ? '⚠ nessuna stazione — il generatore la salta, resta assegnabile a mano nella griglia'
+          : s.stations.map(id=>{ const st=state.stations.find(x=>x.id===id); return st?esc(st.name):null; }).filter(Boolean).join(', ')}</div>
         ${s.puoFareExtra === false ? `<div class="contact">🚫 fuori dai turni extra</div>` : ''}
       </div>
       <div class="col">
+        <div class="row gap-1 ordina">
+          <button class="btn ghost" data-su="${i}" ${i===0?'disabled':''} aria-label="Sposta ${esc(s.name)} più in alto" title="Sposta ${esc(s.name)} più in alto">▲</button>
+          <button class="btn ghost" data-giu="${i}" ${i===ultimo?'disabled':''} aria-label="Sposta ${esc(s.name)} più in basso" title="Sposta ${esc(s.name)} più in basso">▼</button>
+        </div>
         <button class="btn ghost small" data-edit="${s.id}">Modifica</button>
         <button class="btn ghost small text-alert" data-del="${s.id}">Rimuovi</button>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
+  // L'ordine della brigata È la posizione in state.staff: spostare su e giù
+  // scambia due elementi dell'array, non c'è nessun campo "ordine" da tenere
+  // allineato. I turni sono indicizzati per id della persona (state.shifts),
+  // quindi riordinare l'elenco non tocca un solo turno assegnato.
+  const sposta = (da, a)=>{
+    [state.staff[da], state.staff[a]] = [state.staff[a], state.staff[da]];
+    save('staff');
+    renderStaffList();
+    // Dopo il ridisegno la scheda si è spostata di una posizione. Sul telefono,
+    // senza questo, il pulsante appena premuto finisce sotto un'altra persona e
+    // il secondo tocco sposterebbe quella sbagliata: si insegue lo stesso
+    // pulsante della stessa persona alla sua nuova posizione. Se lì è arrivata
+    // in fondo alla corsa quel pulsante è disabilitato e non prende il fuoco:
+    // si ripiega sull'altra freccia, che è comunque sulla sua riga.
+    const verso = da < a ? 'giu' : 'su';
+    const b = el.querySelector(`[data-${verso}="${a}"]:not([disabled])`)
+           || el.querySelector(`[data-${verso==='giu'?'su':'giu'}="${a}"]:not([disabled])`);
+    if(b){ b.scrollIntoView({block:'nearest'}); b.focus(); }
+  };
+  el.querySelectorAll('[data-su]').forEach(b=>
+    b.addEventListener('click', ()=> sposta(+b.dataset.su, +b.dataset.su - 1)));
+  el.querySelectorAll('[data-giu]').forEach(b=>
+    b.addEventListener('click', ()=> sposta(+b.dataset.giu, +b.dataset.giu + 1)));
   el.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=> openStaffForm(state.staff.find(s=>s.id===b.dataset.edit))));
   el.querySelectorAll('[data-del]').forEach(b=>{
     b.addEventListener('click', ()=>{
