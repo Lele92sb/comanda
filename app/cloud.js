@@ -340,6 +340,71 @@ window.storageSet = async function(key, value){
 };
 
 // --------------------------------------------------------------------------
+// Richieste del personale (ferie, riposi, servizi preferiti).
+// In cloud stanno in una tabella dedicata: chi è in sola lettura deve poter
+// inserire le proprie richieste senza poter toccare i dati della cucina.
+// In modalità locale non ci sono account, quindi vivono nel salvataggio locale
+// come qualsiasi altra sezione — le inserisce lo chef per tutti.
+// --------------------------------------------------------------------------
+const LOCAL_REQ_KEY = 'requests';
+
+Cloud.listRequests = async function(){
+  if(!CLOUD_ENABLED) return localGet(LOCAL_REQ_KEY) || [];
+  const { data, error } = await Cloud.client
+    .from('kitchen_requests')
+    .select('id, staff_id, user_id, dal, al, tipo, servizi, stato, nota, created_at')
+    .eq('kitchen_id', Cloud.kitchen.id)
+    .order('dal', { ascending: true });
+  if(error) throw error;
+  return data || [];
+};
+
+Cloud.createRequest = async function(req){
+  if(!CLOUD_ENABLED){
+    const list = localGet(LOCAL_REQ_KEY) || [];
+    list.push({ ...req, id: 'r'+Date.now().toString(36), stato: req.stato || 'in_attesa' });
+    localSet(LOCAL_REQ_KEY, list);
+    return;
+  }
+  const { data, error } = await Cloud.client.from('kitchen_requests').insert({
+    kitchen_id: Cloud.kitchen.id,
+    staff_id: req.staff_id, user_id: Cloud.user.id,
+    dal: req.dal, al: req.al, tipo: req.tipo,
+    servizi: req.servizi || [], nota: req.nota || null,
+    // Quando è il titolare a registrare una richiesta ricevuta a voce, non ha
+    // senso che debba poi approvare sé stesso.
+    stato: Cloud.isOwner() ? 'approvata' : 'in_attesa',
+  }).select('id');
+  if(error) throw error;
+  if(!data || !data.length) throw new Error('Non hai i permessi per inserire questa richiesta.');
+};
+
+Cloud.decideRequest = async function(id, stato){
+  if(!CLOUD_ENABLED){
+    const list = localGet(LOCAL_REQ_KEY) || [];
+    const r = list.find(x=>x.id===id); if(r) r.stato = stato;
+    localSet(LOCAL_REQ_KEY, list);
+    return;
+  }
+  const { data, error } = await Cloud.client.from('kitchen_requests')
+    .update({ stato, decisa_da: Cloud.user.id, decisa_il: new Date().toISOString() })
+    .eq('id', id).select('id');
+  if(error) throw error;
+  if(!data || !data.length) throw new Error('Solo chi gestisce la cucina può decidere sulle richieste.');
+};
+
+Cloud.deleteRequest = async function(id){
+  if(!CLOUD_ENABLED){
+    localSet(LOCAL_REQ_KEY, (localGet(LOCAL_REQ_KEY)||[]).filter(x=>x.id!==id));
+    return;
+  }
+  const { data, error } = await Cloud.client.from('kitchen_requests')
+    .delete().eq('id', id).select('id');
+  if(error) throw error;
+  if(!data || !data.length) throw new Error('Non puoi ritirare questa richiesta.');
+};
+
+// --------------------------------------------------------------------------
 // Chiamate AI — passano sempre dal proxy server, che è l'unico a conoscere la
 // chiave API. In modalità locale non c'è nessun server: le funzioni AI restano
 // spente e l'app lo dice chiaramente invece di fallire in silenzio.

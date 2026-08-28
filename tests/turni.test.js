@@ -283,3 +283,105 @@ test('generazione su una sola settimana: risultato identico al motore base', () 
   assert.equal(shortfalls.length, 0);
   assert.deepEqual(Object.keys(newShifts['s1']).sort(), dates.slice().sort());
 });
+
+/* ===================== RICHIESTE APPROVATE: VINCOLI ASSOLUTI ===================== */
+
+const SETT = weekDates(new Date(2026, 8, 16)); // lun 14 → dom 20 settembre 2026
+
+test('un riposo approvato non viene mai violato, nemmeno per coprire un buco', () => {
+  // Scenario costruito apposta perché il generatore sia TENTATO di violarlo:
+  // Anna è l'unica qualificata e il fabbisogno c'è tutti i giorni. Senza
+  // vincolo la chiamerebbe come turno extra proprio in quel giorno.
+  const staff = [{ id:'a1', name:'Anna', stations:['a'], weeklyQuota:[{count:7,codes:['P']}] }];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const constraints = { a1: { [SETT[2]]: {blocked:'R'} } };   // mercoledì libero
+
+  for(let i=0;i<50;i++){
+    const { newShifts, shortfalls } = computeShiftsForDates(staff, needs,
+      {config:BASE, dates:SETT, constraints});
+    assert.equal(newShifts['a1'][SETT[2]].code, 'R', 'il riposo concordato è stato violato');
+    assert.ok(shortfalls.some(sf=>sf.day===SETT[2]),
+      'la scopertura di quel giorno va dichiarata, non risolta calpestando il riposo');
+  }
+});
+
+test('le ferie approvate coprono tutto il periodo richiesto', () => {
+  const staff = [{ id:'a1', name:'Anna', stations:['a'], weeklyQuota:[{count:7,codes:['P']}] }];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const ferie = {};
+  SETT.slice(0,5).forEach(d=>{ ferie[d] = {blocked:'F'}; });
+  const { newShifts } = computeShiftsForDates(staff, needs,
+    {config:BASE, dates:SETT, constraints:{a1: ferie}});
+
+  SETT.slice(0,5).forEach(d=> assert.equal(newShifts['a1'][d].code, 'F', `${d} doveva essere ferie`));
+  SETT.slice(5).forEach(d=> assert.notEqual(newShifts['a1'][d].code, 'F', `${d} non era in ferie`));
+});
+
+test('chi ha chiesto solo pranzo non riceve mai turni di cena', () => {
+  // La quota di Anna prevede sia pranzo che cena e il fabbisogno chiede
+  // entrambi: senza il vincolo finirebbe sicuramente in servizio serale.
+  const staff = [
+    { id:'a1', name:'Anna', stations:['a'], weeklyQuota:[{count:7,codes:['P','S','SP']}] },
+    { id:'a2', name:'Bruno', stations:['a'], weeklyQuota:[{count:7,codes:['P','S','SP']}] },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[{stationId:'a',count:1}] };
+  const soloPranzo = {};
+  SETT.forEach(d=>{ soloPranzo[d] = {services:['pranzo']}; });
+
+  for(let i=0;i<50;i++){
+    const { newShifts } = computeShiftsForDates(staff, needs,
+      {config:BASE, dates:SETT, constraints:{a1: soloPranzo}});
+    SETT.forEach(d=>{
+      const code = newShifts['a1'][d].code;
+      assert.ok(['P','R','',null].includes(code) || code==='R',
+        `Anna ha chiesto solo pranzo ma il ${d} ha ricevuto "${code}"`);
+      assert.notEqual(code, 'S', 'turno di cena assegnato a chi ha chiesto solo pranzo');
+      assert.notEqual(code, 'SP', 'lo spezzato porta dentro la cena: non è "solo pranzo"');
+    });
+  }
+});
+
+test('un turno accorpato non aggira una richiesta di singolo servizio', () => {
+  // Lo spezzato copre pranzo E cena: chi ha chiesto solo pranzo non deve
+  // riceverlo, perché gli porterebbe dentro il servizio che ha escluso.
+  assert.equal(codeAllowedTest('SP', ['pranzo']), false);
+  assert.equal(codeAllowedTest('P',  ['pranzo']), true);
+  assert.equal(codeAllowedTest('S',  ['pranzo']), false);
+  assert.equal(codeAllowedTest('SP', ['pranzo','cena']), true);
+});
+function codeAllowedTest(code, servizi){
+  const { codeAllowed } = require('../app/logic.js');
+  return codeAllowed({x:{d:{services:servizi}}}, 'x', 'd', code, BASE.codeToServices);
+}
+
+test('richieste impossibili da soddisfare producono scoperture dichiarate, non silenzio', () => {
+  // Tutta la brigata in ferie lo stesso giorno: il servizio non si può coprire.
+  const staff = [
+    { id:'a1', name:'Anna',  stations:['a'], weeklyQuota:[{count:7,codes:['P']}] },
+    { id:'a2', name:'Bruno', stations:['a'], weeklyQuota:[{count:7,codes:['P']}] },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const giorno = SETT[3];
+  const constraints = { a1:{ [giorno]:{blocked:'F'} }, a2:{ [giorno]:{blocked:'F'} } };
+  const { newShifts, shortfalls } = computeShiftsForDates(staff, needs,
+    {config:BASE, dates:SETT, constraints});
+
+  assert.equal(newShifts['a1'][giorno].code, 'F');
+  assert.equal(newShifts['a2'][giorno].code, 'F');
+  const dichiarata = shortfalls.find(sf=>sf.day===giorno);
+  assert.ok(dichiarata, 'il giorno scoperto deve comparire nel riepilogo');
+  assert.equal(dichiarata.service, 'pranzo');
+});
+
+test('senza vincoli il comportamento resta identico a prima', () => {
+  const staff = [{ id:'s1', name:'Unico', stations:['a'], weeklyQuota:[{count:7,codes:['P']}] }];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const a = computeShiftsForDates(staff, needs, {config:BASE, dates:SETT});
+  const b = computeShiftsForDates(staff, needs, {config:BASE, dates:SETT, constraints:{}});
+  assert.equal(a.shortfalls.length, 0);
+  assert.equal(b.shortfalls.length, 0);
+  SETT.forEach(d=>{
+    assert.equal(a.newShifts['s1'][d].code, 'P');
+    assert.equal(b.newShifts['s1'][d].code, 'P');
+  });
+});

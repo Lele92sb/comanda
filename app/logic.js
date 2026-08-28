@@ -154,6 +154,33 @@ function buildStaffPools(staffList){
   return pools;
 }
 
+// ----------------------------------------------------------------------------
+// Vincoli: le richieste approvate del personale (ferie, riposi, "solo pranzo")
+// e gli impegni in altre cucine. Sono REGOLE ASSOLUTE — il generatore non le
+// viola mai: se non riesce a coprire un servizio rispettandole, lo dichiara.
+//
+// Forma attesa:
+//   constraints[staffId][data] = { blocked:'F'|'R', services:[id,...] }
+//     blocked  → la persona non è assegnabile quel giorno, con quel codice
+//     services → è assegnabile SOLO a turni che coprono uno di questi servizi
+// ----------------------------------------------------------------------------
+function constraintFor(constraints, staffId, day){
+  return (constraints && constraints[staffId] && constraints[staffId][day]) || null;
+}
+// Il codice è ammesso per questa persona in questo giorno?
+function codeAllowed(constraints, staffId, day, code, codeToServices){
+  const c = constraintFor(constraints, staffId, day);
+  if(!c) return true;
+  if(c.blocked) return false;
+  if(c.services && c.services.length){
+    const coperti = codeToServices[code] || [];
+    // Un turno che copre anche servizi NON richiesti va escluso: chi ha chiesto
+    // "solo pranzo" non deve ritrovarsi lo spezzato che gli porta dentro la cena.
+    return coperti.length > 0 && coperti.every(sv=> c.services.includes(sv));
+  }
+  return true;
+}
+
 function computeShifts(staffList, staffingNeeds, options){
   options = options || {};
   const cfg = options.config || buildShiftConfig(null, null);
@@ -161,6 +188,7 @@ function computeShifts(staffList, staffingNeeds, options){
   const { serviceCodes: SERVICE_CODES, codeToServices: CODE_TO_SERVICES,
           mainCode: MAIN_CODE, workingCodes: WORKING_CODES } = cfg;
   const days = options.days || DAYS;
+  const constraints = options.constraints || {};
 
   const pools = buildStaffPools(staffList);
   const assigned = {}, stationAssign = {}, extraFlag = {};
@@ -169,6 +197,13 @@ function computeShifts(staffList, staffingNeeds, options){
   const extras = [];
 
   days.forEach(day=>{
+    // Le richieste approvate si applicano prima di ogni altra cosa: la persona
+    // è già "occupata" per quel giorno e nessuna logica successiva la tocca.
+    staffList.forEach(s=>{
+      const c = constraintFor(constraints, s.id, day);
+      if(c && c.blocked) assigned[s.id][day] = c.blocked;
+    });
+
     const remain = {};
     SERVICES.forEach(sv=>{ remain[sv]={}; (staffingNeeds[sv]||[]).forEach(n=>{ remain[sv][n.stationId]=(remain[sv][n.stationId]||0)+(parseInt(n.count)||0); }); });
 
@@ -182,18 +217,27 @@ function computeShifts(staffList, staffingNeeds, options){
       });
       stationIds.forEach(stationId=>{
         while(remain[sv][stationId] > 0){
+          // Codici che coprono questo servizio E che questa persona può fare
+          // oggi, viste le sue richieste approvate.
+          const codiciUtili = (s) => (SERVICE_CODES[sv]||[])
+            .filter(c=> codeAllowed(constraints, s.id, day, c, CODE_TO_SERVICES));
+
           let candidates = staffList.filter(s=>{
             if(assigned[s.id][day]) return false;
             const qualified = (s.stations&&s.stations.length) ? s.stations.includes(stationId) : false;
             if(!qualified) return false;
-            return pools[s.id].some(slot=> slot.codes.some(c=>(SERVICE_CODES[sv]||[]).includes(c)));
+            if(!codiciUtili(s).length) return false;
+            return pools[s.id].some(slot=> slot.codes.some(c=>codiciUtili(s).includes(c)));
           });
           let isExtra = false;
           if(!candidates.length){
             // il fabbisogno supera quello che le quote possono coprire: proviamo comunque a tappare
             // il buco con un turno EXTRA (oltre quota), pescando chiunque sia qualificato e libero
-            // quel giorno, invece di lasciare la postazione scoperta.
-            candidates = staffList.filter(s=> !assigned[s.id][day] && s.stations && s.stations.includes(stationId));
+            // quel giorno, invece di lasciare la postazione scoperta. Le richieste
+            // approvate restano intoccabili anche qui: si preferisce dichiarare la
+            // scopertura piuttosto che far saltare un riposo concordato.
+            candidates = staffList.filter(s=> !assigned[s.id][day] && s.stations
+              && s.stations.includes(stationId) && codiciUtili(s).length);
             isExtra = true;
           }
           if(!candidates.length){
@@ -214,22 +258,24 @@ function computeShifts(staffList, staffingNeeds, options){
           const codeCoversMore = code =>
             (CODE_TO_SERVICES[code]||[]).filter(sv2=> sv2!==sv && (remain[sv2]||{})[stationId] > 0).length;
 
+          const ammessi = codiciUtili(chosen);
           let code;
           if(isExtra){
             // nessuno slot di quota compatibile disponibile: si assegna comunque il turno giusto,
             // segnato come extra, senza consumare la quota (che è già esaurita).
-            const utili = (SERVICE_CODES[sv]||[]).slice().sort((a,b)=> codeCoversMore(b) - codeCoversMore(a));
-            code = (utili.length && codeCoversMore(utili[0]) > 0) ? utili[0] : (MAIN_CODE[sv] || utili[0]);
+            const utili = ammessi.slice().sort((a,b)=> codeCoversMore(b) - codeCoversMore(a));
+            code = (utili.length && codeCoversMore(utili[0]) > 0) ? utili[0]
+                 : (ammessi.includes(MAIN_CODE[sv]) ? MAIN_CODE[sv] : utili[0]);
           } else {
             const matchIdx = [];
-            pool.forEach((slot,i)=>{ if(slot.codes.some(c=>(SERVICE_CODES[sv]||[]).includes(c))) matchIdx.push(i); });
+            pool.forEach((slot,i)=>{ if(slot.codes.some(c=>ammessi.includes(c))) matchIdx.push(i); });
             matchIdx.sort((a,b)=> pool[a].codes.length - pool[b].codes.length);
             const slotIdx = matchIdx[0];
             const slot = pool[slotIdx];
-            const utili = slot.codes.filter(c=>(SERVICE_CODES[sv]||[]).includes(c))
+            const utili = slot.codes.filter(c=>ammessi.includes(c))
                                     .sort((a,b)=> codeCoversMore(b) - codeCoversMore(a));
             if(utili.length && codeCoversMore(utili[0]) > 0) code = utili[0];
-            else if(slot.codes.includes(MAIN_CODE[sv])) code = MAIN_CODE[sv];
+            else if(slot.codes.includes(MAIN_CODE[sv]) && ammessi.includes(MAIN_CODE[sv])) code = MAIN_CODE[sv];
             else code = utili[0];
             pool.splice(slotIdx,1);
           }
@@ -250,6 +296,23 @@ function computeShifts(staffList, staffingNeeds, options){
 
     staffList.forEach(s=>{
       if(!assigned[s.id][day]){
+        // Chi ha chiesto solo certi servizi non può ricevere qui un turno
+        // qualsiasi pescato dalla quota: meglio lasciarlo a riposo.
+        const vincolo = constraintFor(constraints, s.id, day);
+        if(vincolo && vincolo.services && vincolo.services.length){
+          const idx = pools[s.id].findIndex(slot=>
+            slot.codes.some(c=> codeAllowed(constraints, s.id, day, c, CODE_TO_SERVICES)));
+          if(idx < 0){ assigned[s.id][day] = REST_CODE; return; }
+          const slot = pools[s.id].splice(idx,1)[0];
+          const ok = slot.codes.filter(c=> codeAllowed(constraints, s.id, day, c, CODE_TO_SERVICES));
+          const code = ok[Math.floor(Math.random()*ok.length)];
+          assigned[s.id][day] = code;
+          if(WORKING_CODES.includes(code)){
+            const qualified = (s.stations&&s.stations.length) ? s.stations : [];
+            if(qualified.length) stationAssign[s.id][day] = qualified[Math.floor(Math.random()*qualified.length)];
+          }
+          return;
+        }
         if(pools[s.id].length){
           // per i giorni non guidati dal fabbisogno, consuma uno slot di Riposo se c'è: non sprecare
           // turni di lavoro preziosi (specialmente quelli che coprono più servizi) in giorni dove
@@ -298,7 +361,7 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
 
   groupByWeek(dates).forEach(settimana=>{
     const res = computeShifts(staffList, staffingNeeds, {
-      config: options.config, days: settimana,
+      config: options.config, days: settimana, constraints: options.constraints,
     });
     staffList.forEach(s=>{ Object.assign(newShifts[s.id], res.newShifts[s.id]||{}); });
     shortfalls.push(...res.shortfalls);
@@ -311,5 +374,5 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
 return { DAYS, SPECIAL_CODES, REST_CODE, DEFAULT_SERVICES, DEFAULT_SHIFT_TYPES,
          buildShiftConfig, shuffleArray, buildStaffPools, computeShifts,
          isoDate, parseISO, startOfWeek, weekDates, monthDates, dayName, groupByWeek,
-         computeShiftsForDates };
+         computeShiftsForDates, constraintFor, codeAllowed };
 });

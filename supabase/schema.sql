@@ -80,6 +80,28 @@ create table if not exists public.user_data (
   primary key (user_id, key)
 );
 
+-- Richieste del personale: ferie, giorni di riposo, servizi preferiti.
+-- Tabella a sé e non una sezione di kitchen_data perché chi è in sola lettura
+-- deve poter INSERIRE le proprie richieste senza poter toccare nient'altro
+-- della cucina: un permesso che sul blob dei dati non è esprimibile.
+create table if not exists public.kitchen_requests (
+  id         uuid primary key default gen_random_uuid(),
+  kitchen_id uuid not null references public.kitchens(id) on delete cascade,
+  staff_id   text not null,               -- id della persona nella brigata
+  user_id    uuid references auth.users(id) on delete set null,  -- chi l'ha inserita
+  dal        date not null,
+  al         date not null,
+  tipo       text not null check (tipo in ('ferie','riposo','servizio')),
+  servizi    jsonb not null default '[]'::jsonb,
+  stato      text not null default 'in_attesa' check (stato in ('in_attesa','approvata','rifiutata')),
+  nota       text,
+  created_at timestamptz not null default now(),
+  decisa_da  uuid references auth.users(id),
+  decisa_il  timestamptz,
+  check (al >= dal)
+);
+create index if not exists kitchen_requests_kitchen_idx on public.kitchen_requests(kitchen_id, stato);
+
 create table if not exists public.kitchen_invites (
   code       text primary key,
   kitchen_id uuid not null references public.kitchens(id) on delete cascade,
@@ -179,6 +201,39 @@ drop policy if exists user_data_all on public.user_data;
 create policy user_data_all on public.user_data
   for all using (user_id = auth.uid())
   with check (user_id = auth.uid());
+
+-- Richieste: ognuno vede e crea le proprie; il titolare le vede tutte e decide.
+alter table public.kitchen_requests enable row level security;
+
+drop policy if exists requests_select on public.kitchen_requests;
+create policy requests_select on public.kitchen_requests
+  for select using (
+    user_id = auth.uid() or public.my_role(kitchen_id) = 'owner'
+  );
+
+-- Si può inserire solo a proprio nome, e solo in una cucina di cui si fa parte.
+-- Il titolare può inserirne anche per chi non ha un account.
+drop policy if exists requests_insert on public.kitchen_requests;
+create policy requests_insert on public.kitchen_requests
+  for insert with check (
+    public.my_role(kitchen_id) is not null
+    and (user_id = auth.uid() or public.my_role(kitchen_id) = 'owner')
+  );
+
+-- Approvare o rifiutare è solo del titolare: altrimenti chiunque potrebbe
+-- auto-approvarsi le ferie e vincolare il generatore.
+drop policy if exists requests_update on public.kitchen_requests;
+create policy requests_update on public.kitchen_requests
+  for update using (public.my_role(kitchen_id) = 'owner')
+  with check (public.my_role(kitchen_id) = 'owner');
+
+-- Ritirare una richiesta: il titolare sempre, l'interessato finché è in attesa.
+drop policy if exists requests_delete on public.kitchen_requests;
+create policy requests_delete on public.kitchen_requests
+  for delete using (
+    public.my_role(kitchen_id) = 'owner'
+    or (user_id = auth.uid() and stato = 'in_attesa')
+  );
 
 -- Gli inviti si leggono/creano solo dal titolare della cucina. Chi accetta un
 -- invito non è ancora membro e quindi non può leggerli: usa join_kitchen().

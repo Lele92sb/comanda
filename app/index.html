@@ -408,6 +408,34 @@ body.readonly main label.btn{opacity:0.45;}
       </div>
     </section>
 
+    <section class="view" id="view-richieste">
+      <h2 class="section-title">Richieste</h2>
+      <p class="section-sub">Ferie, giorni di riposo e servizi preferiti</p>
+      <div class="panel">
+        <h3 id="req-form-title">Nuova richiesta</h3>
+        <p class="small-note" style="margin-top:0;" id="req-form-note"></p>
+        <div id="req-who"></div>
+        <div class="grid2">
+          <div><label>Dal giorno</label><input type="date" id="req-dal"></div>
+          <div><label>Al giorno</label><input type="date" id="req-al"></div>
+        </div>
+        <label>Tipo di richiesta</label>
+        <select id="req-tipo">
+          <option value="riposo">Giorno di riposo</option>
+          <option value="ferie">Ferie</option>
+          <option value="servizio">Solo certi servizi</option>
+        </select>
+        <div id="req-servizi-wrap" style="display:none;">
+          <label>Servizi che posso fare in questi giorni</label>
+          <div class="chip-toggle" id="req-servizi"></div>
+        </div>
+        <label>Nota (facoltativa)</label>
+        <input type="text" id="req-nota" placeholder="es. visita medica, matrimonio...">
+        <button class="btn full" id="req-add" style="margin-top:12px;">Invia richiesta</button>
+      </div>
+      <div class="panel"><h3 id="req-list-title">Richieste</h3><div id="req-list"></div></div>
+    </section>
+
     <section class="view" id="view-assistente">
       <h2 class="section-title">Assistente AI</h2>
       <p class="section-sub">Il tuo sous-chef digitale — parla, chiedi consigli, valuta insieme</p>
@@ -661,6 +689,7 @@ const TABS = [
   {id:'menu', label:'Menu'},
   {id:'brigata', label:'Brigata'},
   {id:'turni', label:'Turni'},
+  {id:'richieste', label:'Richieste'},
   {id:'assistente', label:'Assistente AI'},
   {id:'benessere', label:'Benessere'},
 ];
@@ -700,6 +729,7 @@ function switchTab(id){
   if(id==='menu') renderMenuList();
   if(id==='brigata') renderStaffList();
   if(id==='turni'){ renderTurni(); renderOreExtra(); }
+  if(id==='richieste') renderRichieste();
   if(id==='assistente') { renderKB(); renderChat(); }
   if(id==='benessere') { renderWbStaffOptions(); renderWbSummary(); renderWbTips(); }
 }
@@ -1548,9 +1578,15 @@ function renderStaffList(){
     });
   });
 }
-function openStaffForm(existing){
+async function openStaffForm(existing){
   const holder = document.getElementById('staff-form-holder');
-  const s = existing || {id:uid(), name:'', role:'Cuoco', hours:'', phone:'', email:'', stations:[], weeklyQuota:[]};
+  const s = existing || {id:uid(), name:'', role:'Cuoco', hours:'', phone:'', email:'', stations:[], weeklyQuota:[], userId:null};
+  // Chi ha un account nella cucina, per poter collegare la persona al suo
+  // accesso: senza il collegamento non può inviare le proprie richieste.
+  let membri = [];
+  if(Cloud.enabled && Cloud.isOwner()){
+    try{ membri = await Cloud.listMembers(); }catch(e){ console.error('membri non caricati', e); }
+  }
   holder.innerHTML = `
     <div class="panel">
       <h3>${existing?'Modifica persona':'Aggiungi persona'}</h3>
@@ -1573,6 +1609,13 @@ function openStaffForm(existing){
         ${state.stations.length ? state.stations.map(st=>`<button type="button" data-st="${st.id}" class="${(s.stations||[]).includes(st.id)?'on':''}">${esc(st.name)}</button>`).join('') : '<span class="small-note">Nessuna stazione creata ancora — puoi crearle in Turni → Stazioni, poi torna qui.</span>'}
       </div>
       <p class="small-note">Usata dal generatore di turni per non mettere in una postazione qualcuno che non la sa coprire.</p>
+      ${membri.length ? `
+      <label>Account collegato</label>
+      <select id="s-user">
+        <option value="">— nessuno: le richieste le inserisci tu per lui —</option>
+        ${membri.map(m=>`<option value="${esc(m.user_id)}" ${s.userId===m.user_id?'selected':''}>${esc(m.display_name||m.email||'membro')}</option>`).join('')}
+      </select>
+      <p class="small-note">Collegando la persona al suo account potrà inviare da sola ferie e richieste di riposo.</p>` : ''}
       <div style="display:flex;gap:10px;margin-top:14px;">
         <button class="btn" id="s-save">Salva</button>
         <button class="btn ghost" id="s-cancel">Annulla</button>
@@ -1585,9 +1628,11 @@ function openStaffForm(existing){
     const name = document.getElementById('s-name').value.trim();
     if(!name){ toast('Serve un nome'); return; }
     const stations = Array.from(document.querySelectorAll('#s-stations button.on')).map(b=>b.dataset.st);
+    const userSel = document.getElementById('s-user');
     const newStaff = { id:s.id, name, role:document.getElementById('s-role').value, hours:document.getElementById('s-hours').value,
       phone:document.getElementById('s-phone').value.trim(), email:document.getElementById('s-email').value.trim(),
-      stations, weeklyQuota: s.weeklyQuota||[] };
+      stations, weeklyQuota: s.weeklyQuota||[],
+      userId: userSel ? (userSel.value || null) : (s.userId||null) };
     const idx = state.staff.findIndex(x=>x.id===s.id);
     if(idx>=0) state.staff[idx]=newStaff; else state.staff.push(newStaff);
     save('staff'); holder.innerHTML=''; renderStaffList(); toast('Salvato');
@@ -1972,17 +2017,173 @@ function renderQuotas(){
   });
 }
 
+/* ============================= RICHIESTE DEL PERSONALE ============================= */
+let RICHIESTE = [];
+
+// La persona della brigata corrispondente a chi sta usando l'app. Il
+// collegamento si imposta nell'anagrafica brigata; senza, si possono solo
+// vedere le richieste altrui (da titolare) e non inviarne per sé.
+function miaSchedaBrigata(){
+  if(!Cloud.enabled) return null;
+  return state.staff.find(s=> s.userId === Cloud.user.id) || null;
+}
+function nomeBrigata(staffId){
+  const s = state.staff.find(x=>x.id===staffId);
+  return s ? s.name : '(persona non più in brigata)';
+}
+function elencoDate(dal, al){
+  const out = []; const fine = parseISO(al);
+  for(let d = parseISO(dal); d <= fine; d.setDate(d.getDate()+1)) out.push(isoDate(d));
+  return out;
+}
+const TIPO_LABEL = { ferie:'Ferie', riposo:'Riposo', servizio:'Solo certi servizi' };
+
+// Da richieste approvate a vincoli per il motore. Un blocco (ferie/riposo) ha
+// sempre la precedenza su una preferenza di servizio: è più stringente.
+function constraintsFromRequests(){
+  const c = {};
+  RICHIESTE.filter(r=>r.stato==='approvata').forEach(r=>{
+    elencoDate(r.dal, r.al).forEach(d=>{
+      c[r.staff_id] = c[r.staff_id] || {};
+      const esistente = c[r.staff_id][d];
+      if(esistente && esistente.blocked) return;
+      if(r.tipo==='ferie')       c[r.staff_id][d] = {blocked:'F'};
+      else if(r.tipo==='riposo') c[r.staff_id][d] = {blocked:'R'};
+      else                       c[r.staff_id][d] = {services: r.servizi || []};
+    });
+  });
+  return c;
+}
+
+async function caricaRichieste(){
+  try{ RICHIESTE = await Cloud.listRequests(); }
+  catch(e){ console.error('richieste non caricate', e); RICHIESTE = []; }
+}
+
+async function renderRichieste(){
+  await caricaRichieste();
+  const sonoTitolare = !Cloud.enabled || Cloud.isOwner();
+  const mia = miaSchedaBrigata();
+
+  // --- form ---
+  document.getElementById('req-form-title').textContent = sonoTitolare ? 'Registra una richiesta' : 'Nuova richiesta';
+  document.getElementById('req-form-note').textContent = sonoTitolare
+    ? 'Le richieste che registri tu sono già approvate: valgono subito per il generatore. Quelle inviate dalla brigata restano in attesa finché non decidi.'
+    : 'La richiesta arriva a chi gestisce la cucina. Diventa vincolante per i turni solo quando viene approvata.';
+
+  const whoEl = document.getElementById('req-who');
+  if(sonoTitolare){
+    whoEl.innerHTML = `<label>Per chi</label><select id="req-staff">${
+      state.staff.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')
+      || '<option value="">Nessuno in brigata</option>'}</select>`;
+  } else if(mia){
+    whoEl.innerHTML = `<p class="small-note" style="margin-top:0;">Richiesta a nome di <b>${esc(mia.name)}</b>.</p>`;
+  } else {
+    whoEl.innerHTML = `<div class="alert-box">Non risulti collegato a nessuna persona della brigata: chiedi a chi gestisce la cucina di collegarti, così potrai inviare le tue richieste.</div>`;
+  }
+  document.getElementById('req-add').disabled = !sonoTitolare && !mia;
+
+  document.getElementById('req-servizi').innerHTML = state.services.map(sv=>
+    `<button type="button" data-sv="${esc(sv.id)}">${esc(sv.name)}</button>`).join('');
+
+  // --- elenco ---
+  const visibili = sonoTitolare ? RICHIESTE
+    : RICHIESTE.filter(r=> mia && r.staff_id === mia.id);
+  document.getElementById('req-list-title').textContent = sonoTitolare ? 'Tutte le richieste' : 'Le mie richieste';
+
+  const el = document.getElementById('req-list');
+  if(!visibili.length){ el.innerHTML = `<div class="empty">Nessuna richiesta.</div>`; return; }
+
+  const inAttesa = visibili.filter(r=>r.stato==='in_attesa');
+  const decise   = visibili.filter(r=>r.stato!=='in_attesa');
+  const riga = r=>{
+    const giorni = elencoDate(r.dal, r.al).length;
+    const periodo = r.dal===r.al
+      ? parseISO(r.dal).toLocaleDateString('it-IT',{weekday:'short', day:'numeric', month:'long'})
+      : `${parseISO(r.dal).toLocaleDateString('it-IT',{day:'numeric',month:'short'})} → ${parseISO(r.al).toLocaleDateString('it-IT',{day:'numeric',month:'short'})} (${giorni} giorni)`;
+    const dettaglio = r.tipo==='servizio'
+      ? 'solo: ' + (r.servizi||[]).map(SERVICE_LABEL).join(', ')
+      : TIPO_LABEL[r.tipo];
+    const badge = r.stato==='approvata' ? '<span class="role-badge">approvata</span>'
+                : r.stato==='rifiutata' ? '<span class="role-badge viewer">rifiutata</span>'
+                : '<span class="role-badge viewer">in attesa</span>';
+    return `
+      <div class="staff-card">
+        <div style="min-width:0;">
+          <div style="font-weight:600;">${esc(nomeBrigata(r.staff_id))} — ${esc(dettaglio)}</div>
+          <div class="contact">${esc(periodo)}${r.nota? ' · '+esc(r.nota):''}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+          ${badge}
+          ${sonoTitolare && r.stato==='in_attesa' ? `
+            <button class="btn small req-ok" data-id="${esc(r.id)}">Approva</button>
+            <button class="btn ghost small req-no" data-id="${esc(r.id)}">Rifiuta</button>` : ''}
+          <button class="btn ghost small req-del" data-id="${esc(r.id)}" style="color:var(--alert);">Elimina</button>
+        </div>
+      </div>`;
+  };
+
+  el.innerHTML =
+    (inAttesa.length ? `<label>Da decidere (${inAttesa.length})</label>` + inAttesa.map(riga).join('') : '') +
+    (decise.length   ? `<label>Già decise</label>` + decise.map(riga).join('') : '');
+
+  const dopo = async (fn, msg)=>{ try{ await fn(); toast(msg); renderRichieste(); }catch(e){ toast(humanError(e)); } };
+  el.querySelectorAll('.req-ok').forEach(b=>b.addEventListener('click', ()=>
+    dopo(()=>Cloud.decideRequest(b.dataset.id,'approvata'), 'Approvata — vincola i prossimi turni generati')));
+  el.querySelectorAll('.req-no').forEach(b=>b.addEventListener('click', ()=>
+    dopo(()=>Cloud.decideRequest(b.dataset.id,'rifiutata'), 'Rifiutata')));
+  el.querySelectorAll('.req-del').forEach(b=>b.addEventListener('click', ()=>{
+    if(!confirm('Eliminare questa richiesta?')) return;
+    dopo(()=>Cloud.deleteRequest(b.dataset.id), 'Richiesta eliminata');
+  }));
+}
+
+document.getElementById('req-tipo').addEventListener('change', e=>{
+  document.getElementById('req-servizi-wrap').style.display = e.target.value==='servizio' ? 'block' : 'none';
+});
+document.getElementById('req-servizi').addEventListener('click', e=>{
+  if(e.target.dataset.sv) e.target.classList.toggle('on');
+});
+document.getElementById('req-add').addEventListener('click', async ()=>{
+  const dal = document.getElementById('req-dal').value;
+  const al  = document.getElementById('req-al').value || dal;
+  const tipo = document.getElementById('req-tipo').value;
+  if(!dal){ toast('Indica almeno il giorno di inizio'); return; }
+  if(parseISO(al) < parseISO(dal)){ toast('La data finale è prima di quella iniziale'); return; }
+
+  const sel = document.getElementById('req-staff');
+  const mia = miaSchedaBrigata();
+  const staffId = sel ? sel.value : (mia && mia.id);
+  if(!staffId){ toast('Manca la persona a cui riferire la richiesta'); return; }
+
+  const servizi = Array.from(document.querySelectorAll('#req-servizi button.on')).map(b=>b.dataset.sv);
+  if(tipo==='servizio' && !servizi.length){ toast('Scegli almeno un servizio'); return; }
+
+  try{
+    await Cloud.createRequest({ staff_id: staffId, dal, al, tipo, servizi,
+                                nota: document.getElementById('req-nota').value.trim() });
+    document.getElementById('req-nota').value = '';
+    document.querySelectorAll('#req-servizi button.on').forEach(b=>b.classList.remove('on'));
+    toast(Cloud.enabled && !Cloud.isOwner() ? 'Richiesta inviata — in attesa di approvazione' : 'Richiesta registrata');
+    renderRichieste();
+  }catch(e){ toast(humanError(e)); }
+});
+
 /* ============================= TURNI: generatore casuale (motore in logic.js, need-driven, testato) ============================= */
-function generateRandomShifts(){
+async function generateRandomShifts(){
   if(!state.staff.length){ toast('Aggiungi prima la brigata'); return; }
+  // Le richieste approvate sono vincoli assoluti: vanno rilette adesso, non
+  // usando quelle caricate chissà quando.
+  await caricaRichieste();
   const missingQuota = state.staff.filter(s=> !(s.weeklyQuota&&s.weeklyQuota.length));
   if(missingQuota.length){ toast('Imposta prima le quote per: '+missingQuota.map(s=>s.name).join(', ')); return; }
   const unqualified = state.staff.filter(s=> !(s.stations&&s.stations.length));
   if(unqualified.length){ toast('Attenzione: senza stazioni assegnate, '+unqualified.map(s=>s.name).join(', ')+' non potranno coprire nessun fabbisogno'); }
 
   const dates = periodDates();
+  const constraints = constraintsFromRequests();
   const { newShifts, shortfalls, extras } = computeShiftsForDates(state.staff, state.staffingNeeds,
-    {config: refreshShiftConfig(), dates});
+    {config: refreshShiftConfig(), dates, constraints});
   // Si sovrascrivono SOLO le date del periodo: i turni delle altre settimane
   // gia' pianificate non devono sparire perche' se ne rigenera una.
   state.staff.forEach(s=>{
@@ -2012,8 +2213,13 @@ function generateRandomShifts(){
       Object.entries(byDay).map(([day,lines])=>`<b>${day}</b>: ${lines.join(' · ')}`).join('<br>') +
       `</div><p class="small-note">Per risolvere: aggiungi personale qualificato per quella stazione, o abbassa il fabbisogno richiesto.</p>`;
   }
+  const vincolate = Object.keys(constraints).length;
+  if(vincolate){
+    const giorni = Object.values(constraints).reduce((n,g)=>n+Object.keys(g).length, 0);
+    html = `<div class="ok-box">Rispettate le richieste approvate: ${giorni} giorni vincolati su ${vincolate} person${vincolate>1?'e':'a'}.</div>` + html;
+  }
   if(!extras.length && !shortfalls.length){
-    html = `<div class="ok-box">✓ Fabbisogno coperto per tutti i servizi, tutti i giorni, senza bisogno di turni extra.</div>`;
+    html += `<div class="ok-box">✓ Fabbisogno coperto per tutti i servizi, tutti i giorni, senza bisogno di turni extra.</div>`;
   }
   logEl.innerHTML = html;
   toast(shortfalls.length ? 'Turni generati — alcune postazioni restano scoperte, vedi dettagli' : (extras.length ? 'Turni generati — con alcuni turni extra' : 'Turni generati — fabbisogno coperto'));
