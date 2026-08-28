@@ -1,3 +1,4 @@
+import { t } from '../core/lingua.ts';
 import { SERVICE_LABEL, esc, periodDates, refreshShiftConfig, save, setPeriodAnchor, setPeriodMode, shiftPeriod, state, toast } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
 import { computeShiftsForDates, parseISO } from '../lib/logic.js';
@@ -42,7 +43,7 @@ async function generateRandomShifts(){
     state.shifts[s.id] = Object.assign(state.shifts[s.id]||{}, newShifts[s.id]||{});
   });
   save('shifts');
-  renderTurni(); renderOreExtra(); renderDashboard();
+  renderTurni(); renderOreExtra(); renderPubblicazione(); renderDashboard();
 
   const logEl = document.getElementById('generate-log');
   let html = '';
@@ -84,7 +85,7 @@ async function generateRandomShifts(){
 document.getElementById('btn-generate-shifts').addEventListener('click', generateRandomShifts);
 
 /* ---- Navigazione del periodo ---- */
-function aggiornaPeriodo(){ renderTurni(); renderOreExtra(); }
+function aggiornaPeriodo(){ renderTurni(); renderOreExtra(); renderPubblicazione(); }
 document.querySelectorAll('.period-modes button').forEach(b=>b.addEventListener('click', ()=>{
   setPeriodMode(b.dataset.period);
   aggiornaPeriodo();
@@ -92,3 +93,53 @@ document.querySelectorAll('.period-modes button').forEach(b=>b.addEventListener(
 document.getElementById('period-prev').addEventListener('click', ()=>{ shiftPeriod(-1); aggiornaPeriodo(); });
 document.getElementById('period-next').addEventListener('click', ()=>{ shiftPeriod(1);  aggiornaPeriodo(); });
 document.getElementById('period-today').addEventListener('click', ()=>{ setPeriodAnchor(new Date()); aggiornaPeriodo(); });
+
+/* ============================= PUBBLICAZIONE DEI TURNI =============================
+   Chi ha solo lettura vede un turno solo quando la sua data è stata pubblicata.
+   Il filtro vero è nel database (leggi_sezione): qui c'è solo il comando.
+   ============================================================================ */
+export function renderPubblicazione(){
+  const box = document.getElementById('pubblica-box');
+  // Chi non può modificare non pubblica niente: per lui il riquadro non esiste.
+  box.classList.toggle('hidden', Cloud.enabled && !Cloud.canWrite());
+  if(Cloud.enabled && !Cloud.canWrite()) return;
+
+  const dates = periodDates();
+  const pubblicate = new Set(state.publishedShifts || []);
+  const quante = dates.filter(d=>pubblicate.has(d)).length;
+  const tutte = quante === dates.length;
+
+  document.getElementById('pubblica-stato').textContent = tutte
+    ? t('Periodo pubblicato')
+    : (quante ? t('Pubblicato in parte: {n} giorni su {tot}', {n: quante, tot: dates.length})
+              : t('Non ancora pubblicato'));
+  document.getElementById('pubblica-nota').textContent = tutte
+    ? t('La brigata vede questi turni.')
+    : t('La brigata non vede questi turni finché non li pubblichi.');
+
+  const btn = document.getElementById('btn-pubblica');
+  btn.textContent = tutte ? t('Nascondi') : t('Pubblica');
+  btn.classList.toggle('ghost', tutte);
+}
+
+document.getElementById('btn-pubblica').addEventListener('click', async ()=>{
+  const dates = periodDates();
+  const pubblicate = new Set(state.publishedShifts || []);
+  const tutte = dates.every(d=>pubblicate.has(d));
+
+  if(tutte){
+    const ok = await conferma(t('Nascondere questi turni alla brigata?'),
+      t('Torneranno invisibili finché non li pubblichi di nuovo. I turni restano come sono.'),
+      {conferma: t('Nascondi')});
+    if(!ok) return;
+    dates.forEach(d=>pubblicate.delete(d));
+  } else {
+    dates.forEach(d=>pubblicate.add(d));
+  }
+
+  state.publishedShifts = [...pubblicate].sort();
+  const salvato = await save('publishedShifts');
+  if(!salvato) return;
+  renderPubblicazione();
+  toast(tutte ? t('Turni nascosti') : t('Turni pubblicati — la brigata li vede'));
+});

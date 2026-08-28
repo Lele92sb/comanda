@@ -398,3 +398,13 @@ body.readonly main input:not(#chat-input),
 body.readonly main select,
 body.readonly main textarea:not(#chat-input),
 body.readonly main label.btn{opacity:0.45;}
+
+/* Riga con casella di scelta e spiegazione sotto: le impostazioni che cambiano
+   cosa vedono gli altri meritano una frase, non solo un'etichetta. */
+.riga-scelta{display:flex;gap:var(--space-3);align-items:flex-start;
+  padding:var(--space-3) 0;border-bottom:1px solid var(--line);
+  text-transform:none;letter-spacing:0;color:var(--paper);font-family:var(--font-body);
+  font-size:var(--text-md);margin:0;cursor:pointer;}
+.riga-scelta:last-child{border-bottom:none;}
+.riga-scelta input[type=checkbox]{width:18px;height:18px;margin-top:2px;flex-shrink:0;accent-color:var(--copper);}
+.riga-scelta .contact{margin-top:2px;display:block;}

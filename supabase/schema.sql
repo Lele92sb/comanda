@@ -30,9 +30,20 @@ create table if not exists public.kitchens (
   ai_month      text not null default to_char(now(),'YYYY-MM'),
   ai_calls      integer not null default 0,
   ai_limit      integer not null default 1000,
+  -- Cosa vede chi "può modificare". Ogni titolare decide per la propria
+  -- cucina: c'è chi al secondo mostra tutto e chi tiene i numeri per sé.
+  -- Stanno QUI e non nei dati della cucina perché chi può modificare può
+  -- scrivere i dati: se l'impostazione vivesse lì, potrebbe alzarsi i
+  -- permessi da solo.
+  editor_vede_costi     boolean not null default true,
+  editor_vede_personali boolean not null default false,
   created_at    timestamptz not null default now(),
   created_by    uuid not null references auth.users(id)
 );
+
+-- Adeguamento per le cucine create prima che le impostazioni esistessero.
+alter table public.kitchens add column if not exists editor_vede_costi     boolean not null default true;
+alter table public.kitchens add column if not exists editor_vede_personali boolean not null default false;
 
 create table if not exists public.kitchen_members (
   kitchen_id   uuid not null references public.kitchens(id) on delete cascade,
@@ -171,7 +182,7 @@ create policy kitchens_update on public.kitchens
 -- colonna chiudono la porta; status, trial_ends_at e ai_limit restano
 -- scrivibili solo lato server (service role).
 revoke update on public.kitchens from authenticated;
-grant update (name) on public.kitchens to authenticated;
+grant update (name, editor_vede_costi, editor_vede_personali) on public.kitchens to authenticated;
 
 -- Chi lavora in cucina vede SOLO la propria riga; l'elenco completo della
 -- squadra — con le email dei colleghi — è riservato al titolare.
@@ -187,10 +198,6 @@ drop policy if exists members_write on public.kitchen_members;
 create policy members_write on public.kitchen_members
   for all using (public.my_role(kitchen_id) = 'owner')
   with check (public.my_role(kitchen_id) = 'owner');
-
-drop policy if exists data_select on public.kitchen_data;
-create policy data_select on public.kitchen_data
-  for select using (public.my_role(kitchen_id) is not null);
 
 drop policy if exists data_write on public.kitchen_data;
 create policy data_write on public.kitchen_data
@@ -355,52 +362,6 @@ $$;
 -- Se qualcun altro ha salvato la stessa sezione nel frattempo, solleva
 -- 'CONFLICT' invece di sovrascrivere il suo lavoro.
 -- ----------------------------------------------------------------------------
-create or replace function public.save_kitchen_data(
-  p_kitchen uuid, p_key text, p_value jsonb, p_expected_version bigint
-)
-returns bigint
-language plpgsql
-set search_path = public
-as $$
-declare v_current bigint;
-begin
-  -- Controllo esplicito, prima di toccare qualsiasi cosa. Senza di questo un
-  -- viewer non farebbe danni (l'RLS filtra comunque le righe), ma la UPDATE
-  -- non troverebbe nessuna riga da aggiornare e Postgres NON lo considera un
-  -- errore: la funzione risponderebbe "salvato" a un salvataggio mai avvenuto,
-  -- e chi scrive perderebbe il lavoro credendolo al sicuro.
-  if not public.can_write(p_kitchen) then
-    raise exception 'FORBIDDEN' using errcode = '42501';
-  end if;
-
-  select version into v_current from public.kitchen_data
-  where kitchen_id = p_kitchen and key = p_key;
-
-  if v_current is null then
-    insert into public.kitchen_data (kitchen_id, key, value, version, updated_by)
-    values (p_kitchen, p_key, p_value, 1, auth.uid());
-    return 1;
-  end if;
-
-  if p_expected_version is not null and p_expected_version <> v_current then
-    raise exception 'CONFLICT' using errcode = 'P0001';
-  end if;
-
-  update public.kitchen_data
-  set value = p_value, version = v_current + 1, updated_at = now(), updated_by = auth.uid()
-  where kitchen_id = p_kitchen and key = p_key;
-
-  -- Rete di sicurezza: se per qualsiasi motivo la riga non è stata aggiornata,
-  -- meglio un errore che un falso "salvato".
-  if not found then
-    raise exception 'FORBIDDEN' using errcode = '42501';
-  end if;
-
-  return v_current + 1;
-end;
-$$;
-
--- ----------------------------------------------------------------------------
 -- Consumo AI: incrementa il contatore mensile della cucina e dice se la
 -- chiamata è consentita. Chiamata SOLO dal proxy server (service role).
 -- ----------------------------------------------------------------------------
@@ -449,3 +410,206 @@ grant execute on function public.set_my_display_name(uuid, text)           to au
 grant execute on function public.save_kitchen_data(uuid, text, jsonb, bigint) to authenticated;
 grant execute on function public.my_role(uuid)                             to authenticated;
 grant execute on function public.can_write(uuid)                           to authenticated;
+
+-- ============================================================================
+-- RISERVATEZZA DEI DATI PER RUOLO
+--
+-- I dati vengono filtrati QUI, prima di uscire dal database. Nascondere un
+-- riquadro nell'interfaccia non è riservatezza: chi apre la console del
+-- browser legge tutto quello che è arrivato al telefono. Quindi non deve
+-- arrivarci proprio.
+--
+-- Tre livelli:
+--   titolare        tutto
+--   può modificare  tutto tranne ciò che il titolare ha deciso di tenersi
+--                   (impostazioni editor_vede_costi / editor_vede_personali)
+--   sola lettura    turni PUBBLICATI, ricette senza numeri, e nient'altro
+-- ============================================================================
+
+-- Chi ha solo lettura non vede i turni finché non vengono pubblicati: lo chef
+-- deve poter generare, rifare e sistemare senza che la brigata legga bozze.
+create or replace function public.sezione_visibile(
+  p_ruolo text, p_key text,
+  p_vede_costi boolean default true, p_vede_personali boolean default false
+)
+returns boolean
+language sql
+immutable
+as $$
+  select case
+    when p_ruolo = 'owner' then true
+
+    when p_ruolo = 'editor' then case
+      -- Fornitori e fatture SONO dati economici: se il titolare ha tolto i
+      -- costi, toglierli a metà lascerebbe la porta aperta dal retro.
+      when p_key in ('suppliers','invoiceHistory','importedInvoices') then p_vede_costi
+      else true
+    end
+
+    when p_ruolo = 'viewer' then p_key in (
+      -- Quello che serve a un cuoco: sapere quando lavora e come si fa un piatto.
+      'shifts', 'staff', 'stations', 'services', 'shiftTypes', 'staffingNeeds',
+      'recipes', 'subrecipes', 'ingredients', 'menus', 'publishedShifts'
+    )
+
+    else false
+  end;
+$$;
+
+-- ----------------------------------------------------------------------------
+-- La redazione vera e propria: toglie i campi che quel ruolo non deve vedere.
+-- ----------------------------------------------------------------------------
+create or replace function public.reddigi_sezione(
+  p_ruolo text, p_key text, p_valore jsonb,
+  p_vede_costi boolean, p_vede_personali boolean, p_pubblicati jsonb
+)
+returns jsonb
+language plpgsql
+immutable
+as $$
+declare
+  senza_costi   boolean := (p_ruolo = 'viewer') or (p_ruolo = 'editor' and not p_vede_costi);
+  senza_person  boolean := (p_ruolo = 'viewer') or (p_ruolo = 'editor' and not p_vede_personali);
+begin
+  if p_ruolo = 'owner' or p_valore is null then return p_valore; end if;
+
+  -- INGREDIENTI: il nome e l'unità servono per leggere una ricetta; il prezzo
+  -- d'acquisto e il fornitore sono un'altra cosa.
+  if p_key = 'ingredients' and senza_costi then
+    return (select coalesce(jsonb_agg(
+      jsonb_build_object('id', i->>'id', 'name', i->>'name',
+                         'unit', i->>'unit', 'yieldPct', i->'yieldPct')), '[]'::jsonb)
+            from jsonb_array_elements(p_valore) i);
+  end if;
+
+  -- PIATTI: la ricetta si legge, il prezzo di vendita e il costo no.
+  if p_key = 'recipes' and senza_costi then
+    return (select coalesce(jsonb_agg(
+      (r - 'priceActual' - 'foodCostTargetPct')), '[]'::jsonb)
+            from jsonb_array_elements(p_valore) r);
+  end if;
+
+  -- BRIGATA: per leggere i turni bastano nome e stazioni. Telefono, email e
+  -- ore contrattuali sono dati da datore di lavoro.
+  if p_key = 'staff' and senza_person then
+    return (select coalesce(jsonb_agg(
+      jsonb_build_object('id', s->>'id', 'name', s->>'name', 'role', s->>'role',
+                         'stations', coalesce(s->'stations','[]'::jsonb),
+                         'weeklyQuota', coalesce(s->'weeklyQuota','[]'::jsonb))), '[]'::jsonb)
+            from jsonb_array_elements(p_valore) s);
+  end if;
+
+  -- TURNI: chi ha solo lettura vede unicamente le date pubblicate.
+  if p_key = 'shifts' and p_ruolo = 'viewer' then
+    return (select coalesce(jsonb_object_agg(persona.key,
+              (select coalesce(jsonb_object_agg(giorno.key, giorno.value), '{}'::jsonb)
+                 from jsonb_each(persona.value) giorno
+                where p_pubblicati ? giorno.key)
+            ), '{}'::jsonb)
+            from jsonb_each(p_valore) persona);
+  end if;
+
+  return p_valore;
+end;
+$$;
+
+-- ----------------------------------------------------------------------------
+-- L'unica porta di lettura. Restituisce valore e versione: la versione serve
+-- al controllo dei conflitti fra due persone che salvano insieme.
+-- ----------------------------------------------------------------------------
+create or replace function public.leggi_sezione(p_kitchen uuid, p_key text)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+declare
+  ruolo         text := public.my_role(p_kitchen);
+  k             public.kitchens;
+  riga          public.kitchen_data;
+  pubblicati    jsonb := '[]'::jsonb;
+begin
+  if ruolo is null then raise exception 'Non fai parte di questa cucina'; end if;
+  select * into k from public.kitchens where id = p_kitchen;
+
+  if not public.sezione_visibile(ruolo, p_key, k.editor_vede_costi, k.editor_vede_personali) then
+    -- Non un errore: la sezione semplicemente non esiste, per chi guarda.
+    return jsonb_build_object('valore', null, 'versione', 0);
+  end if;
+
+  select * into riga from public.kitchen_data where kitchen_id = p_kitchen and key = p_key;
+  if riga is null then return jsonb_build_object('valore', null, 'versione', 0); end if;
+
+  if p_key = 'shifts' and ruolo = 'viewer' then
+    select coalesce(value, '[]'::jsonb) into pubblicati
+      from public.kitchen_data where kitchen_id = p_kitchen and key = 'publishedShifts';
+  end if;
+
+  return jsonb_build_object(
+    'valore', public.reddigi_sezione(ruolo, p_key, riga.value,
+                k.editor_vede_costi, k.editor_vede_personali, pubblicati),
+    'versione', riga.version
+  );
+end;
+$$;
+grant execute on function public.leggi_sezione(uuid, text) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Chiusa la lettura diretta: tutti passano dalla funzione, che redige.
+-- Senza questo, bastava interrogare kitchen_data per avere i dati interi.
+-- ----------------------------------------------------------------------------
+drop policy if exists data_select on public.kitchen_data;
+create policy data_select on public.kitchen_data
+  for select using (public.my_role(kitchen_id) = 'owner');
+
+-- ----------------------------------------------------------------------------
+-- E in scrittura: non si scrive ciò che non si può leggere. Altrimenti chi
+-- può modificare potrebbe sovrascrivere i fornitori senza averli mai visti.
+-- ----------------------------------------------------------------------------
+create or replace function public.save_kitchen_data(
+  p_kitchen uuid, p_key text, p_value jsonb, p_expected_version bigint
+)
+returns bigint
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_current bigint;
+  ruolo     text := public.my_role(p_kitchen);
+  k         public.kitchens;
+begin
+  if not public.can_write(p_kitchen) then
+    raise exception 'FORBIDDEN' using errcode = '42501';
+  end if;
+  -- Una sezione che non puoi vedere non puoi nemmeno riscriverla: altrimenti
+  -- chi può modificare sovrascriverebbe i fornitori senza averli mai visti.
+  select * into k from public.kitchens where id = p_kitchen;
+  if not public.sezione_visibile(ruolo, p_key, k.editor_vede_costi, k.editor_vede_personali) then
+    raise exception 'FORBIDDEN' using errcode = '42501';
+  end if;
+
+  select version into v_current from public.kitchen_data
+  where kitchen_id = p_kitchen and key = p_key;
+
+  if v_current is null then
+    insert into public.kitchen_data (kitchen_id, key, value, version, updated_by)
+    values (p_kitchen, p_key, p_value, 1, auth.uid());
+    return 1;
+  end if;
+
+  if p_expected_version is not null and p_expected_version <> v_current then
+    raise exception 'CONFLICT' using errcode = 'P0001';
+  end if;
+
+  update public.kitchen_data
+  set value = p_value, version = v_current + 1, updated_at = now(), updated_by = auth.uid()
+  where kitchen_id = p_kitchen and key = p_key;
+
+  if not found then
+    raise exception 'FORBIDDEN' using errcode = '42501';
+  end if;
+
+  return v_current + 1;
+end;
+$$;

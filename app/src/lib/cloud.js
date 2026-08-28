@@ -93,7 +93,7 @@ Cloud.resetPassword = async function(email){
 Cloud.loadMemberships = async function(){
   const { data, error } = await Cloud.client
     .from('kitchen_members')
-    .select('role, display_name, kitchen:kitchens(id, name, status, trial_ends_at)')
+    .select('role, display_name, kitchen:kitchens(id, name, status, trial_ends_at, editor_vede_costi, editor_vede_personali)')
     .eq('user_id', Cloud.user.id)
     .order('created_at', { ascending: true });
   if(error) throw error;
@@ -167,6 +167,21 @@ Cloud.listMembers = async function(){
 // Postgres non solleva nessun errore — l'operazione "riesce" senza fare niente.
 // Per questo ogni scrittura chiede indietro le righe toccate con .select() e
 // verifica che ce ne sia almeno una: meglio un errore chiaro di un falso "fatto".
+// Impostazioni di riservatezza della cucina. Vivono sulla riga della cucina,
+// non nei suoi dati: chi può modificare può scrivere i dati, e se stessero lì
+// potrebbe alzarsi i permessi da solo.
+Cloud.setRiservatezza = async function({ costi, personali }){
+  const patch = {};
+  if(costi !== undefined) patch.editor_vede_costi = costi;
+  if(personali !== undefined) patch.editor_vede_personali = personali;
+  const { data, error } = await Cloud.client
+    .from('kitchens').update(patch).eq('id', Cloud.kitchen.id)
+    .select('editor_vede_costi, editor_vede_personali');
+  if(error) throw error;
+  if(!data || !data.length) throw new Error('Solo chi gestisce la cucina può cambiare queste impostazioni.');
+  Object.assign(Cloud.kitchen, data[0]);
+};
+
 Cloud.setMemberRole = async function(userId, role){
   const { data, error } = await Cloud.client
     .from('kitchen_members').update({ role })
@@ -281,13 +296,17 @@ async function cloudGet(key){
     if(error) throw error;
     return data ? data.value : null;
   }
-  const { data, error } = await Cloud.client
-    .from('kitchen_data').select('value, version')
-    .eq('kitchen_id', Cloud.kitchen.id).eq('key', key).maybeSingle();
+  // Si legge SEMPRE dalla funzione, mai dalla tabella: è lì dentro che i dati
+  // vengono filtrati secondo il ruolo e le impostazioni della cucina. Leggendo
+  // la tabella arriverebbe tutto al telefono, e nascondere poi un riquadro
+  // nell'interfaccia non nasconde niente a chi apre la console del browser.
+  const { data, error } = await Cloud.client.rpc('leggi_sezione', {
+    p_kitchen: Cloud.kitchen.id, p_key: key,
+  });
   if(error) throw error;
   if(!data) return null;
-  Cloud.versions[key] = data.version;
-  return data.value;
+  Cloud.versions[key] = data.versione;
+  return data.valore;
 }
 
 async function cloudSet(key, value){
@@ -350,11 +369,14 @@ Cloud.altreCucine = function(){
 // Legge una sezione dati di un'ALTRA cucina (solo lettura, senza toccare le
 // versioni della cucina corrente).
 Cloud.readOtherKitchen = async function(kitchenId, key){
-  const { data, error } = await Cloud.client
-    .from('kitchen_data').select('value')
-    .eq('kitchen_id', kitchenId).eq('key', key).maybeSingle();
+  // Anche qui si passa dalla funzione: chi legge un'altra cucina ci vede
+  // dentro solo quello che il suo ruolo LÌ gli consente. Se in un locale sei
+  // solo un cuoco, non ne leggi i fornitori nemmeno passando da qui.
+  const { data, error } = await Cloud.client.rpc('leggi_sezione', {
+    p_kitchen: kitchenId, p_key: key,
+  });
   if(error) throw error;
-  return data ? data.value : null;
+  return data ? data.valore : null;
 };
 
 // Impegni della stessa persona nelle altre cucine, nell'intervallo di date.

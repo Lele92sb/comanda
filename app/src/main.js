@@ -44,6 +44,11 @@ window.__comanda = {
   get cucina(){ return Cloud.kitchen; },
   get utente(){ return Cloud.user; },
   get ruolo(){ return Cloud.role; },
+  // Il client del database. Esporlo non concede niente: la chiave pubblica sta
+  // nel codice della pagina e chiunque può costruirsene uno. Serve invece a
+  // verificare che le protezioni tengano davvero, provando a scavalcare
+  // l'interfaccia come farebbe qualcuno in malafede.
+  get db(){ return Cloud.client; },
   versione: __VERSIONE__,
 };
 

@@ -1,8 +1,8 @@
 import { Cloud, storageGet, storageSet } from '../lib/cloud.js';
 import { DAYS, DEFAULT_SERVICES, DEFAULT_SHIFT_TYPES, buildShiftConfig, monthDates, parseISO, weekDates } from '../lib/logic.js';
 /* ============================= STATE ============================= */
-export const STORE_KEYS = ['ingredients','subrecipes','recipes','menus','staff','shifts','knowledge','chatHistory','wellbeing','suppliers','stations','staffingNeeds','services','shiftTypes','importedInvoices','invoiceHistory'];
-export let state = { ingredients:[], subrecipes:[], recipes:[], menus:[], staff:[], shifts:{}, knowledge:[], chatHistory:[], wellbeing:[], suppliers:[], stations:[], staffingNeeds:{}, services:[], shiftTypes:[], importedInvoices:[], invoiceHistory:[] };
+export const STORE_KEYS = ['ingredients','subrecipes','recipes','menus','staff','shifts','knowledge','chatHistory','wellbeing','suppliers','stations','staffingNeeds','services','shiftTypes','importedInvoices','invoiceHistory','publishedShifts'];
+export let state = { ingredients:[], subrecipes:[], recipes:[], menus:[], staff:[], shifts:{}, knowledge:[], chatHistory:[], wellbeing:[], suppliers:[], stations:[], staffingNeeds:{}, services:[], shiftTypes:[], importedInvoices:[], invoiceHistory:[], publishedShifts:[] };
 
 export const ALLERGENS = ["Glutine","Crostacei","Uova","Pesce","Arachidi","Soia","Latte","Frutta a guscio","Sedano","Senape","Sesamo","Solfiti","Lupini","Molluschi"];
 // Periodo mostrato nella pianificazione: una settimana o un mese, ancorato a una

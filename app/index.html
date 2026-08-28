@@ -197,6 +197,16 @@
         </div>
         <button class="btn full mb-4" id="btn-generate-shifts" data-t>🎲 Genera turni del periodo</button>
         <div id="generate-log" class="mb-4"></div>
+        <!-- Finché non si pubblica, la brigata non vede niente di questo
+             periodo: si può generare, rifare e sistemare senza che nessuno
+             legga una bozza. -->
+        <div class="panel row middle between wrap" id="pubblica-box">
+          <div class="wrap-anywhere">
+            <div class="bold" id="pubblica-stato"></div>
+            <div class="contact" id="pubblica-nota"></div>
+          </div>
+          <button class="btn small" id="btn-pubblica"></button>
+        </div>
         <div class="panel" id="turni-panel"></div>
         <p class="small-note" id="turni-legend"></p>
         <div class="panel">

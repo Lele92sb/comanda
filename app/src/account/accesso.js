@@ -266,6 +266,18 @@ async function openTeam(){
           </div>`;}).join('')}
       </div>
       <div class="panel">
+        <h3>Cosa vede chi può modificare</h3>
+        <p class="small-note mt-0">Chi ha solo lettura vede i turni pubblicati, le ricette senza numeri e le proprie richieste — e nient'altro, comunque. Qui decidi quanto mostrare al tuo secondo.</p>
+        <label class="riga-scelta">
+          <input type="checkbox" id="ris-costi" ${Cloud.kitchen.editor_vede_costi ? 'checked' : ''}>
+          <span><b>Prezzi e food cost</b><br><span class="contact">Prezzi d'acquisto, food cost, margini, fornitori e fatture. Senza, non può comporre un menu né valutare un piatto.</span></span>
+        </label>
+        <label class="riga-scelta">
+          <input type="checkbox" id="ris-personali" ${Cloud.kitchen.editor_vede_personali ? 'checked' : ''}>
+          <span><b>Dati personali della brigata</b><br><span class="contact">Telefono, email e ore contrattuali. Senza, vede nomi, stazioni e quote: quanto basta per fare i turni.</span></span>
+        </label>
+      </div>
+      <div class="panel">
         <h3>Invita qualcuno</h3>
         <p class="small-note mt-0" >Genera un codice e daglielo: lo inserisce al primo accesso ed entra con il permesso che scegli tu. Vale per una persona sola. Permesso e durata restano modificabili anche dopo averlo consegnato.</p>
         <div class="grid2">
@@ -298,6 +310,15 @@ async function openTeam(){
             </div>
           </div>`).join('') : ''}
       </div>`;
+
+    const cambiaRiservatezza = async (campo, valore, elemento)=>{
+      try{ await Cloud.setRiservatezza({[campo]: valore}); toast(t('Impostazione salvata')); }
+      catch(e){ elemento.checked = !valore; teamError(e); }
+    };
+    document.getElementById('ris-costi').addEventListener('change', e=>
+      cambiaRiservatezza('costi', e.target.checked, e.target));
+    document.getElementById('ris-personali').addEventListener('change', e=>
+      cambiaRiservatezza('personali', e.target.checked, e.target));
 
     document.getElementById('inv-create').addEventListener('click', async ()=>{
       try{
