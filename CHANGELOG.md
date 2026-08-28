@@ -2,6 +2,50 @@
 
 Tutte le modifiche rilevanti all'app, versione per versione.
 
+## [1.3.0] — Turni: servizi su misura, mese, richieste, più cucine
+
+### Servizi e tipi di turno definiti da te
+- Colazione, pranzo e cena non sono più cablati: ogni cucina definisce i propri
+  servizi (aperitivo, brunch, lunch...) e i tipi di turno che li coprono, con
+  sigla, orario e ore.
+- Lo "spezzato" smette di essere un caso particolare del codice: un turno
+  dichiara quali servizi copre, e se ne copre due il generatore capisce da solo
+  che una persona sola ne chiude due. Vale per qualsiasi coppia di servizi.
+- Rinominare una sigla la propaga ai turni già assegnati e alle quote.
+
+### Turni per data, settimana o mese
+- I turni erano indicizzati per nome del giorno ("Lun"): esisteva una sola
+  settimana, senza storico e senza sapere quale fosse. Ora hanno una data vera.
+- Si pianifica per settimana o per mese, avanti e indietro nel tempo. La griglia
+  mensile scorre in orizzontale con la colonna dei nomi fissa.
+- Rigenerando un periodo si sovrascrive solo quello: le altre settimane restano.
+- La dashboard mostra i turni della data di oggi. Prima leggeva la casella con
+  il nome del giorno, qualunque settimana fosse stata generata.
+
+### Richieste del personale
+- Nuova sezione dove i dipendenti inviano ferie, giorni di riposo o richieste di
+  fare solo certi servizi. Il titolare approva o rifiuta; può registrarne anche
+  per chi non ha un account.
+- Le richieste approvate sono regole assolute per il generatore: non vengono mai
+  violate, nemmeno per tappare un buco. Se un servizio non è copribile
+  rispettandole, la scopertura viene dichiarata.
+- Un turno accorpato non aggira una richiesta di singolo servizio: chi ha chiesto
+  solo pranzo non si ritrova lo spezzato che gli porta dentro la cena.
+- Solo il titolare può approvare, imposto dal database: altrimenti chiunque
+  potrebbe auto-approvarsi le ferie.
+
+### Più cucine
+- Selettore rapido nella barra in alto per passare da un locale all'altro.
+- Copia di servizi, turni e stazioni da un'altra cucina già impostata.
+- Chi lavora su più locali non viene assegnato in due posti lo stesso giorno. La
+  stessa persona è riconosciuta tra cucine dall'account collegato o dal numero
+  di telefono.
+
+### Affidabilità
+- La suite di test passa da 7 a 27 casi: servizi personalizzati, calcolo delle
+  date in ora locale, mesi bisestili, quote che ripartono ogni settimana,
+  inviolabilità delle richieste approvate e degli impegni in altre cucine.
+
 ## [1.2.0] — Account, cucine condivise e ruoli
 
 Passaggio da app personale su un singolo dispositivo a prodotto multi-utente, in vista
