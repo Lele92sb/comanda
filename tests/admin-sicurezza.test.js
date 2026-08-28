@@ -87,6 +87,28 @@ test('platform_admins non nasce da un trigger o da una scrittura nascosta', () =
     'in questo file non deve esistere nessuna scrittura su platform_admins: si nomina un amministratore solo con SQL diretto');
 });
 
+test('nessuna funzione amministrativa legge i contenuti delle cucine', () => {
+  // La separazione che tiene in piedi tutto il resto: l'amministratore vede
+  // METADATI (quante cucine, quanto pesano, chi ne fa parte), non ricette,
+  // prezzi o anagrafiche. L'unica porta sui contenuti è quella dell'accesso
+  // di assistenza, che è motivata, a scadenza e registrata.
+  const PORTA_SUI_CONTENUTI = ['admin_leggi_contenuto'];
+  for (const f of funzioniConcesse()) {
+    if (PORTA_SUI_CONTENUTI.includes(f.nome)) continue;
+    assert.equal(/\bkitchen_data\b/.test(f.corpo), false,
+      `${f.nome} tocca kitchen_data: i contenuti di una cucina non escono dalle funzioni di consultazione`);
+  }
+});
+
+test('la porta sui contenuti chiede l\'accesso di assistenza e registra ogni lettura', () => {
+  const f = funzioni().find(x => x.nome === 'admin_leggi_contenuto');
+  if (!f) return;   // finché non esiste, non c'è niente da proteggere
+  assert.match(f.corpo, /assistenza_attiva/,
+    'admin_leggi_contenuto deve pretendere un accesso di assistenza in corso');
+  assert.match(f.corpo, /admin_scrivi_registro/,
+    'ogni lettura di contenuto va scritta nel registro: è il senso dell\'accesso di assistenza');
+});
+
 test('il registro non si modifica e non si cancella', () => {
   const suRegistro = policy().filter(p => p.tabella === 'admin_audit');
   assert.deepEqual(suRegistro.map(p => p.operazione), ['select'],

@@ -227,3 +227,622 @@ $$;
 
 revoke all on function public.admin_scrivi_registro(text,uuid,text,uuid,text,text,jsonb)
   from public, anon, authenticated;
+
+
+-- ============================================================================
+-- 3. NUMERI MANTENUTI, NON RICALCOLATI
+--
+-- Il modello dati di questa app è un blob JSON per sezione. Contare "quanto
+-- pesa una cucina" scandendo i blob funziona a dieci cucine e fonde a
+-- diecimila: ogni caricamento della console leggerebbe ogni byte di ogni
+-- cliente. Quindi il conto si tiene mentre i dati cambiano, in due posti:
+--
+--   kitchen_stats      una riga per cucina: peso, sezioni, ultima scrittura,
+--                      membri per ruolo.
+--   platform_counters  i totali della piattaforma, per stato commerciale.
+--
+-- QUANDO QUESTA SCELTA VA RIFATTA
+--   * platform_counters ha una riga per secchio: due creazioni di cucina nello
+--     stesso istante si aspettano a vicenda su quella riga. Finché le cucine
+--     si creano a mano non si sente; oltre ~10 creazioni al secondo si passa a
+--     righe multiple sommate in lettura, o a un conteggio periodico.
+--   * il trigger su kitchen_data serializza il JSON per pesarlo, a ogni
+--     salvataggio. Su blob da 600 KB è la stessa serializzazione che il client
+--     ha già fatto: si sente sopra i ~5 MB per sezione, e lì conviene passare
+--     a pg_column_size (peso compresso, meno intuitivo ma quasi gratis).
+--   * i conteggi "attive negli ultimi 7/30 giorni" scandiscono kitchen_stats,
+--     una riga per cucina. Oltre la soglia dichiarata in admin_numeri()
+--     smettono di rispondere invece di scandire: vanno spostati su secchi
+--     aggiornati da un lavoro notturno.
+-- ============================================================================
+
+-- Cancellazione reversibile: la cucina resta, marcata. La rimozione definitiva
+-- è un secondo passo, apposta (vedi sezione 5).
+alter table public.kitchens add column if not exists deleted_at timestamptz;
+
+-- Gli indici seguono ESATTAMENTE l'ordinamento dell'elenco: l'impaginazione a
+-- chiave ordina per (created_at desc, id desc), e senza questo indice ogni
+-- pagina costerebbe un ordinamento dell'intera tabella.
+create index if not exists kitchens_creata_idx on public.kitchens (created_at desc, id desc);
+create index if not exists kitchens_stato_idx  on public.kitchens (status, created_at desc);
+
+create table if not exists public.kitchen_stats (
+  kitchen_id       uuid primary key references public.kitchens(id) on delete cascade,
+  byte_dati        bigint  not null default 0,
+  sezioni          integer not null default 0,
+  ultima_scrittura timestamptz,
+  membri_owner     integer not null default 0,
+  membri_editor    integer not null default 0,
+  membri_viewer    integer not null default 0
+);
+create index if not exists kitchen_stats_attivita_idx
+  on public.kitchen_stats (ultima_scrittura desc nulls last);
+
+-- RLS attiva e nessuna policy: si legge solo dalle funzioni amministrative.
+-- Sono i metadati di tutti i clienti messi in fila — esattamente ciò che non
+-- deve uscire da una query fatta a mano dal browser di qualcuno.
+alter table public.kitchen_stats enable row level security;
+revoke all on table public.kitchen_stats from anon, authenticated;
+
+create table if not exists public.platform_counters (
+  chiave text primary key,
+  valore bigint not null default 0
+);
+alter table public.platform_counters enable row level security;
+revoke all on table public.platform_counters from anon, authenticated;
+
+create or replace function public.pc_somma(p_chiave text, p_delta bigint)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  insert into public.platform_counters (chiave, valore) values (p_chiave, p_delta)
+  on conflict (chiave) do update set valore = platform_counters.valore + p_delta;
+$$;
+revoke all on function public.pc_somma(text, bigint) from public, anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Peso e ultima attività di una cucina, tenuti aggiornati a ogni salvataggio.
+-- ----------------------------------------------------------------------------
+create or replace function public.kitchen_data_stats()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_cucina  uuid;
+  v_delta   bigint;
+  v_sezioni integer;
+begin
+  if tg_op = 'DELETE' then
+    v_cucina  := old.kitchen_id;
+    v_delta   := -octet_length(old.value::text);
+    v_sezioni := -1;
+  elsif tg_op = 'INSERT' then
+    v_cucina  := new.kitchen_id;
+    v_delta   := octet_length(new.value::text);
+    v_sezioni := 1;
+  else
+    v_cucina  := new.kitchen_id;
+    v_delta   := octet_length(new.value::text) - octet_length(old.value::text);
+    v_sezioni := 0;
+  end if;
+
+  insert into public.kitchen_stats (kitchen_id, byte_dati, sezioni, ultima_scrittura)
+  values (v_cucina, greatest(v_delta, 0), greatest(v_sezioni, 0), now())
+  on conflict (kitchen_id) do update
+    set byte_dati        = greatest(kitchen_stats.byte_dati + v_delta, 0),
+        sezioni          = greatest(kitchen_stats.sezioni + v_sezioni, 0),
+        ultima_scrittura = now();
+  return null;
+end;
+$$;
+
+drop trigger if exists kitchen_data_stats on public.kitchen_data;
+create trigger kitchen_data_stats
+  after insert or update or delete on public.kitchen_data
+  for each row execute function public.kitchen_data_stats();
+
+-- ----------------------------------------------------------------------------
+-- Membri per ruolo. Si ricontano quelli della sola cucina toccata: una brigata
+-- sono decine di righe, non milioni, e un conteggio esatto vale più di un
+-- delta che può sfasarsi e non tornare più indietro da solo.
+-- ----------------------------------------------------------------------------
+create or replace function public.kitchen_members_stats()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v_cucina uuid := coalesce(new.kitchen_id, old.kitchen_id);
+begin
+  insert into public.kitchen_stats (kitchen_id) values (v_cucina) on conflict do nothing;
+  update public.kitchen_stats s set
+    membri_owner  = (select count(*) from public.kitchen_members m where m.kitchen_id = v_cucina and m.role = 'owner'),
+    membri_editor = (select count(*) from public.kitchen_members m where m.kitchen_id = v_cucina and m.role = 'editor'),
+    membri_viewer = (select count(*) from public.kitchen_members m where m.kitchen_id = v_cucina and m.role = 'viewer')
+  where s.kitchen_id = v_cucina;
+  return null;
+end;
+$$;
+
+drop trigger if exists kitchen_members_stats on public.kitchen_members;
+create trigger kitchen_members_stats
+  after insert or update or delete on public.kitchen_members
+  for each row execute function public.kitchen_members_stats();
+
+-- ----------------------------------------------------------------------------
+-- I totali della piattaforma. Si muovono solo quando cambia davvero qualcosa:
+-- rinominare una cucina non deve toccare nessun contatore.
+-- ----------------------------------------------------------------------------
+create or replace function public.kitchens_contatori()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'UPDATE'
+     and new.status is not distinct from old.status
+     and new.deleted_at is not distinct from old.deleted_at then
+    return null;
+  end if;
+
+  if tg_op in ('UPDATE', 'DELETE') then
+    if old.deleted_at is not null then
+      perform public.pc_somma('cucine_cancellate', -1);
+    else
+      perform public.pc_somma('stato:' || old.status, -1);
+      perform public.pc_somma('cucine_vive', -1);
+    end if;
+  end if;
+
+  if tg_op in ('INSERT', 'UPDATE') then
+    if new.deleted_at is not null then
+      perform public.pc_somma('cucine_cancellate', 1);
+    else
+      perform public.pc_somma('stato:' || new.status, 1);
+      perform public.pc_somma('cucine_vive', 1);
+    end if;
+  end if;
+
+  if tg_op = 'INSERT' then
+    insert into public.kitchen_stats (kitchen_id) values (new.id) on conflict do nothing;
+  end if;
+
+  return null;
+end;
+$$;
+
+drop trigger if exists kitchens_contatori on public.kitchens;
+create trigger kitchens_contatori
+  after insert or update or delete on public.kitchens
+  for each row execute function public.kitchens_contatori();
+
+-- ----------------------------------------------------------------------------
+-- Riempimento iniziale, e riparazione.
+--
+-- È l'UNICA scansione dei blob che questo file fa: una volta, all'installazione
+-- (e ogni volta che si rilancia il file, che è rieseguibile). Da lì in poi i
+-- numeri li tengono i trigger.
+--
+-- Oltre ~50.000 cucine questo blocco va spezzato a lotti, o si tiene una
+-- transazione lunghissima aperta sull'intera tabella dei dati.
+-- ----------------------------------------------------------------------------
+do $$
+begin
+  insert into public.kitchen_stats (kitchen_id) select k.id from public.kitchens k
+  on conflict do nothing;
+
+  update public.kitchen_stats s set
+    byte_dati        = coalesce(d.byte, 0),
+    sezioni          = coalesce(d.righe, 0),
+    ultima_scrittura = d.ultima,
+    membri_owner     = coalesce(m.owner, 0),
+    membri_editor    = coalesce(m.editor, 0),
+    membri_viewer    = coalesce(m.viewer, 0)
+  from public.kitchens k
+  left join lateral (
+    select sum(octet_length(kd.value::text))::bigint as byte,
+           count(*)::integer as righe,
+           max(kd.updated_at) as ultima
+    from public.kitchen_data kd where kd.kitchen_id = k.id
+  ) d on true
+  left join lateral (
+    select count(*) filter (where km.role = 'owner')::integer  as owner,
+           count(*) filter (where km.role = 'editor')::integer as editor,
+           count(*) filter (where km.role = 'viewer')::integer as viewer
+    from public.kitchen_members km where km.kitchen_id = k.id
+  ) m on true
+  where s.kitchen_id = k.id;
+
+  delete from public.platform_counters;
+  insert into public.platform_counters (chiave, valore)
+  select 'stato:' || k.status, count(*) from public.kitchens k
+   where k.deleted_at is null group by k.status;
+  insert into public.platform_counters (chiave, valore)
+  select 'cucine_vive', count(*) from public.kitchens where deleted_at is null;
+  insert into public.platform_counters (chiave, valore)
+  select 'cucine_cancellate', count(*) from public.kitchens where deleted_at is not null;
+end $$;
+
+
+-- ============================================================================
+-- 4. VEDERE — sola lettura, metadati e aggregati
+--
+-- Qui dentro non esce nessun contenuto di cucina: né ricette, né prezzi, né
+-- l'anagrafica della brigata con telefoni ed email. Escono i metadati (quante
+-- cucine, quanto pesano, quando le hanno toccate l'ultima volta, chi ne fa
+-- parte con che ruolo) e gli aggregati. Per i contenuti serve un accesso di
+-- assistenza: sezione 7, e passa da un'altra funzione.
+--
+-- Nota sulle email dei membri: ci sono, e servono. Cambiare il ruolo di
+-- qualcuno o trasferire una proprietà si fa identificando la persona, e in
+-- questo progetto è già successo di declassare il titolare sbagliato usando un
+-- identificatore non aggiornato. L'email dell'ACCOUNT è un metadato del
+-- rapporto commerciale; il telefono del cuoco dentro i dati della cucina no,
+-- e infatti da qui non esce.
+-- ============================================================================
+
+-- Impaginazione a chiave: si riparte dall'ultima riga vista, non dalla
+-- posizione. Con l'offset la pagina 5.000 costa quanto scorrere tutto ciò che
+-- la precede; con la chiave costa come la prima.
+-- Le due parti del cursore vanno insieme: con solo una delle due il confronto
+-- di riga diventa nullo e l'elenco torna vuoto senza dire perché.
+create or replace function public.admin_cursore_valido(p_quando timestamptz, p_id uuid)
+returns boolean
+language sql
+immutable
+as $$
+  select (p_quando is null) = (p_id is null);
+$$;
+revoke all on function public.admin_cursore_valido(timestamptz, uuid) from public, anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- I numeri d'insieme.
+--
+-- SOGLIA_STIMA: sopra questo numero di account non si conta più riga per riga.
+-- Un count(*) su auth.users a ogni caricamento della console è una scansione
+-- completa, e cresce con i clienti: proprio quando la console serve di più
+-- diventa quella che non risponde. Sopra la soglia si usa la stima del planner
+-- e lo si DICE ("stimato": true), invece di far finta di sapere il numero esatto.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_numeri()
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+declare
+  SOGLIA_STIMA constant bigint := 200000;
+  v_cucine   jsonb;
+  v_account  jsonb;
+  v_attivita jsonb;
+  v_stima    bigint;
+  v_vive     bigint;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select coalesce(jsonb_object_agg(chiave, valore), '{}'::jsonb) into v_cucine
+    from public.platform_counters;
+
+  v_vive := coalesce((v_cucine->>'cucine_vive')::bigint, 0);
+  if v_vive > SOGLIA_STIMA then
+    v_attivita := jsonb_build_object('attive_7g', null, 'attive_30g', null,
+      'nota', 'oltre ' || SOGLIA_STIMA || ' cucine: il conteggio degli attivi richiederebbe una scansione, va spostato su contatori aggiornati di notte');
+  else
+    select jsonb_build_object(
+      'attive_7g',  count(*) filter (where s.ultima_scrittura > now() - interval '7 days'),
+      'attive_30g', count(*) filter (where s.ultima_scrittura > now() - interval '30 days')
+    ) into v_attivita from public.kitchen_stats s;
+  end if;
+
+  -- reltuples è -1 quando la tabella non è mai stata analizzata: allora non è
+  -- una stima, è un "non lo so", e si conta davvero.
+  select coalesce((select c.reltuples::bigint from pg_class c where c.oid = 'auth.users'::regclass), -1)
+    into v_stima;
+
+  if v_stima > SOGLIA_STIMA then
+    v_account := jsonb_build_object('totali', v_stima, 'stimato', true,
+      'attivi_7g', null, 'attivi_30g', null, 'nuovi_30g', null,
+      'nota', 'oltre ' || SOGLIA_STIMA || ' account: totale stimato dal planner, gli attivi richiedono un indice su auth.users');
+  else
+    select jsonb_build_object(
+      'totali',     count(*),
+      'stimato',    false,
+      'attivi_7g',  count(*) filter (where u.last_sign_in_at > now() - interval '7 days'),
+      'attivi_30g', count(*) filter (where u.last_sign_in_at > now() - interval '30 days'),
+      'nuovi_30g',  count(*) filter (where u.created_at > now() - interval '30 days')
+    ) into v_account from auth.users u;
+  end if;
+
+  return jsonb_build_object(
+    'cucine',   v_cucine,
+    'attivita', v_attivita,
+    'account',  v_account,
+    'soglia_stima', SOGLIA_STIMA,
+    'letto_il', now()
+  );
+end;
+$$;
+grant execute on function public.admin_numeri() to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Nuove iscrizioni nel tempo: una riga per giorno, al massimo un anno.
+-- Il tetto non è pigrizia: senza, un parametro sbagliato dal browser diventa
+-- una scansione di tutta la storia a ogni apertura della pagina.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_iscrizioni(p_giorni integer default 30)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+declare
+  v_giorni integer := least(greatest(coalesce(p_giorni, 30), 1), 365);
+  v jsonb;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'giorno', g.giorno, 'cucine', g.cucine, 'account', g.account
+         ) order by g.giorno), '[]'::jsonb)
+    into v
+  from (
+    select d::date as giorno,
+           (select count(*) from public.kitchens k
+             where k.created_at >= d and k.created_at < d + interval '1 day') as cucine,
+           (select count(*) from auth.users u
+             where u.created_at >= d and u.created_at < d + interval '1 day') as account
+      from generate_series(date_trunc('day', now()) - (v_giorni - 1) * interval '1 day',
+                           date_trunc('day', now()), interval '1 day') d
+  ) g;
+
+  return jsonb_build_object('giorni', v_giorni, 'serie', v);
+end;
+$$;
+grant execute on function public.admin_iscrizioni(integer) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Elenco cucine, a chiave. p_dopo_creata / p_dopo_id sono l'ultima riga della
+-- pagina precedente: si passano entrambi o nessuno dei due.
+--
+-- La ricerca per nome usa ILIKE '%...%', che nessun indice btree può servire.
+-- Sopra qualche decina di migliaia di cucine va aggiunto un indice trigram:
+--   create extension if not exists pg_trgm;
+--   create index kitchens_nome_trgm on public.kitchens using gin (name gin_trgm_ops);
+-- Non lo si crea qui perché installa un'estensione, e installare estensioni è
+-- una decisione di chi possiede il database, non di questo file.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_cucine(
+  p_cerca       text        default null,
+  p_stato       text        default null,
+  p_cancellate  boolean     default false,
+  p_limite      integer     default 25,
+  p_dopo_creata timestamptz default null,
+  p_dopo_id     uuid        default null
+)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+declare
+  v_limite integer := least(greatest(coalesce(p_limite, 25), 1), 100);
+  v_cerca  text    := nullif(trim(coalesce(p_cerca, '')), '');
+  v jsonb;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+  if not public.admin_cursore_valido(p_dopo_creata, p_dopo_id) then
+    raise exception 'Cursore incompleto: servono sia la data sia l''id dell''ultima riga vista';
+  end if;
+
+  select coalesce(jsonb_agg(to_jsonb(x) order by x.created_at desc, x.id desc), '[]'::jsonb)
+    into v
+  from (
+    select k.id, k.name, k.status, k.created_at, k.trial_ends_at, k.deleted_at,
+           k.ai_month, k.ai_calls, k.ai_limit,
+           coalesce(s.byte_dati, 0)     as byte_dati,
+           coalesce(s.sezioni, 0)       as sezioni,
+           s.ultima_scrittura,
+           coalesce(s.membri_owner, 0)  as membri_owner,
+           coalesce(s.membri_editor, 0) as membri_editor,
+           coalesce(s.membri_viewer, 0) as membri_viewer
+      from public.kitchens k
+      left join public.kitchen_stats s on s.kitchen_id = k.id
+     where (case when p_cancellate then k.deleted_at is not null else k.deleted_at is null end)
+       and (p_stato is null or k.status = p_stato)
+       and (v_cerca is null or k.name ilike '%' || v_cerca || '%' or k.id::text = v_cerca)
+       and (p_dopo_creata is null or (k.created_at, k.id) < (p_dopo_creata, p_dopo_id))
+     order by k.created_at desc, k.id desc
+     limit v_limite
+  ) x;
+
+  return v;
+end;
+$$;
+grant execute on function public.admin_cucine(text, text, boolean, integer, timestamptz, uuid) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Elenco account, a chiave. Le cucine di ciascuno si aggregano DOPO il limite:
+-- così il lavoro è proporzionale alla pagina, non alla tabella.
+--
+-- auth.users non ha un indice su created_at, quindi l'ordinamento è un sort
+-- della tabella. Fino a qualche decina di migliaia di account non si nota;
+-- oltre, serve questo (da valutare: è una tabella gestita da Supabase):
+--   create index concurrently users_created_idx on auth.users (created_at desc, id desc);
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_account(
+  p_cerca        text        default null,
+  p_limite       integer     default 25,
+  p_dopo_creato  timestamptz default null,
+  p_dopo_id      uuid        default null
+)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+declare
+  v_limite integer := least(greatest(coalesce(p_limite, 25), 1), 100);
+  v_cerca  text    := nullif(trim(coalesce(p_cerca, '')), '');
+  v jsonb;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+  if not public.admin_cursore_valido(p_dopo_creato, p_dopo_id) then
+    raise exception 'Cursore incompleto: servono sia la data sia l''id dell''ultima riga vista';
+  end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', p.id, 'email', p.email, 'created_at', p.created_at,
+           'last_sign_in_at', p.last_sign_in_at, 'cucine', c.cucine
+         ) order by p.created_at desc, p.id desc), '[]'::jsonb)
+    into v
+  from (
+    select u.id, u.email, u.created_at, u.last_sign_in_at
+      from auth.users u
+     where (v_cerca is null or u.email ilike '%' || v_cerca || '%' or u.id::text = v_cerca)
+       and (p_dopo_creato is null or (u.created_at, u.id) < (p_dopo_creato, p_dopo_id))
+     order by u.created_at desc, u.id desc
+     limit v_limite
+  ) p
+  left join lateral (
+    select coalesce(jsonb_agg(jsonb_build_object(
+             'id', k.id, 'nome', k.name, 'ruolo', m.role, 'stato', k.status
+           ) order by k.name), '[]'::jsonb) as cucine
+      from public.kitchen_members m
+      join public.kitchens k on k.id = m.kitchen_id
+     where m.user_id = p.id
+  ) c on true;
+
+  return v;
+end;
+$$;
+grant execute on function public.admin_account(text, integer, timestamptz, uuid) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- La scheda di una cucina: metadati, membri, e le ultime cose fatte su di lei.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_cucina(p_kitchen uuid)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+declare
+  k public.kitchens;
+  s public.kitchen_stats;
+  v_membri jsonb;
+  v_registro jsonb;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select * into k from public.kitchens where id = p_kitchen;
+  if k.id is null then return jsonb_build_object('trovata', false); end if;
+  select * into s from public.kitchen_stats where kitchen_id = p_kitchen;
+
+  -- L'email si legge da auth.users, non dalla copia in kitchen_members: la
+  -- copia è ferma al giorno dell'ingresso, e agire su un identificatore vecchio
+  -- è precisamente l'errore che questo progetto ha già fatto una volta.
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'user_id', m.user_id, 'email', u.email, 'email_registrata', m.email,
+           'display_name', m.display_name, 'ruolo', m.role, 'dal', m.created_at,
+           'ultimo_accesso', u.last_sign_in_at
+         ) order by m.role, m.created_at), '[]'::jsonb)
+    into v_membri
+    from public.kitchen_members m
+    left join auth.users u on u.id = m.user_id
+   where m.kitchen_id = p_kitchen;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', a.id, 'quando', a.quando, 'azione', a.azione, 'esito', a.esito,
+           'admin_email', a.admin_email, 'bersaglio_email', a.bersaglio_email,
+           'dettagli', a.dettagli
+         ) order by a.quando desc, a.id desc), '[]'::jsonb)
+    into v_registro
+    from (
+      select * from public.admin_audit where cucina_id = p_kitchen
+       order by quando desc, id desc limit 20
+    ) a;
+
+  return jsonb_build_object(
+    'trovata', true,
+    'cucina', jsonb_build_object(
+      'id', k.id, 'name', k.name, 'status', k.status, 'created_at', k.created_at,
+      'trial_ends_at', k.trial_ends_at, 'deleted_at', k.deleted_at,
+      'ai_month', k.ai_month, 'ai_calls', k.ai_calls, 'ai_limit', k.ai_limit,
+      'editor_vede_costi', k.editor_vede_costi,
+      'editor_vede_personali', k.editor_vede_personali
+    ),
+    'stat', jsonb_build_object(
+      'byte_dati', coalesce(s.byte_dati, 0), 'sezioni', coalesce(s.sezioni, 0),
+      'ultima_scrittura', s.ultima_scrittura,
+      'membri_owner', coalesce(s.membri_owner, 0),
+      'membri_editor', coalesce(s.membri_editor, 0),
+      'membri_viewer', coalesce(s.membri_viewer, 0)
+    ),
+    'membri', v_membri,
+    'registro', v_registro
+  );
+end;
+$$;
+grant execute on function public.admin_cucina(uuid) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Il registro, a chiave. È l'unica lettura che serve anche quando le righe
+-- saranno milioni: l'indice (quando desc, id desc) la tiene costante.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_registro(
+  p_cucina      uuid        default null,
+  p_limite      integer     default 50,
+  p_dopo_quando timestamptz default null,
+  p_dopo_id     bigint      default null
+)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+declare
+  v_limite integer := least(greatest(coalesce(p_limite, 50), 1), 200);
+  v jsonb;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+  if (p_dopo_quando is null) <> (p_dopo_id is null) then
+    raise exception 'Cursore incompleto: servono sia la data sia l''id dell''ultima riga vista';
+  end if;
+
+  select coalesce(jsonb_agg(to_jsonb(x) order by x.quando desc, x.id desc), '[]'::jsonb)
+    into v
+  from (
+    select a.* from public.admin_audit a
+     where (p_cucina is null or a.cucina_id = p_cucina)
+       and (p_dopo_quando is null or (a.quando, a.id) < (p_dopo_quando, p_dopo_id))
+     order by a.quando desc, a.id desc
+     limit v_limite
+  ) x;
+
+  return v;
+end;
+$$;
+grant execute on function public.admin_registro(uuid, integer, timestamptz, bigint) to authenticated;
