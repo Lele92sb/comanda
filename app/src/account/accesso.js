@@ -227,15 +227,48 @@ function scadenzaTesto(iso){
   return 'scade tra meno di un\'ora';
 }
 
+// Quando l'assistenza ha guardato dentro questa cucina, e perché.
+// Compare solo se è successo davvero: un riquadro sempre presente che dice
+// "nessuno ha guardato" si smette di leggere dopo tre volte, e allora non dice
+// più niente nemmeno il giorno in cui qualcuno guarda per davvero.
+function assistenzePanel(lista){
+  if(!lista || !lista.length) return '';
+  const inCorso = lista.filter(a=>a.in_corso);
+  const righe = lista.slice(0, 5).map(a=>`
+    <div class="panel subpanel">
+      <div class="row middle between gap-3">
+        <div class="wrap-anywhere">
+          <div class="bold wrap-anywhere">${esc(a.motivo)}</div>
+          <div class="contact wrap-anywhere">${esc(a.chi || 'assistenza')} ·
+            ${new Date(a.concesso_il).toLocaleString('it-IT')}</div>
+        </div>
+        <span class="role-badge ${a.in_corso ? '' : 'viewer'}">${a.in_corso ? 'in corso' : 'concluso'}</span>
+      </div>
+    </div>`).join('');
+
+  return `
+    <div class="panel">
+      <h3>Accessi dell'assistenza</h3>
+      <p class="small-note mt-0">Quando chi sviluppa l'app ha bisogno di guardare i dati di questa
+        cucina per risolvere un problema, apre un accesso a tempo con un motivo scritto. Lo trovi qui,
+        sempre, anche dopo che si è chiuso.</p>
+      ${inCorso.length ? `<div class="alert-box">Un accesso è <b>in corso</b> in questo momento.</div>` : ''}
+      ${righe}
+    </div>`;
+}
+
 async function openTeam(){
   teamEl.classList.add('show');
   document.getElementById('team-kitchen').textContent = Cloud.kitchen.name;
   document.getElementById('team-error').classList.add('hidden');
   document.getElementById('team-body').innerHTML = '<div class="empty">Carico…</div>';
   try{
-    const [members, invites] = await Promise.all([Cloud.listMembers(), Cloud.listInvites()]);
+    const [members, invites, assistenze] = await Promise.all([
+      Cloud.listMembers(), Cloud.listInvites(), Cloud.assistenzeSullaCucina(),
+    ]);
     const pending = invites.filter(Cloud.inviteIsPending);
     document.getElementById('team-body').innerHTML = `
+      ${assistenzePanel(assistenze)}
       <div class="panel">
         <h3>Chi lavora su questa cucina</h3>
         ${members.map(m=>{

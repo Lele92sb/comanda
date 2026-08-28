@@ -1569,3 +1569,267 @@ begin
 end;
 $$;
 grant execute on function public.admin_pulisci_errori(integer) to authenticated;
+
+
+-- ============================================================================
+-- 7. ACCESSO DI ASSISTENZA — l'unica porta sui CONTENUTI di una cucina
+--
+-- Tutto il resto di questo file guarda metadati: quante cucine, quanto pesano,
+-- chi ne fa parte. Ricette, food cost, fornitori, telefoni della brigata sono
+-- un'altra cosa: sono il lavoro di qualcun altro, e un amministratore non deve
+-- vederli perché ne ha la facoltà tecnica, ma perché gliel'hanno chiesto.
+--
+-- Quattro condizioni, tutte insieme:
+--   MOTIVATO   il motivo si scrive, e non può essere vuoto;
+--   A TERMINE  scade da solo, al massimo dopo un giorno;
+--   REGISTRATO ogni singola lettura di contenuto finisce nel registro, non
+--              solo l'apertura dell'accesso;
+--   VISIBILE   il titolare della cucina lo vede — è l'unica delle quattro che
+--              rende le altre tre credibili.
+--
+-- COSA C'È E COSA MANCA
+-- C'è il meccanismo completo lato database, compresa la lettura dei contenuti
+-- (admin_leggi_contenuto). Nell'interfaccia c'è l'apertura, la chiusura e
+-- l'elenco degli accessi; NON c'è uno sfogliatore dei contenuti, e non è una
+-- dimenticanza: un pannello che mostra le ricette dei clienti è la cosa che si
+-- finisce per aprire per abitudine. Finché non serve davvero, chi ha bisogno
+-- di guardare un dato passa dal SQL Editor, con l'accesso aperto, e la lettura
+-- resta scritta nel registro come tutte le altre.
+-- ============================================================================
+create table if not exists public.admin_support_access (
+  id          uuid primary key default gen_random_uuid(),
+  kitchen_id  uuid not null references public.kitchens(id) on delete cascade,
+  admin_id    uuid not null,
+  admin_email text,
+  motivo      text not null,
+  concesso_il timestamptz not null default now(),
+  scade_il    timestamptz not null,
+  revocato_il timestamptz
+);
+create index if not exists support_access_cucina_idx
+  on public.admin_support_access (kitchen_id, concesso_il desc);
+
+alter table public.admin_support_access enable row level security;
+
+-- Il titolare della cucina lo vede. È il punto: un accesso che il cliente non
+-- può vedere non è un accesso di assistenza, è una porta di servizio.
+drop policy if exists support_access_select on public.admin_support_access;
+create policy support_access_select on public.admin_support_access
+  for select using (
+    public.my_role(kitchen_id) = 'owner' or public.is_platform_admin()
+  );
+-- Niente insert, update o delete: si passa dalle funzioni, che registrano.
+
+revoke all on table public.admin_support_access from anon, authenticated;
+grant select on table public.admin_support_access to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- C'è un accesso in corso, per CHI STA CHIAMANDO?
+-- L'accesso è nominativo: quello concesso a un amministratore non apre la
+-- porta a un altro.
+-- ----------------------------------------------------------------------------
+create or replace function public.assistenza_attiva(p_kitchen uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.admin_support_access
+     where kitchen_id = p_kitchen
+       and admin_id = auth.uid()
+       and revocato_il is null
+       and scade_il > now()
+  );
+$$;
+-- Non concessa a nessuno: la usa solo admin_leggi_contenuto, qui dentro. Una
+-- funzione in più chiamabile dal browser è una superficie in più da difendere,
+-- e questa non serve a niente là fuori.
+revoke all on function public.assistenza_attiva(uuid) from public, anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Cosa vede il TITOLARE di una cucina: gli accessi sulla sua, e nient'altro.
+-- ----------------------------------------------------------------------------
+create or replace function public.assistenza_sulla_cucina(p_kitchen uuid)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+declare v jsonb;
+begin
+  if public.my_role(p_kitchen) <> 'owner' then
+    raise exception 'Solo chi gestisce la cucina può vedere gli accessi di assistenza'
+      using errcode = '42501';
+  end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', a.id, 'chi', a.admin_email, 'motivo', a.motivo,
+           'concesso_il', a.concesso_il, 'scade_il', a.scade_il,
+           'revocato_il', a.revocato_il,
+           'in_corso', (a.revocato_il is null and a.scade_il > now())
+         ) order by a.concesso_il desc), '[]'::jsonb)
+    into v
+  from (
+    select * from public.admin_support_access
+     where kitchen_id = p_kitchen order by concesso_il desc limit 20
+  ) a;
+
+  return v;
+end;
+$$;
+grant execute on function public.assistenza_sulla_cucina(uuid) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- Aprire un accesso. Il tetto di un giorno non è arrotondato per comodità: un
+-- accesso "finché serve" resta aperto per sempre, e a quel punto le altre tre
+-- condizioni non contano più niente.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_apri_assistenza(
+  p_kitchen uuid, p_motivo text, p_minuti integer default 60
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  k public.kitchens;
+  v_minuti integer := least(greatest(coalesce(p_minuti, 60), 5), 1440);
+  v_motivo text := nullif(trim(coalesce(p_motivo, '')), '');
+  v_id uuid;
+  v_scade timestamptz;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select * into k from public.kitchens where id = p_kitchen;
+  if k.id is null then
+    return public.admin_rifiuta('assistenza_apertura', p_kitchen, null, null, null, 'Cucina non trovata.');
+  end if;
+  if v_motivo is null or length(v_motivo) < 10 then
+    return public.admin_rifiuta('assistenza_apertura', k.id, k.name, null, null,
+      'Serve un motivo scritto per esteso: lo legge il titolare della cucina.');
+  end if;
+
+  v_scade := now() + make_interval(mins => v_minuti);
+
+  insert into public.admin_support_access (kitchen_id, admin_id, admin_email, motivo, scade_il)
+  values (p_kitchen, auth.uid(),
+          (select u.email from auth.users u where u.id = auth.uid()),
+          v_motivo, v_scade)
+  returning id into v_id;
+
+  perform public.admin_scrivi_registro('assistenza_apertura', k.id, k.name, null, null, 'ok',
+    jsonb_build_object('motivo', v_motivo, 'minuti', v_minuti, 'scade_il', v_scade));
+
+  return jsonb_build_object('ok', true, 'id', v_id, 'scade_il', v_scade);
+end;
+$$;
+grant execute on function public.admin_apri_assistenza(uuid, text, integer) to authenticated;
+
+create or replace function public.admin_chiudi_assistenza(p_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare a public.admin_support_access; k public.kitchens;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select * into a from public.admin_support_access where id = p_id;
+  if a.id is null then
+    return public.admin_rifiuta('assistenza_chiusura', null, null, null, null, 'Accesso non trovato.');
+  end if;
+  select * into k from public.kitchens where id = a.kitchen_id;
+
+  update public.admin_support_access set revocato_il = now()
+   where id = p_id and revocato_il is null;
+
+  perform public.admin_scrivi_registro('assistenza_chiusura', a.kitchen_id, k.name, null, null, 'ok',
+    jsonb_build_object('id', p_id, 'motivo', a.motivo));
+
+  return jsonb_build_object('ok', true);
+end;
+$$;
+grant execute on function public.admin_chiudi_assistenza(uuid) to authenticated;
+
+-- Gli accessi su una cucina, dal lato dell'amministratore.
+create or replace function public.admin_assistenze(p_kitchen uuid)
+returns jsonb
+language plpgsql
+security definer
+stable
+set search_path = public
+as $$
+declare v jsonb;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', a.id, 'chi', a.admin_email, 'motivo', a.motivo,
+           'concesso_il', a.concesso_il, 'scade_il', a.scade_il,
+           'revocato_il', a.revocato_il,
+           'in_corso', (a.revocato_il is null and a.scade_il > now())
+         ) order by a.concesso_il desc), '[]'::jsonb)
+    into v
+  from (
+    select * from public.admin_support_access
+     where kitchen_id = p_kitchen order by concesso_il desc limit 20
+  ) a;
+
+  return v;
+end;
+$$;
+grant execute on function public.admin_assistenze(uuid) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- La lettura di un contenuto. È l'unica funzione di questo file che tocca
+-- kitchen_data, e ci arriva solo con un accesso di assistenza in corso.
+-- Ogni chiamata scrive nel registro: non l'apertura dell'accesso — quella è
+-- già scritta — ma OGNI SEZIONE LETTA, con il suo nome.
+--
+-- Non è "stable" apposta: scrive nel registro, quindi deve poter scrivere.
+-- ----------------------------------------------------------------------------
+create or replace function public.admin_leggi_contenuto(p_kitchen uuid, p_key text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  k public.kitchens;
+  v jsonb;
+begin
+  if not public.is_platform_admin() then
+    raise exception 'Non sei amministratore della piattaforma' using errcode = '42501';
+  end if;
+
+  select * into k from public.kitchens where id = p_kitchen;
+  if k.id is null then
+    return public.admin_rifiuta('assistenza_lettura', p_kitchen, null, null, null, 'Cucina non trovata.');
+  end if;
+  if not public.assistenza_attiva(p_kitchen) then
+    return public.admin_rifiuta('assistenza_lettura', k.id, k.name, null, null,
+      'Serve un accesso di assistenza in corso, aperto da te, per leggere i dati di questa cucina.',
+      jsonb_build_object('sezione', p_key));
+  end if;
+
+  select d.value into v from public.kitchen_data d
+   where d.kitchen_id = p_kitchen and d.key = p_key;
+
+  perform public.admin_scrivi_registro('assistenza_lettura', k.id, k.name, null, null, 'ok',
+    jsonb_build_object('sezione', p_key, 'trovata', v is not null));
+
+  return jsonb_build_object('ok', true, 'sezione', p_key, 'valore', v);
+end;
+$$;
+grant execute on function public.admin_leggi_contenuto(uuid, text) to authenticated;

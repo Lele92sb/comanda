@@ -264,6 +264,23 @@ Cloud.revokeInvite = async function(code){
   if(!data || !data.length) throw new Error('Non hai i permessi per annullare questo invito.');
 };
 
+// Accessi di assistenza aperti dal proprietario del prodotto su QUESTA cucina.
+// Un accesso che il cliente non può vedere non è assistenza, è una porta di
+// servizio: per questo il titolare li trova nel pannello della squadra.
+//
+// Fallisce in silenzio, e deve: la console di amministrazione è un pezzo
+// separato (supabase/admin.sql) che può non essere ancora installato. Se non
+// c'è, non ci sono accessi da mostrare — non un errore da spiegare a uno chef.
+Cloud.assistenzeSullaCucina = async function(){
+  if(!CLOUD_ENABLED || !Cloud.kitchen || !Cloud.isOwner()) return [];
+  try{
+    const { data, error } = await Cloud.client.rpc('assistenza_sulla_cucina',
+      { p_kitchen: Cloud.kitchen.id });
+    if(error) return [];
+    return data || [];
+  }catch(e){ return []; }
+};
+
 // Blocco d'uso: 'suspended' o trial scaduto. Il controllo vero è comunque lato
 // server (le funzioni AI) e lato database; qui serve solo a spiegarlo a schermo.
 Cloud.accessBlock = function(){
