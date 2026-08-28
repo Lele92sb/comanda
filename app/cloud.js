@@ -137,8 +137,9 @@ Cloud.joinKitchen = async function(code){
 Cloud.listMembers = async function(){
   const { data, error } = await Cloud.client
     .from('kitchen_members')
-    .select('user_id, role, display_name, created_at')
-    .eq('kitchen_id', Cloud.kitchen.id);
+    .select('user_id, role, display_name, email, created_at')
+    .eq('kitchen_id', Cloud.kitchen.id)
+    .order('created_at', { ascending: true });
   if(error) throw error;
   return data||[];
 };

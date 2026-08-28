@@ -2097,23 +2097,27 @@ async function openTeam(){
     document.getElementById('team-body').innerHTML = `
       <div class="panel">
         <h3>Chi lavora su questa cucina</h3>
-        ${members.map(m=>`
+        ${members.map(m=>{
+          const io = m.user_id === Cloud.user.id;
+          const nome = m.display_name || m.email || 'Persona senza email registrata';
+          return `
           <div class="staff-card">
-            <div>
-              <div style="font-weight:600;">${esc(m.display_name || (m.user_id===Cloud.user.id ? Cloud.user.email : 'Membro'))}</div>
-              <div class="contact">${m.user_id===Cloud.user.id?'sei tu':''}</div>
+            <div style="min-width:0;">
+              <div style="font-weight:600;overflow-wrap:anywhere;">${esc(nome)}</div>
+              <div class="contact">${io ? 'sei tu' : 'nella cucina dal ' + new Date(m.created_at).toLocaleDateString('it-IT')}</div>
             </div>
-            ${m.user_id===Cloud.user.id
-              ? '<span class="role-badge">titolare</span>'
+            ${io
+              ? `<span class="role-badge">${m.role==='owner'?'titolare':(m.role==='editor'?'può modificare':'sola lettura')}</span>`
               : `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
                    <select class="tm-role" data-u="${esc(m.user_id)}" style="width:auto;">
                      <option value="editor" ${m.role==='editor'?'selected':''}>può modificare</option>
                      <option value="viewer" ${m.role==='viewer'?'selected':''}>sola lettura</option>
                      <option value="owner"  ${m.role==='owner'?'selected':''}>titolare</option>
                    </select>
-                   <button class="btn ghost small tm-rm" data-u="${esc(m.user_id)}" style="color:var(--alert);">Rimuovi</button>
+                   <button class="btn ghost small tm-rm" data-u="${esc(m.user_id)}"
+                           data-n="${esc(nome)}" style="color:var(--alert);">Rimuovi</button>
                  </div>`}
-          </div>`).join('')}
+          </div>`;}).join('')}
       </div>
       <div class="panel">
         <h3>Invita qualcuno</h3>
@@ -2176,6 +2180,9 @@ async function openTeam(){
       catch(e){ teamError(e); }
     }));
     teamEl.querySelectorAll('.tm-rm').forEach(b=>b.addEventListener('click', async ()=>{
+      // Rimuovere qualcuno gli toglie l'accesso subito: meglio una conferma con
+      // il nome davanti agli occhi, viste le righe una sotto l'altra.
+      if(!confirm(`Togliere a ${b.dataset.n} l'accesso a ${Cloud.kitchen.name}?\n\nI dati della cucina restano intatti. Potrai riammetterla con un nuovo codice d'invito.`)) return;
       try{ await Cloud.removeMember(b.dataset.u); openTeam(); toast('Persona rimossa'); }
       catch(e){ teamError(e); }
     }));

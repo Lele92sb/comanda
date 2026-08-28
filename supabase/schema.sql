@@ -39,9 +39,22 @@ create table if not exists public.kitchen_members (
   user_id      uuid not null references auth.users(id) on delete cascade,
   role         text not null check (role in ('owner','editor','viewer')),
   display_name text,
+  -- Copia dell'email al momento dell'ingresso. Serve perché la tabella degli
+  -- account (auth.users) non è leggibile dal browser: senza questa colonna il
+  -- titolare vedrebbe righe anonime e non saprebbe a chi sta cambiando il
+  -- permesso o chi sta rimuovendo.
+  email        text,
   created_at   timestamptz not null default now(),
   primary key (kitchen_id, user_id)
 );
+
+-- Adeguamento per i database creati prima che l'email venisse memorizzata.
+-- Rieseguibile senza effetti.
+alter table public.kitchen_members add column if not exists email text;
+update public.kitchen_members m
+set email = u.email
+from auth.users u
+where u.id = m.user_id and m.email is null;
 
 -- Dati della cucina, condivisi da tutti i membri. Una riga per "sezione"
 -- (ingredients, recipes, shifts, ...): l'app lavora già a sezioni intere, quindi
@@ -186,8 +199,9 @@ begin
   insert into public.kitchens (name, created_by) values (trim(p_name), auth.uid())
   returning id into v_id;
 
-  insert into public.kitchen_members (kitchen_id, user_id, role, display_name)
-  values (v_id, auth.uid(), 'owner', nullif(trim(coalesce(p_display_name,'')),''));
+  insert into public.kitchen_members (kitchen_id, user_id, role, display_name, email)
+  values (v_id, auth.uid(), 'owner', nullif(trim(coalesce(p_display_name,'')),''),
+          (select email from auth.users where id = auth.uid()));
 
   return v_id;
 end;
@@ -216,8 +230,9 @@ begin
     raise exception 'Codice invito scaduto';
   end if;
 
-  insert into public.kitchen_members (kitchen_id, user_id, role, display_name)
-  values (inv.kitchen_id, auth.uid(), inv.role, nullif(trim(coalesce(p_display_name,'')),''))
+  insert into public.kitchen_members (kitchen_id, user_id, role, display_name, email)
+  values (inv.kitchen_id, auth.uid(), inv.role, nullif(trim(coalesce(p_display_name,'')),''),
+          (select email from auth.users where id = auth.uid()))
   on conflict (kitchen_id, user_id) do nothing;
 
   update public.kitchen_invites
