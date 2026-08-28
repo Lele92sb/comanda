@@ -32,13 +32,25 @@ const AMBIENTI = {
   },
 };
 
-const host = location.hostname;
-const isTest =
-  /^staging\./.test(host) ||                 // deploy del branch staging su Cloudflare Pages
-  location.pathname.includes('/staging/') ||  // schema a sottocartella (GitHub Pages)
-  host === 'localhost' || host === '127.0.0.1' || location.protocol === 'file:';
+// L'ambiente è deciso al momento della COSTRUZIONE, dal branch che si sta
+// pubblicando, e viene scritto dentro il codice (vedi `define` in
+// vite.config.js). Non si indovina più dal nome dell'indirizzo.
+//
+// Prima si leggeva location.hostname e si cercava "staging." all'inizio.
+// Ha funzionato per fortuna: quando Cloudflare ha assegnato al progetto un
+// nome col suffisso, bastava che l'indirizzo cadesse diversamente perché
+// l'app di prova si collegasse al database vero della cucina. Un dato
+// scritto dal costruttore non può sbagliarsi così.
+//
+// In mancanza del valore si sceglie SEMPRE l'ambiente di test: se qualcosa va
+// storto nella catena di pubblicazione, si finisce sul database di prova e
+// non su quello dei clienti. L'errore costa una prova ripetuta, non dati veri
+// mescolati a dati finti.
+const ambiente = (typeof __AMBIENTE__ === 'string' && __AMBIENTE__ === 'produzione')
+  ? 'produzione' : 'test';
+const isTest = ambiente === 'test';
 
 export const COMANDA_CONFIG = Object.assign(
-  { IS_TEST: isTest },
-  isTest ? AMBIENTI.test : AMBIENTI.produzione
+  { IS_TEST: isTest, AMBIENTE: ambiente },
+  AMBIENTI[ambiente]
 );

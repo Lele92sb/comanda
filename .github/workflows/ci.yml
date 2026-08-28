@@ -6,11 +6,16 @@ on:
   pull_request:
     branches: [main, staging]
 
-# Un rilascio alla volta per ambiente: evita che due push ravvicinati si
-# sovrascrivano a vicenda a metà pubblicazione.
+# Un rilascio alla volta per ambiente, e vince sempre l'ultimo commit.
+#
+# Con cancel-in-progress a false i push ravvicinati si mettevano in fila:
+# bastava che il primo si impantanasse perché tutti i successivi restassero
+# in attesa. Ma la build di un commit ormai superato non serve a nessuno —
+# annullarla è più sicuro che accodarla, perché evita anche che una
+# pubblicazione vecchia arrivi dopo una nuova.
 concurrency:
   group: deploy-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -52,7 +57,11 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      # L'ambiente lo decide il BRANCH, non l'indirizzo su cui si finisce.
+      # main -> database di produzione; qualunque altro branch -> quello di prova.
       - run: npm run build
+        env:
+          COMANDA_AMBIENTE: ${{ github.ref_name == 'main' && 'produzione' || 'test' }}
       # Crea il progetto Pages se non esiste ancora. Fallisce con un errore
       # innocuo quando c'e' gia', e per questo l'errore viene ignorato: cosi'
       # il primo rilascio non richiede nessun passaggio manuale nella
