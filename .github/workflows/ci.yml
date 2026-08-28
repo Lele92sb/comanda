@@ -20,7 +20,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Deve stare al passo con "engines" in package.json. I test caricano
+          # moduli TypeScript direttamente, cosa che Node sa fare solo dalla
+          # 22.6 in poi: sulla 20 la pipeline falliva prima ancora di provare
+          # una riga di codice.
+          node-version: '24'
           cache: npm
       - run: npm ci
       - run: npm test
@@ -41,7 +45,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Deve stare al passo con "engines" in package.json. I test caricano
+          # moduli TypeScript direttamente, cosa che Node sa fare solo dalla
+          # 22.6 in poi: sulla 20 la pipeline falliva prima ancora di provare
+          # una riga di codice.
+          node-version: '24'
           cache: npm
       - run: npm ci
       - run: npm run build
