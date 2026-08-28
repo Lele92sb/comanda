@@ -200,9 +200,20 @@ create policy members_write on public.kitchen_members
   with check (public.my_role(kitchen_id) = 'owner');
 
 drop policy if exists data_write on public.kitchen_data;
-create policy data_write on public.kitchen_data
-  for all using (public.can_write(kitchen_id))
+drop policy if exists data_insert on public.kitchen_data;
+drop policy if exists data_update on public.kitchen_data;
+drop policy if exists data_delete on public.kitchen_data;
+-- Tre policy separate e non una sola "for all": in Postgres FOR ALL comprende
+-- anche la SELECT, quindi una singola policy di scrittura avrebbe concesso a
+-- chi puo' modificare di leggere le righe grezze, scavalcando la funzione che
+-- filtra. La lettura resta una cosa a parte, e passa solo da leggi_sezione.
+create policy data_insert on public.kitchen_data
+  for insert with check (public.can_write(kitchen_id));
+create policy data_update on public.kitchen_data
+  for update using (public.can_write(kitchen_id))
   with check (public.can_write(kitchen_id));
+create policy data_delete on public.kitchen_data
+  for delete using (public.can_write(kitchen_id));
 
 drop policy if exists user_data_all on public.user_data;
 create policy user_data_all on public.user_data
@@ -572,6 +583,11 @@ create or replace function public.save_kitchen_data(
 )
 returns bigint
 language plpgsql
+-- security definer perche' la lettura diretta della tabella e' riservata al
+-- titolare: senza, un editor non riuscirebbe piu' nemmeno a leggere il numero
+-- di versione della sezione che sta salvando. I permessi non si allentano:
+-- la funzione li verifica da se', in modo esplicito, nelle prime righe.
+security definer
 set search_path = public
 as $$
 declare
