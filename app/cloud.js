@@ -97,7 +97,7 @@ Cloud.resetPassword = async function(email){
 Cloud.loadMemberships = async function(){
   const { data, error } = await Cloud.client
     .from('kitchen_members')
-    .select('role, kitchen:kitchens(id, name, status, trial_ends_at)')
+    .select('role, display_name, kitchen:kitchens(id, name, status, trial_ends_at)')
     .eq('user_id', Cloud.user.id)
     .order('created_at', { ascending: true });
   if(error) throw error;
@@ -110,6 +110,7 @@ Cloud.selectKitchen = function(kitchenId){
   if(!m) throw new Error('Cucina non trovata tra le tue');
   Cloud.kitchen = m.kitchen;
   Cloud.role = m.role;
+  Cloud.myDisplayName = m.display_name || null;
   Cloud.versions = {};
   try{ localStorage.setItem(LS_PREFIX+'last_kitchen', kitchenId); }catch(e){}
 };
@@ -118,20 +119,41 @@ Cloud.lastKitchenId = function(){
   try{ return localStorage.getItem(LS_PREFIX+'last_kitchen'); }catch(e){ return null; }
 };
 
-Cloud.createKitchen = async function(name){
-  const { data, error } = await Cloud.client.rpc('create_kitchen', { p_name: name });
+Cloud.createKitchen = async function(name, nomeInCucina){
+  const { data, error } = await Cloud.client.rpc('create_kitchen',
+    { p_name: name, p_display_name: nomeInCucina || null });
   if(error) throw error;
   await Cloud.loadMemberships();
   Cloud.selectKitchen(data);
   return data;
 };
 
-Cloud.joinKitchen = async function(code){
-  const { data, error } = await Cloud.client.rpc('join_kitchen', { p_code: code });
+Cloud.joinKitchen = async function(code, nomeInCucina){
+  const { data, error } = await Cloud.client.rpc('join_kitchen',
+    { p_code: code, p_display_name: nomeInCucina || null });
   if(error) throw error;
   await Cloud.loadMemberships();
   Cloud.selectKitchen(data);
   return data;
+};
+
+// Il nome con cui gli altri ti vedono in questa cucina.
+Cloud.setMyDisplayName = async function(nome){
+  const { error } = await Cloud.client.rpc('set_my_display_name',
+    { p_kitchen: Cloud.kitchen.id, p_name: nome });
+  if(error) throw error;
+  Cloud.myDisplayName = (nome||'').trim() || null;
+};
+
+// Il titolare può correggere il nome di chiunque: se un collega scrive
+// "aiuto1" o niente, deve poter mettere qualcosa di riconoscibile.
+Cloud.setMemberName = async function(userId, nome){
+  const { data, error } = await Cloud.client.from('kitchen_members')
+    .update({ display_name: (nome||'').trim() || null })
+    .eq('kitchen_id', Cloud.kitchen.id).eq('user_id', userId)
+    .select('user_id');
+  if(error) throw error;
+  if(!data || !data.length) throw new Error('Non hai i permessi per rinominare le persone.');
 };
 
 Cloud.listMembers = async function(){

@@ -172,7 +172,9 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 
 .small-note{font-family:var(--font-mono);font-size:10.5px;color:var(--brass);margin-top:6px;line-height:1.6;}
 .staff-card{background:var(--bg-elev);border:1px solid var(--line);border-radius:6px;padding:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
-.staff-card .contact{font-family:var(--font-mono);font-size:11px;color:var(--brass);margin-top:4px;line-height:1.6;}
+/* Riga di dettaglio sotto un nome (contatti, email, data d'ingresso). Non è
+   legata a .staff-card: serve anche nell'elenco della squadra. */
+.contact{font-family:var(--font-mono);font-size:11px;color:var(--brass);margin-top:4px;line-height:1.6;}
 
 /* ---- Account, cucina, ruoli ---- */
 .overlay{position:fixed;inset:0;background:var(--bg);z-index:200;overflow-y:auto;padding:32px 20px;display:none;}
@@ -218,6 +220,7 @@ body.readonly main label.btn{opacity:0.45;}
         <span id="ab-email"></span>
       </div>
       <div class="acts">
+        <button id="ab-rename">Il tuo nome</button>
         <button id="ab-team" style="display:none;">Squadra</button>
         <button id="ab-switch">Cambia cucina</button>
         <button id="ab-logout">Esci</button>
@@ -1977,13 +1980,20 @@ function screenKitchens(){
     ${rows}
     <div class="panel" style="margin-top:18px;">
       <h3>Apri una nuova cucina</h3>
-      <input type="text" id="g-kname" placeholder="Nome della cucina, es. Trattoria del Porto">
-      <button class="btn full" id="g-create" style="margin-top:10px;">Crea cucina</button>
+      <label>Nome della cucina</label>
+      <input type="text" id="g-kname" placeholder="es. Trattoria del Porto">
+      <label>Come ti chiamano in cucina</label>
+      <input type="text" id="g-myname" placeholder="es. Emanuele, chef">
+      <button class="btn full" id="g-create" style="margin-top:12px;">Crea cucina</button>
     </div>
     <div class="panel">
       <h3>Entra con un codice d'invito</h3>
       <p class="small-note" style="margin-top:0;">Te lo dà chi gestisce la cucina.</p>
+      <label>Codice</label>
       <input type="text" id="g-code" placeholder="ABCD2345" style="text-transform:uppercase;letter-spacing:2px;">
+      <label>Come ti chiamano in cucina</label>
+      <input type="text" id="g-joinname" placeholder="es. Marco, secondo">
+      <p class="small-note" style="margin-top:4px;">Serve a chi gestisce la cucina per riconoscerti nell'elenco della squadra.</p>
       <button class="btn ghost full" id="g-join" style="margin-top:10px;">Entra nella cucina</button>
     </div>
     <div style="text-align:center;"><button class="gate-switch" id="g-out">Esci dall'account</button></div>
@@ -1995,13 +2005,13 @@ function screenKitchens(){
   document.getElementById('g-create').addEventListener('click', async ()=>{
     const name = document.getElementById('g-kname').value.trim();
     if(!name){ gateError('Dai un nome alla cucina.'); return; }
-    try{ await Cloud.createKitchen(name); startApp(); }
+    try{ await Cloud.createKitchen(name, document.getElementById('g-myname').value); startApp(); }
     catch(e){ gateError(humanError(e)); }
   });
   document.getElementById('g-join').addEventListener('click', async ()=>{
     const code = document.getElementById('g-code').value.trim().toUpperCase();
     if(!code){ gateError('Inserisci il codice.'); return; }
-    try{ await Cloud.joinKitchen(code); startApp(); }
+    try{ await Cloud.joinKitchen(code, document.getElementById('g-joinname').value); startApp(); }
     catch(e){ gateError(humanError(e)); }
   });
   document.getElementById('g-out').addEventListener('click', async ()=>{ await Cloud.signOut(); screenSignIn('signin'); });
@@ -2036,7 +2046,8 @@ function renderAccountBar(){
   const bar = document.getElementById('account-bar');
   bar.style.display = 'flex';
   document.getElementById('ab-kitchen').textContent = Cloud.kitchen.name;
-  document.getElementById('ab-email').textContent = Cloud.user.email;
+  // Il nome scelto, se c'è: l'email è lunga e non dice niente a colpo d'occhio.
+  document.getElementById('ab-email').textContent = Cloud.myDisplayName || Cloud.user.email;
   const badge = document.getElementById('ab-role');
   badge.textContent = Cloud.role==='owner' ? 'titolare' : (Cloud.role==='editor' ? 'può modificare' : 'sola lettura');
   badge.className = 'role-badge' + (Cloud.role==='viewer' ? ' viewer' : '');
@@ -2099,24 +2110,29 @@ async function openTeam(){
         <h3>Chi lavora su questa cucina</h3>
         ${members.map(m=>{
           const io = m.user_id === Cloud.user.id;
-          const nome = m.display_name || m.email || 'Persona senza email registrata';
+          const nome = m.display_name || m.email || 'Senza nome';
           return `
-          <div class="staff-card">
-            <div style="min-width:0;">
-              <div style="font-weight:600;overflow-wrap:anywhere;">${esc(nome)}</div>
-              <div class="contact">${io ? 'sei tu' : 'nella cucina dal ' + new Date(m.created_at).toLocaleDateString('it-IT')}</div>
-            </div>
-            ${io
-              ? `<span class="role-badge">${m.role==='owner'?'titolare':(m.role==='editor'?'può modificare':'sola lettura')}</span>`
-              : `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
-                   <select class="tm-role" data-u="${esc(m.user_id)}" style="width:auto;">
+          <div class="panel" style="background:var(--bg-elev2);padding:12px;margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+              <div style="min-width:0;">
+                <div style="font-weight:600;overflow-wrap:anywhere;">${esc(nome)}</div>
+                <div class="contact" style="overflow-wrap:anywhere;">${esc(m.email||'')}${
+                  io ? ' · sei tu' : ' · dal ' + new Date(m.created_at).toLocaleDateString('it-IT')}</div>
+              </div>
+              ${io
+                ? `<span class="role-badge">${m.role==='owner'?'titolare':(m.role==='editor'?'può modificare':'sola lettura')}</span>`
+                : `<select class="tm-role" data-u="${esc(m.user_id)}" style="width:auto;flex-shrink:0;">
                      <option value="editor" ${m.role==='editor'?'selected':''}>può modificare</option>
                      <option value="viewer" ${m.role==='viewer'?'selected':''}>sola lettura</option>
                      <option value="owner"  ${m.role==='owner'?'selected':''}>titolare</option>
-                   </select>
-                   <button class="btn ghost small tm-rm" data-u="${esc(m.user_id)}"
-                           data-n="${esc(nome)}" style="color:var(--alert);">Rimuovi</button>
-                 </div>`}
+                   </select>`}
+            </div>
+            <div class="grid2" style="margin-top:8px;">
+              <input type="text" class="tm-name" data-u="${esc(m.user_id)}"
+                     value="${esc(m.display_name||'')}" placeholder="nome in cucina, es. Marco secondo">
+              ${io ? '' : `<button class="btn ghost small tm-rm" data-u="${esc(m.user_id)}"
+                           data-n="${esc(nome)}" style="color:var(--alert);">Rimuovi dalla cucina</button>`}
+            </div>
           </div>`;}).join('')}
       </div>
       <div class="panel">
@@ -2179,6 +2195,13 @@ async function openTeam(){
       try{ await Cloud.setMemberRole(sel.dataset.u, sel.value); toast('Ruolo aggiornato'); }
       catch(e){ teamError(e); }
     }));
+    teamEl.querySelectorAll('.tm-name').forEach(inp=>inp.addEventListener('change', async ()=>{
+      try{
+        await Cloud.setMemberName(inp.dataset.u, inp.value);
+        if(inp.dataset.u === Cloud.user.id){ Cloud.myDisplayName = inp.value.trim() || null; renderAccountBar(); }
+        toast('Nome aggiornato');
+      }catch(e){ teamError(e); }
+    }));
     teamEl.querySelectorAll('.tm-rm').forEach(b=>b.addEventListener('click', async ()=>{
       // Rimuovere qualcuno gli toglie l'accesso subito: meglio una conferma con
       // il nome davanti agli occhi, viste le righe una sotto l'altra.
@@ -2198,6 +2221,13 @@ function teamError(e){
 }
 
 document.getElementById('ab-team').addEventListener('click', openTeam);
+document.getElementById('ab-rename').addEventListener('click', async ()=>{
+  const nome = prompt('Come ti chiamano in cucina?\n\nÈ il nome con cui ti vede chi gestisce la cucina.',
+                      Cloud.myDisplayName || '');
+  if(nome === null) return;
+  try{ await Cloud.setMyDisplayName(nome); renderAccountBar(); toast('Nome aggiornato'); }
+  catch(e){ toast(humanError(e)); }
+});
 document.getElementById('ab-logout').addEventListener('click', async ()=>{ await Cloud.signOut(); location.reload(); });
 document.getElementById('ab-switch').addEventListener('click', ()=>{
   try{ localStorage.removeItem((Cloud.isStaging?'comanda_staging_':'comanda_')+'last_kitchen'); }catch(e){}

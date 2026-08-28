@@ -151,9 +151,15 @@ create policy kitchens_update on public.kitchens
 revoke update on public.kitchens from authenticated;
 grant update (name) on public.kitchens to authenticated;
 
+-- Chi lavora in cucina vede SOLO la propria riga; l'elenco completo della
+-- squadra — con le email dei colleghi — è riservato al titolare.
+-- Nascondere il pulsante nell'interfaccia non basterebbe: senza questa policy
+-- chiunque potrebbe leggere le email dei colleghi interrogando l'API a mano.
 drop policy if exists members_select on public.kitchen_members;
 create policy members_select on public.kitchen_members
-  for select using (public.my_role(kitchen_id) is not null);
+  for select using (
+    user_id = auth.uid() or public.my_role(kitchen_id) = 'owner'
+  );
 
 drop policy if exists members_write on public.kitchen_members;
 create policy members_write on public.kitchen_members
@@ -240,6 +246,27 @@ begin
   where code = inv.code;
 
   return inv.kitchen_id;
+end;
+$$;
+
+-- ----------------------------------------------------------------------------
+-- Il proprio nome in cucina ("Marco, secondo").
+-- Passa da una funzione dedicata invece che da un update diretto: concedere a
+-- ciascuno la modifica della propria riga aprirebbe la porta a cambiarsi anche
+-- il ruolo. Qui si tocca solo display_name, e solo la propria riga.
+-- ----------------------------------------------------------------------------
+create or replace function public.set_my_display_name(p_kitchen uuid, p_name text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'Non autenticato'; end if;
+  update public.kitchen_members
+  set display_name = nullif(trim(coalesce(p_name,'')),'')
+  where kitchen_id = p_kitchen and user_id = auth.uid();
+  if not found then raise exception 'Non fai parte di questa cucina'; end if;
 end;
 $$;
 
@@ -340,6 +367,7 @@ revoke all on function public.consume_ai_call(uuid) from public, anon, authentic
 grant execute on function public.consume_ai_call(uuid)                     to service_role;
 grant execute on function public.create_kitchen(text, text)                to authenticated;
 grant execute on function public.join_kitchen(text, text)                  to authenticated;
+grant execute on function public.set_my_display_name(uuid, text)           to authenticated;
 grant execute on function public.save_kitchen_data(uuid, text, jsonb, bigint) to authenticated;
 grant execute on function public.my_role(uuid)                             to authenticated;
 grant execute on function public.can_write(uuid)                           to authenticated;
