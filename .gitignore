@@ -7,3 +7,6 @@ node_modules/
 # Chiavi segrete per la prova in locale (chiave Anthropic, service role Supabase).
 # NON deve mai finire in git: chi legge il repo potrebbe spendere sulla tua chiave.
 .dev.vars
+
+# Build di Vite
+dist/

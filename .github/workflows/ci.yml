@@ -21,7 +21,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+      - run: npm ci
       - run: npm test
+      # La build fa da controllo strutturale: un import verso un simbolo che
+      # non esiste piu' ferma qui il rilascio, non davanti all'utente.
+      - run: npm run build
 
   deploy:
     name: Pubblica su Cloudflare Pages
@@ -33,9 +38,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
       # main → indirizzo di produzione; staging → staging.<progetto>.pages.dev
       - name: Deploy
-        run: npx --yes wrangler@4 pages deploy --project-name=comanda --branch=${{ github.ref_name }}
+        run: npx --yes wrangler@4 pages deploy dist --project-name=comanda --branch=${{ github.ref_name }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

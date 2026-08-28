@@ -12,10 +12,9 @@
 //   LOCALE — nessuna configurazione: dati nel browser, come la prima versione.
 //   CLOUD  — Supabase: login, dati condivisi per cucina, ruoli editor/viewer.
 // ============================================================================
-(function(){
-'use strict';
+import { createClient } from '@supabase/supabase-js';
+import { COMANDA_CONFIG as cfg } from './config.js';
 
-const cfg = window.COMANDA_CONFIG || {};
 const CLOUD_ENABLED = !!(cfg.SUPABASE_URL && cfg.SUPABASE_PUBLIC_KEY);
 
 // Chiavi che restano personali del singolo utente anche in una cucina condivisa:
@@ -48,10 +47,7 @@ Cloud.isOwner  = function(){ return Cloud.role === 'owner'; };
 // --------------------------------------------------------------------------
 Cloud.init = async function(){
   if(!CLOUD_ENABLED) return { mode:'local' };
-  if(!window.supabase || !window.supabase.createClient){
-    throw new Error('Libreria Supabase non caricata — controlla la connessione.');
-  }
-  Cloud.client = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_PUBLIC_KEY);
+  Cloud.client = createClient(cfg.SUPABASE_URL, cfg.SUPABASE_PUBLIC_KEY);
   const { data } = await Cloud.client.auth.getSession();
   Cloud.user = data.session ? data.session.user : null;
   return { mode:'cloud', signedIn: !!Cloud.user };
@@ -322,7 +318,7 @@ async function cloudSet(key, value){
 }
 
 // Interfaccia usata dall'app. Ritorna null se il dato non esiste ancora.
-window.storageGet = async function(key){
+export const storageGet = async function(key){
   if(!CLOUD_ENABLED) return localGet(key);
   try{ return await cloudGet(key); }
   catch(e){ console.error('lettura dal cloud fallita', key, e); throw e; }
@@ -331,7 +327,7 @@ window.storageGet = async function(key){
 // Ritorna true se salvato, false se rifiutato. Quando rifiuta, Cloud.lastFailure
 // dice perché ('conflict' o 'readonly'), così chi chiama non copre con un
 // messaggio generico una spiegazione già data.
-window.storageSet = async function(key, value){
+export const storageSet = async function(key, value){
   Cloud.lastFailure = null;
   if(!CLOUD_ENABLED) return localSet(key, value);
   if(!Cloud.canWrite()){ Cloud.lastFailure = 'readonly'; return false; }
@@ -505,5 +501,4 @@ Cloud.ai = async function(body){
   return json;
 };
 
-window.Cloud = Cloud;
-})();
+export { Cloud };

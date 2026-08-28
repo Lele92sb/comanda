@@ -1,6 +1,7 @@
 // ============================================================================
 // Comanda — motore di generazione turni (logica pura, senza DOM/storage)
-// Funziona sia nel browser (incluso via <script>) sia in Node (per i test).
+// Modulo ES puro: nessun DOM, nessuno storage, nessuna dipendenza.
+// È il motore, ed è la parte che i test coprono per intero.
 // Qualunque modifica a questo file richiede che la test suite in /tests passi.
 //
 // I SERVIZI NON SONO CABLATI QUI. Ogni cucina definisce i propri (colazione,
@@ -14,13 +15,6 @@
 // una persona sola che copre pranzo e cena. Non è più un caso speciale nel
 // codice, è una configurazione come le altre.
 // ============================================================================
-(function(root, factory){
-  if (typeof module === 'object' && module.exports) {
-    module.exports = factory();
-  } else {
-    Object.assign(root, factory());
-  }
-})(typeof self !== 'undefined' ? self : this, function(){
 
 const DAYS = ["Lun","Mar","Mer","Gio","Ven","Sab","Dom"];
 
@@ -371,8 +365,24 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
   return { newShifts, shortfalls, extras };
 }
 
-return { DAYS, SPECIAL_CODES, REST_CODE, DEFAULT_SERVICES, DEFAULT_SHIFT_TYPES,
-         buildShiftConfig, shuffleArray, buildStaffPools, computeShifts,
-         isoDate, parseISO, startOfWeek, weekDates, monthDates, dayName, groupByWeek,
-         computeShiftsForDates, constraintFor, codeAllowed };
-});
+export {
+  DAYS,
+  SPECIAL_CODES,
+  REST_CODE,
+  DEFAULT_SERVICES,
+  DEFAULT_SHIFT_TYPES,
+  buildShiftConfig,
+  shuffleArray,
+  buildStaffPools,
+  computeShifts,
+  isoDate,
+  parseISO,
+  startOfWeek,
+  weekDates,
+  monthDates,
+  dayName,
+  groupByWeek,
+  computeShiftsForDates,
+  constraintFor,
+  codeAllowed,
+};

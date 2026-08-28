@@ -20,26 +20,25 @@
 // chiave. La chiave davvero segreta (secret / service_role) sta solo lato
 // server, nelle variabili d'ambiente di Cloudflare — mai qui.
 // ============================================================================
-(function(){
-  const AMBIENTI = {
-    produzione: {
-      SUPABASE_URL: '',
-      SUPABASE_PUBLIC_KEY: '',
-    },
-    test: {
-      SUPABASE_URL: 'https://wkgmrklhxarnmtjysnws.supabase.co',
-      SUPABASE_PUBLIC_KEY: 'sb_publishable_0X9X9YsH5PKfrq_mtXQl7w_j_2oKfjH',
-    },
-  };
 
-  const host = location.hostname;
-  const isTest =
-    /^staging\./.test(host) ||                 // deploy del branch staging su Cloudflare Pages
-    location.pathname.includes('/staging/') ||  // schema a sottocartella (GitHub Pages)
-    host === 'localhost' || host === '127.0.0.1' || location.protocol === 'file:';
+const AMBIENTI = {
+  produzione: {
+    SUPABASE_URL: '',
+    SUPABASE_PUBLIC_KEY: '',
+  },
+  test: {
+    SUPABASE_URL: 'https://wkgmrklhxarnmtjysnws.supabase.co',
+    SUPABASE_PUBLIC_KEY: 'sb_publishable_0X9X9YsH5PKfrq_mtXQl7w_j_2oKfjH',
+  },
+};
 
-  window.COMANDA_CONFIG = Object.assign(
-    { IS_TEST: isTest },
-    isTest ? AMBIENTI.test : AMBIENTI.produzione
-  );
-})();
+const host = location.hostname;
+const isTest =
+  /^staging\./.test(host) ||                 // deploy del branch staging su Cloudflare Pages
+  location.pathname.includes('/staging/') ||  // schema a sottocartella (GitHub Pages)
+  host === 'localhost' || host === '127.0.0.1' || location.protocol === 'file:';
+
+export const COMANDA_CONFIG = Object.assign(
+  { IS_TEST: isTest },
+  isTest ? AMBIENTI.test : AMBIENTI.produzione
+);

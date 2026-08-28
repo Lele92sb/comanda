@@ -1,10 +1,11 @@
 // Test del motore di generazione turni (app/logic.js).
 // Uso node:test, incluso in Node 18+, per non aggiungere dipendenze esterne a un progetto
 // che deve restare semplice da eseguire ovunque con "npm test".
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const { computeShifts, buildShiftConfig, computeShiftsForDates,
-        weekDates, monthDates, groupByWeek, isoDate, startOfWeek, dayName } = require('../app/logic.js');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { computeShifts, buildShiftConfig, computeShiftsForDates,
+         weekDates, monthDates, groupByWeek, isoDate, startOfWeek, dayName,
+         codeAllowed } from '../app/src/lib/logic.js';
 
 // Configurazione classica (colazione/pranzo/cena con spezzato): è quella che
 // l'app crea da sola per chi non ne ha una propria.
@@ -350,7 +351,6 @@ test('un turno accorpato non aggira una richiesta di singolo servizio', () => {
   assert.equal(codeAllowedTest('SP', ['pranzo','cena']), true);
 });
 function codeAllowedTest(code, servizi){
-  const { codeAllowed } = require('../app/logic.js');
   return codeAllowed({x:{d:{services:servizi}}}, 'x', 'd', code, BASE.codeToServices);
 }
 
