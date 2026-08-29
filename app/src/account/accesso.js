@@ -96,7 +96,7 @@ function screenKitchens(){
       <h3>Apri una nuova cucina</h3>
       <label>Nome della cucina</label>
       <input type="text" id="g-kname" placeholder="es. Trattoria del Porto">
-      <label>Come ti chiamano in cucina</label>
+      <label>Come ti chiamano</label>
       <input type="text" id="g-myname" placeholder="es. Emanuele, chef">
       <button class="btn full mt-3" id="g-create">Crea cucina</button>
     </div>
@@ -105,9 +105,9 @@ function screenKitchens(){
       <p class="small-note mt-0" >Te lo dà chi gestisce la cucina.</p>
       <label>Codice</label>
       <input type="text" id="g-code" placeholder="ABCD2345" style="text-transform:uppercase;letter-spacing:2px;">
-      <label>Come ti chiamano in cucina</label>
+      <label>Come ti chiamano</label>
       <input type="text" id="g-joinname" placeholder="es. Marco, secondo">
-      <p class="small-note mt-1" >Serve a chi gestisce la cucina per riconoscerti nell'elenco della squadra.</p>
+      <p class="small-note mt-1" >Serve a chi gestisce la cucina per riconoscerti nell'elenco di chi ha accesso.</p>
       <button class="btn ghost full mt-3" id="g-join">Entra nella cucina</button>
     </div>
     <div class="center"><button class="gate-switch" id="g-out">Esci dall'account</button></div>
@@ -237,7 +237,8 @@ async function openTeam(){
     const pending = invites.filter(Cloud.inviteIsPending);
     document.getElementById('team-body').innerHTML = `
       <div class="panel">
-        <h3>Chi lavora su questa cucina</h3>
+        <h3>Chi ha accesso all'app</h3>
+        <p class="small-note mt-0">Sono gli account che possono aprire Comanda su questa cucina. Chi ci lavora davvero si gestisce in Brigata: le due cose non coincidono — puoi avere accesso senza mai essere sui turni, ed essere sui turni senza avere un account.</p>
         ${members.map(m=>{
           const io = m.user_id === Cloud.user.id;
           const nome = m.display_name || m.email || 'Senza nome';
@@ -259,7 +260,7 @@ async function openTeam(){
             </div>
             <div class="grid2 mt-2" >
               <input type="text" class="tm-name" data-u="${esc(m.user_id)}"
-                     value="${esc(m.display_name||'')}" placeholder="nome in cucina, es. Marco secondo">
+                     value="${esc(m.display_name||'')}" placeholder="nome nell'app, es. Marco secondo">
               ${io ? '' : `<button class="btn ghost small tm-rm text-alert" data-u="${esc(m.user_id)}"
                            data-n="${esc(nome)}">Rimuovi dalla cucina</button>`}
             </div>
@@ -357,7 +358,7 @@ async function openTeam(){
       // Rimuovere qualcuno gli toglie l'accesso subito: meglio una conferma con
       // il nome davanti agli occhi, viste le righe una sotto l'altra.
       const ok = await conferma(`Togliere a ${b.dataset.n} l'accesso a ${Cloud.kitchen.name}?`,
-        'I dati della cucina restano intatti. Potrai riammetterla con un nuovo codice d\'invito.',
+        'Perde solo l\'accesso all\'app. Se è anche in brigata ci resta, con i suoi turni già assegnati: quella è un\'altra cosa e si toglie da Brigata. Potrai riammetterla con un nuovo codice d\'invito.',
         {conferma:'Rimuovi', pericolo:true});
       if(!ok) return;
       try{ await Cloud.removeMember(b.dataset.u); openTeam(); toast('Persona rimossa'); }
