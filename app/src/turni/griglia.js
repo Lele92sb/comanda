@@ -255,6 +255,10 @@ window.addEventListener('resize', ()=>{
     if(!tab) return;
     accorciaNomi(tab);
     adattaTesti(tab);
+    // Anche le frecce vanno rifatte: cambiando larghezza cambia quanti giorni
+    // ci stanno, e quindi se servono e cosa scrivono.
+    const box = tab.closest('.shift-scroll');
+    if(box) box.dispatchEvent(new Event('scroll'));
   }, 120);
 });
 
@@ -274,7 +278,13 @@ export function renderTurni(){
   // L'ORDINE DELLE RIGHE È L'ORDINE DI state.staff, cioè quello che il titolare
   // ha deciso con i pulsanti su/giù nella brigata. Non si riordina qui: due
   // ordinamenti diversi per lo stesso elenco sono due elenchi diversi.
+  const posPrec = posizioneScorrimento(el);
   el.innerHTML = `
+    <div class="shift-nav hidden">
+      <button type="button" data-passo="-1" title="Giorni precedenti">‹</button>
+      <span class="shift-nav-label"></span>
+      <button type="button" data-passo="1" title="Giorni successivi">›</button>
+    </div>
     <div class="shift-scroll">
     <table class="shift-table">
       <colgroup>
@@ -308,7 +318,79 @@ export function renderTurni(){
     b.addEventListener('click', ()=> apriSceltaTurno(b.dataset.staff, b.dataset.day)));
   accorciaNomi(tab);
   adattaTesti(tab);
+  collegaScorrimento(el, tab, dates, oggi, posPrec);
   renderLegenda();
+}
+
+/* ---- Scorrimento orizzontale: non perdere il segno -----------------------
+   Su un telefono la vista mese è larga 1904px in una finestra da 302px: sono
+   sei schermate, e senza un riferimento non si sa più dove si è. Tre cose,
+   nessuna delle quali è una vista nuova da imparare:
+   1. la posizione si conserva fra un disegno e l'altro — renderTurni() gira a
+      ogni modifica di una cella, e senza questo assegnare un turno il 20 del
+      mese riportava la griglia al giorno 1;
+   2. cambiando periodo si parte da oggi, se oggi è nel periodo;
+   3. due frecce spostano di una schermata di giorni per volta, con scritto
+      quali giorni si stanno guardando. Compaiono solo se c'è da scorrere. */
+function posizioneScorrimento(el){
+  const box = el.querySelector('.shift-scroll');
+  return box ? {x: box.scrollLeft, y: box.scrollTop} : null;
+}
+
+let ultimoPeriodo = '';
+
+function collegaScorrimento(el, tab, dates, oggi, posPrec){
+  const box = el.querySelector('.shift-scroll');
+  const nav = el.querySelector('.shift-nav');
+  if(!box || !nav) return;
+
+  const larghezzaColonna = ()=> tab.querySelector('thead th:nth-child(2)').getBoundingClientRect().width || 1;
+  const larghezzaNome = ()=> tab.querySelector('thead th.name-col').getBoundingClientRect().width;
+  // Quanti giorni interi ci stanno oltre la colonna dei nomi, che resta ferma.
+  const giorniPerSchermata = ()=> Math.max(1, Math.floor((box.clientWidth - larghezzaNome()) / larghezzaColonna()));
+
+  const chiave = periodMode + '|' + dates[0] + '|' + dates.length;
+  if(chiave === ultimoPeriodo && posPrec){
+    box.scrollLeft = posPrec.x; box.scrollTop = posPrec.y;
+  } else {
+    const colOggi = dates.indexOf(oggi);
+    if(colOggi >= 0){
+      // Al centro, non al bordo: sul bordo sinistro finirebbe sotto la colonna
+      // dei nomi, che è appiccicata e ci passa sopra.
+      const col = larghezzaColonna();
+      const centrato = colOggi*col - (box.clientWidth - larghezzaNome() - col)/2;
+      // Arrotondato a colonne intere: fermandosi a metà colonna il primo
+      // giorno resta mezzo nascosto sotto la colonna dei nomi, e le frecce
+      // (che spostano di multipli esatti) trascinerebbero lo sfasamento.
+      box.scrollLeft = Math.max(0, Math.round(centrato/col)*col);
+    }
+  }
+  ultimoPeriodo = chiave;
+
+  const etichetta = iso => parseISO(iso).toLocaleDateString('it-IT', {day:'numeric', month:'short'});
+  const aggiorna = ()=>{
+    const serve = box.scrollWidth > box.clientWidth + 2;
+    nav.classList.toggle('hidden', !serve);
+    if(!serve) return;
+    const col = larghezzaColonna();
+    const primo = Math.min(dates.length-1, Math.max(0, Math.round(box.scrollLeft / col)));
+    const ultimo = Math.min(dates.length-1, primo + giorniPerSchermata() - 1);
+    nav.querySelector('.shift-nav-label').textContent =
+      etichetta(dates[primo]) + (ultimo > primo ? ' – ' + etichetta(dates[ultimo]) : '');
+    nav.querySelector('[data-passo="-1"]').disabled = box.scrollLeft <= 1;
+    nav.querySelector('[data-passo="1"]').disabled = box.scrollLeft >= box.scrollWidth - box.clientWidth - 1;
+  };
+
+  nav.querySelectorAll('[data-passo]').forEach(b=> b.addEventListener('click', ()=>{
+    box.scrollBy({left: Number(b.dataset.passo) * giorniPerSchermata() * larghezzaColonna(), behavior:'smooth'});
+  }));
+  let inCorso = false;
+  box.addEventListener('scroll', ()=>{
+    if(inCorso) return;
+    inCorso = true;
+    requestAnimationFrame(()=>{ inCorso = false; aggiorna(); });
+  });
+  aggiorna();
 }
 
 function cellaHtml(s, d, oggi){

@@ -306,6 +306,17 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
    verticale e `position:sticky` non avrebbe nulla a cui aggrapparsi. */
 .shift-scroll{overflow:auto;max-width:100%;max-height:70vh;}
 
+/* Frecce per scorrere di una schermata di giorni per volta, con scritto quali
+   giorni si stanno guardando. Compaiono solo quando c'è da scorrere: sul
+   telefono la vista mese è larga 1904px in una finestra da 302px. */
+.shift-nav{display:flex;align-items:center;justify-content:center;gap:var(--space-2);margin-bottom:var(--space-2);}
+.shift-nav button{background:transparent;border:1px solid var(--line-strong);color:var(--paper);
+  font-family:var(--font-mono);font-size:13px;line-height:1;padding:8px 14px;border-radius:var(--radius-sm);}
+.shift-nav button:hover:not(:disabled){border-color:var(--copper);}
+.shift-nav button:disabled{opacity:0.35;cursor:default;}
+.shift-nav .shift-nav-label{font-family:var(--font-mono);font-size:var(--text-xs);
+  color:var(--copper-light);min-width:130px;text-align:center;}
+
 /* --- Colonna delle ore e riga dei totali ---------------------------------
    La colonna delle ore è appiccicata a destra, simmetrica a quella dei nomi —
    ma SOLO su schermo largo: su un telefono da 375px la griglia utile è larga
