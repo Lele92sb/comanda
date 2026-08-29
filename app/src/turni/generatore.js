@@ -1,11 +1,34 @@
 import { t } from '../core/lingua.ts';
-import { SERVICE_LABEL, esc, periodDates, refreshShiftConfig, save, setPeriodAnchor, setPeriodMode, shiftPeriod, state, toast } from '../core/state.js';
+import { SERVICE_LABEL, conferma, esc, periodDates, refreshShiftConfig, save, setPeriodAnchor, setPeriodMode, shiftPeriod, state, toast } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
-import { computeShiftsForDates, parseISO } from '../lib/logic.js';
+import { REST_CODE, computeShiftsForDates, constraintFor, parseISO, puoFareExtra } from '../lib/logic.js';
 import { renderDashboard } from '../viste/dashboard.js';
 import { renderOreExtra, renderTurni } from './griglia.js';
 import { caricaRichieste, constraintsFromRequests } from './richieste.js';
 /* ============================= TURNI: generatore casuale (motore in logic.js, need-driven, testato) ============================= */
+
+/* Chi avrebbe potuto coprire questa postazione, ma non e' stato chiamato
+   perche' ha spento "puo' fare turni extra".
+
+   Serve perche' il vecchio messaggio di scopertura era diventato falso: diceva
+   "nessun qualificato e' libero quel giorno", e da quando si puo' dichiarare di
+   non fare turni oltre la quota una persona puo' essere liberissima e
+   comunque non chiamabile. Sono due scoperture diverse e si risolvono in due
+   modi diversi — una assumendo o qualificando qualcuno, l'altra facendo una
+   telefonata. Dirle con la stessa frase manda a cercare il problema sbagliato.
+
+   "Libero" qui vuol dire a riposo: ferie e malattia non sono disponibilita',
+   e chi ha una richiesta approvata che blocca il giorno non e' libero comunque
+   — quello e' un vincolo assoluto, non una preferenza. */
+function rinunciatariPer(sf, constraints){
+  return state.staff.filter(s=>
+    !puoFareExtra(s)
+    && s.stations && s.stations.includes(sf.stationId)
+    && !(constraintFor(constraints, s.id, sf.day) || {}).blocked
+    && (((state.shifts[s.id]||{})[sf.day]||{}).code || '') === REST_CODE
+  ).map(s=> s.name);
+}
+
 async function generateRandomShifts(){
   if(!state.staff.length){ toast('Aggiungi prima la brigata'); return; }
   // Le richieste approvate sono vincoli assoluti: vanno rilette adesso, non
@@ -13,8 +36,8 @@ async function generateRandomShifts(){
   await caricaRichieste();
   const missingQuota = state.staff.filter(s=> !(s.weeklyQuota&&s.weeklyQuota.length));
   if(missingQuota.length){ toast('Imposta prima le quote per: '+missingQuota.map(s=>s.name).join(', ')); return; }
-  const unqualified = state.staff.filter(s=> !(s.stations&&s.stations.length));
-  if(unqualified.length){ toast('Attenzione: senza stazioni assegnate, '+unqualified.map(s=>s.name).join(', ')+' non potranno coprire nessun fabbisogno'); }
+  // Chi non ha stazioni non viene pianificato: lo dice il motore nel riepilogo
+  // qui sotto (nonPianificabili), non un avviso che sparisce dopo due secondi.
 
   const dates = periodDates();
   const constraints = constraintsFromRequests();
@@ -35,7 +58,7 @@ async function generateRandomShifts(){
       if(!constraints[staffId][d]) constraints[staffId][d] = {blocked:'R'};
     });
   });
-  const { newShifts, shortfalls, extras } = computeShiftsForDates(state.staff, state.staffingNeeds,
+  const { newShifts, shortfalls, extras, nonPianificabili } = computeShiftsForDates(state.staff, state.staffingNeeds,
     {config: refreshShiftConfig(), dates, constraints});
   // Si sovrascrivono SOLO le date del periodo: i turni delle altre settimane
   // gia' pianificate non devono sparire perche' se ne rigenera una.
@@ -56,18 +79,33 @@ async function generateRandomShifts(){
   }
   if(shortfalls.length){
     const byDay = {};
+    let quantiRinunciatari = 0;
     shortfalls.forEach(sf=>{
       const st = state.stations.find(x=>x.id===sf.stationId);
       const key = parseISO(sf.day).toLocaleDateString('it-IT',{weekday:'short', day:'numeric', month:'short'});
+      const spenti = rinunciatariPer(sf, constraints);
+      if(spenti.length) quantiRinunciatari++;
       byDay[key] = byDay[key] || [];
-      byDay[key].push(`${esc(SERVICE_LABEL(sf.service))} · ${st?st.name:'—'} (mancano ${sf.missing})`);
+      byDay[key].push(`${esc(SERVICE_LABEL(sf.service))} · ${st?esc(st.name):'—'} (mancano ${sf.missing}) — ` +
+        (spenti.length
+          ? `chi poteva coprirla ha i turni extra spenti: <b>${spenti.map(esc).join(', ')}</b>`
+          : `nessun qualificato era libero quel giorno`));
     });
-    html += `<div class="alert-box">⚠ Anche assegnando turni extra, restano postazioni scoperte perché nessun qualificato è libero quel giorno:<br>` +
-      Object.entries(byDay).map(([day,lines])=>`<b>${day}</b>: ${lines.join(' · ')}`).join('<br>') +
-      `</div><p class="small-note">Per risolvere: aggiungi personale qualificato per quella stazione, o abbassa il fabbisogno richiesto.</p>`;
+    html += `<div class="alert-box">⚠ Anche assegnando turni extra, restano postazioni scoperte:<br>` +
+      Object.entries(byDay).map(([day,lines])=>`<b>${day}</b>: ${lines.join('<br>')}`).join('<br>') +
+      `</div><p class="small-note">Per risolvere: ` +
+      (quantiRinunciatari ? `chiedi a chi ha spento "può fare turni extra" nella sua scheda, oppure ` : '') +
+      `aggiungi personale qualificato per quella stazione, o abbassa il fabbisogno richiesto.</p>`;
   }
   const nAltrove = Object.values(altrove).reduce((n,g)=>n+Object.keys(g).length, 0);
   let premessa = '';
+  if(nonPianificabili.length){
+    // Senza questo, chi non ha stazioni si ritrova una fila di R nella griglia
+    // e sembra un difetto del generatore invece di una conseguenza.
+    const nomi = nonPianificabili.map(p=> esc(p.staffName)).join(', ');
+    premessa += `<div class="alert-box">Il generatore non ha dato turni a ${nomi}: ${nonPianificabili.length>1?'non hanno':'non ha'} nessuna stazione assegnata, e un turno senza stazione non copre nessun servizio — conterebbe nelle ore ma non coprirebbe niente. ` +
+      `Nella griglia ${nonPianificabili.length>1?'restano visibili, marcati':'resta visibile, marcato'} con un pallino vuoto: i turni si assegnano a mano, oppure si assegnano le stazioni nella scheda della persona.</div>`;
+  }
   if(nRichieste){
     premessa += `<div class="ok-box">Rispettate le richieste approvate: ${nRichieste} giorni vincolati su ${nPersoneRichieste} person${nPersoneRichieste>1?'e':'a'}.</div>`;
   }

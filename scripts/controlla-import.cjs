@@ -7,7 +7,7 @@ const path = require('path');
 const elenca = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e =>
   e.isDirectory() ? elenca(path.join(d, e.name)) : [path.join(d, e.name)]);
 
-const DA_CONTROLLARE = ['esc', 't', 'lingua', 'toast', 'save', 'state', 'uid', 'Cloud'];
+const DA_CONTROLLARE = ['esc', 't', 'lingua', 'toast', 'save', 'state', 'uid', 'Cloud', 'conferma', 'chiediTesto'];
 let problemi = 0;
 
 for (const f of elenca('app/src').filter(x => /\.(js|ts)$/.test(x))) {
