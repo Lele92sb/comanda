@@ -255,7 +255,94 @@ function computeShifts(staffList, staffingNeeds, options){
   const quotaLavoroResidua = s =>
     pools[s.id].filter(slot=> !slot.codes.includes(REST_CODE)).length;
 
-  days.forEach(day=>{
+  // --------------------------------------------------------------------------
+  // LA FORMA DELLA SETTIMANA, decisa prima di guardare il primo giorno.
+  //
+  // «Io NON guardo giorno per giorno, prima mi faccio un'idea in testa così e
+  // poi inizio.» Questo è quel passaggio, e sta tutto in un'aritmetica che ha
+  // una sola soluzione. Su una partita, in una settimana:
+  //
+  //     x + y = T      si spendono i turni che si hanno
+  //    2x + y = F      si coprono i posti-servizio richiesti, e basta quelli
+  //   ⇒  x = F − T spezzati ,  y = 2T − F turni singoli
+  //
+  // dove un POSTO-SERVIZIO è la coppia (servizio, persona richiesta). «2 al
+  // lavaggio» a pranzo e a cena sono 4 posti in una giornata, 28 in una
+  // settimana — l'unità in cui conta lo chef. Il motore contava in GIORNATE, e
+  // per questo i due conti non tornavano mai fra loro.
+  //
+  // Le due frasi dello chef — «se uno riposa l'altro fa spezzato» e «se uno fa
+  // sera l'altro fa solo pranzo» — non sono due regole da scrivere: sono le due
+  // uniche forme che una giornata può prendere quando la copertura è esatta e
+  // la quota si spende tutta. Escono da sole da questa equazione, e cablarle
+  // vorrebbe dire scriverla due volte e romperle al primo caso fuori misura.
+  //
+  // Perché F e T vanno divisi PER PARTITA e non sommati su tutta la brigata:
+  // misurato sulla brigata dello chef, con un budget unico i turni singoli
+  // finivano al lavaggio — la partita che di singoli ne regge due su quindici —
+  // e le partite in coppia si prendevano tutti gli spezzati. Quattro turni
+  // extra al lavaggio il sabato e la domenica, e 46 ore di scarto fra la
+  // persona più carica e la meno carica. Con il budget per partita: zero extra.
+  // --------------------------------------------------------------------------
+  const postiAlGiorno = {};
+  SERVICES.forEach(sv=>{ (staffingNeeds[sv]||[]).forEach(n=>{
+    postiAlGiorno[n.stationId] = (postiAlGiorno[n.stationId]||0) + (parseInt(n.count)||0);
+  }); });
+  const serviziDi = st => SERVICES.filter(sv=>
+    (staffingNeeds[sv]||[]).some(n=> n.stationId===st && (parseInt(n.count)||0) > 0));
+  // Quanti posti può chiudere UN turno su questa partita: dipende da quali
+  // servizi la stazione richiede e da quali codici li accorpano. Su una cucina
+  // che apre solo a pranzo vale 1, e l'equazione si riduce a "un turno, un
+  // posto" — cioè al comportamento di sempre.
+  const postiPerTurno = st => {
+    const suoi = serviziDi(st);
+    let m = 1;
+    WORKING_CODES.forEach(c=>{
+      const k = (CODE_TO_SERVICES[c]||[]).filter(x=> suoi.includes(x)).length;
+      if(k > m) m = k;
+    });
+    return m;
+  };
+  const capienza = {};
+  staffList.forEach(s=>{ capienza[s.id] = quotaLavoroResidua(s); });
+  const turniResidui = {};
+  Object.keys(postiAlGiorno).forEach(st=>{ turniResidui[st] = 0; });
+  // Partite più rare per prime: è lo stesso criterio con cui il motore riempie
+  // i giorni, e ripete il ragionamento dello chef (chi ha meno margine sceglie
+  // prima). Dentro la partita, prima chi sa fare meno stazioni.
+  const perRarita = Object.keys(postiAlGiorno).sort((a,b)=>
+    staffList.filter(s=> s.stations && s.stations.includes(a)).length -
+    staffList.filter(s=> s.stations && s.stations.includes(b)).length);
+  // La ripartizione vera e propria: «mi divido prima nella testa le persone a
+  // partita». Quello che serve al motore è il totale per partita — quanti turni
+  // quella partita può contare di avere in settimana — non chi li fa: il "chi"
+  // lo decide il giro sui giorni, con i criteri che già esistono.
+  const alloca = (st, tetto)=>{
+    const qualificati = staffList.filter(s=> s.stations && s.stations.includes(st))
+      .sort((a,b)=> a.stations.length - b.stations.length);
+    // Un turno alla volta, a giro. Prendendo da ciascuno TUTTO quello che ha
+    // prima di passare al successivo, la prima persona dell'elenco si porta via
+    // la partita e la seconda resta a guardare: misurato su due pari qualifica
+    // in un mese, 23 giorni di lavoro contro 7. A giro l'ordine conta ancora
+    // (chi sa fare meno stazioni parte per primo e finisce con un turno in più)
+    // ma nessuno resta a secco.
+    for(const p of qualificati){
+      if(turniResidui[st] >= tetto) break;
+      const take = Math.min(capienza[p.id], tetto - turniResidui[st]);
+      capienza[p.id] -= take; turniResidui[st] += take;
+    }
+  };
+  // Due giri, e il primo non è un dettaglio. Assegnando subito a ciascuna
+  // partita tutti i turni che potrebbe usare, la prima partita si prende per
+  // intero chi fa anche la seconda, e la seconda resta a zero: sulla brigata
+  // dello chef il pass sparirebbe del tutto. Il primo giro dà a ognuna il
+  // MINIMO per stare in piedi (tutti spezzati), il secondo distribuisce il
+  // resto. È il modo in cui lo chef si divide le persone a partita prima di
+  // cominciare.
+  perRarita.forEach(st=> alloca(st, Math.ceil((postiAlGiorno[st]*days.length) / postiPerTurno(st))));
+  perRarita.forEach(st=> alloca(st, postiAlGiorno[st]*days.length));
+
+  days.forEach((day, indiceGiorno)=>{
     // Le richieste approvate si applicano prima di ogni altra cosa: la persona
     // è già "occupata" per quel giorno e nessuna logica successiva la tocca.
     staffList.forEach(s=>{
@@ -265,6 +352,25 @@ function computeShifts(staffList, staffingNeeds, options){
 
     const remain = {};
     SERVICES.forEach(sv=>{ remain[sv]={}; (staffingNeeds[sv]||[]).forEach(n=>{ remain[sv][n.stationId]=(remain[sv][n.stationId]||0)+(parseInt(n.count)||0); }); });
+
+    // La quota di forma della settimana che tocca a oggi, partita per partita.
+    // I turni allocati si spalmano sui giorni che restano; i posti da coprire
+    // oggi meno i turni da spendere oggi sono gli spezzati che oggi servono.
+    // È un BUDGET, non un divieto: quando rinunciare allo spezzato lascerebbe
+    // un servizio senza nessuno che lo possa prendere, si sfora. È la stessa
+    // regola già scritta per il tetto agli extra — una scopertura falsa è
+    // peggio di un turno in più, perché manda a cercare un problema che non
+    // esiste.
+    const giorniRimasti = days.length - indiceGiorno;
+    const postiOggi = {};
+    SERVICES.forEach(sv=> Object.keys(remain[sv]).forEach(st=>{
+      postiOggi[st] = (postiOggi[st]||0) + remain[sv][st];
+    }));
+    const budgetSpezzati = {};
+    Object.keys(postiOggi).forEach(st=>{
+      const turniOggi = Math.round((turniResidui[st]||0) / giorniRimasti);
+      budgetSpezzati[st] = Math.max(0, postiOggi[st] - turniOggi);
+    });
 
     SERVICES.forEach(sv=>{
       // stazioni più "rare" (poche persone qualificate in tutta la brigata) vengono coperte per prime,
@@ -354,31 +460,67 @@ function computeShifts(staffList, staffingNeeds, options){
           const codeCoversMore = code =>
             (CODE_TO_SERVICES[code]||[]).filter(sv2=> sv2!==sv && (remain[sv2]||{})[stationId] > 0).length;
 
+          // Quante altre persone potrebbero coprire il servizio `sv2` su questa
+          // stazione, oggi. Serve prima di rinunciare a uno spezzato: il turno
+          // accorpato si lascia solo se il servizio che porta con sé ha
+          // qualcun altro che lo può prendere.
+          const altriLiberi = (sv2) => staffList.filter(s2=>{
+            if(s2.id === chosen.id || assigned[s2.id][day]) return false;
+            if(!(s2.stations && s2.stations.includes(stationId))) return false;
+            const cod = (SERVICE_CODES[sv2]||[])
+              .filter(c=> codeAllowed(constraints, s2.id, day, c, CODE_TO_SERVICES));
+            if(!cod.length) return false;
+            return pools[s2.id].some(slot=> slot.codes.some(c=> cod.includes(c)));
+          }).length;
+          // Si può rinunciare a questo codice accorpato senza aprire un buco?
+          const rinunciabile = code =>
+            (CODE_TO_SERVICES[code]||[]).every(sv2=>
+              sv2===sv || !((remain[sv2]||{})[stationId] > 0) || altriLiberi(sv2) >= remain[sv2][stationId]);
+
+          // La scelta del codice, con il budget della giornata. Un accorpato
+          // vale due posti-servizio: si prende quando la giornata ne ha
+          // bisogno (budget), o quando lasciarlo aprirebbe una scopertura.
+          const scegliCodice = (codici, usaBudget) => {
+            const utili = codici.slice().sort((a,b)=> codeCoversMore(b) - codeCoversMore(a));
+            if(!utili.length) return undefined;
+            const primo = utili[0];
+            if(codeCoversMore(primo) > 0){
+              const singolo = utili.find(c=> codeCoversMore(c) === 0);
+              if(!usaBudget || budgetSpezzati[stationId] > 0 || !singolo || !rinunciabile(primo)){
+                if(usaBudget && budgetSpezzati[stationId] > 0) budgetSpezzati[stationId]--;
+                return primo;
+              }
+              return (codici.includes(MAIN_CODE[sv]) && codeCoversMore(MAIN_CODE[sv]) === 0)
+                ? MAIN_CODE[sv] : singolo;
+            }
+            return codici.includes(MAIN_CODE[sv]) ? MAIN_CODE[sv] : primo;
+          };
+
           const ammessi = codiciUtili(chosen);
           let code;
           if(isExtra){
             // nessuno slot di quota compatibile disponibile: si assegna comunque il turno giusto,
             // segnato come extra, senza consumare la quota (che è già esaurita).
-            const utili = ammessi.slice().sort((a,b)=> codeCoversMore(b) - codeCoversMore(a));
-            code = (utili.length && codeCoversMore(utili[0]) > 0) ? utili[0]
-                 : (ammessi.includes(MAIN_CODE[sv]) ? MAIN_CODE[sv] : utili[0]);
+            // Il budget della giornata non si applica: l'extra è fuori quota, e
+            // un accorpato qui è una telefonata invece di due.
+            code = scegliCodice(ammessi, false);
           } else {
             const matchIdx = [];
             pool.forEach((slot,i)=>{ if(slot.codes.some(c=>ammessi.includes(c))) matchIdx.push(i); });
             matchIdx.sort((a,b)=> pool[a].codes.length - pool[b].codes.length);
             const slotIdx = matchIdx[0];
             const slot = pool[slotIdx];
-            const utili = slot.codes.filter(c=>ammessi.includes(c))
-                                    .sort((a,b)=> codeCoversMore(b) - codeCoversMore(a));
-            if(utili.length && codeCoversMore(utili[0]) > 0) code = utili[0];
-            else if(slot.codes.includes(MAIN_CODE[sv]) && ammessi.includes(MAIN_CODE[sv])) code = MAIN_CODE[sv];
-            else code = utili[0];
+            code = scegliCodice(slot.codes.filter(c=>ammessi.includes(c)), true);
             pool.splice(slotIdx,1);
           }
 
           assigned[chosen.id][day] = code;
           stationAssign[chosen.id][day] = stationId;
           oreFatte[chosen.id] += oreDi(code);
+          // Un turno di quota speso qui è un turno in meno da spalmare sui
+          // giorni che restano: senza questo la forma della settimana
+          // resterebbe ferma al conto del lunedì.
+          if(!isExtra) turniResidui[stationId] = Math.max(0, (turniResidui[stationId]||0) - 1);
           if(isExtra){
             extraFlag[chosen.id][day] = true;
             extraFatti[chosen.id]++;
@@ -391,6 +533,33 @@ function computeShifts(staffList, staffingNeeds, options){
         }
       });
     });
+
+    // Fra le stazioni che la persona sa fare, la prima ancora scoperta per uno
+    // dei servizi che il codice copre. Serve al riempimento finale, che prima
+    // pescava `qualified[a caso]` senza guardare se quella stazione servisse.
+    //
+    // Va detto che qui scatta di rado, ed è voluto: quando parte il riempimento
+    // finale ogni stazione ancora scoperta ha già cercato i candidati di quota
+    // e poi quelli oltre quota, e ha fallito entrambi. Se una persona libera e
+    // qualificata è arrivata fin qui è perché una regola la escludeva (extra
+    // vietati, "non faccio extra", una richiesta approvata). È una cintura di
+    // sicurezza contro un riordino futuro del ciclo, non il motore della
+    // correzione: il motore è il ramo che NON spende lo slot.
+    const stazioneScoperta = (s, code) => {
+      const mie = (s.stations && s.stations.length) ? s.stations : [];
+      for(const sv2 of (CODE_TO_SERVICES[code]||[])){
+        for(const st of mie){ if((remain[sv2]||{})[st] > 0) return st; }
+      }
+      return null;
+    };
+    // Segna la copertura appena decisa nel riempimento finale, altrimenti due
+    // persone di fila si accamperebbero sulla stessa stazione scoperta.
+    const consumaCopertura = (code, st) => {
+      turniResidui[st] = Math.max(0, (turniResidui[st]||0) - 1);
+      (CODE_TO_SERVICES[code]||[]).forEach(sv2=>{
+        if(remain[sv2] && remain[sv2][st]) remain[sv2][st] = Math.max(0, remain[sv2][st]-1);
+      });
+    };
 
     staffList.forEach(s=>{
       if(!assigned[s.id][day]){
@@ -410,19 +579,28 @@ function computeShifts(staffList, staffingNeeds, options){
           const idx = pools[s.id].findIndex(slot=>
             slot.codes.some(c=> codeAllowed(constraints, s.id, day, c, CODE_TO_SERVICES)));
           if(idx < 0){ assigned[s.id][day] = REST_CODE; return; }
-          const slot = pools[s.id].splice(idx,1)[0];
-          const ok = slot.codes.filter(c=> codeAllowed(constraints, s.id, day, c, CODE_TO_SERVICES));
-          const code = ok[Math.floor(rand()*ok.length)];
+          const ok = pools[s.id][idx].codes
+            .filter(c=> codeAllowed(constraints, s.id, day, c, CODE_TO_SERVICES));
+          // Un turno si assegna dove SERVE, non su una stazione a caso fra
+          // quelle che la persona sa fare. Se nessuna delle sue è ancora
+          // scoperta, il turno non copre niente: resta a riposo, e lo slot NON
+          // si consuma. Vale qui come venti righe più su per chi non ha
+          // stazioni — è la stessa domanda, e la risposta dev'essere la stessa.
+          let code = null, stazione = null;
+          for(const c of ok){
+            const st = stazioneScoperta(s, c);
+            if(st){ code = c; stazione = st; break; }
+          }
+          if(!code){ assigned[s.id][day] = REST_CODE; return; }
+          pools[s.id].splice(idx,1);
           assigned[s.id][day] = code;
           // Anche le ore assegnate qui sono ore vere che la persona lavora:
           // se non si contassero, il pareggiamento dei giorni successivi
           // guarderebbe metà della settimana. Misurato: contandole, lo scarto
           // medio max-min in una settimana scende da 4,25 a 2,60 ore.
           oreFatte[s.id] += oreDi(code);
-          if(WORKING_CODES.includes(code)){
-            const qualified = (s.stations&&s.stations.length) ? s.stations : [];
-            if(qualified.length) stationAssign[s.id][day] = qualified[Math.floor(rand()*qualified.length)];
-          }
+          stationAssign[s.id][day] = stazione;
+          consumaCopertura(code, stazione);
           return;
         }
         if(pools[s.id].length){
@@ -437,13 +615,32 @@ function computeShifts(staffList, staffingNeeds, options){
           };
           let bestIdx = 0;
           pools[s.id].forEach((slot,i)=>{ if(valueOf(slot) < valueOf(pools[s.id][bestIdx])) bestIdx = i; });
-          const slot = pools[s.id].splice(bestIdx,1)[0];
-          const code = slot.codes[Math.floor(rand()*slot.codes.length)];
+          const slot = pools[s.id][bestIdx];
+          let code = null, stazione = null;
+          if(valueOf(slot) === 0){
+            code = REST_CODE;                      // slot di solo riposo: si spende, è il suo scopo
+          } else {
+            // Prima si guarda se una stazione della persona è ancora scoperta.
+            for(const c of slot.codes){
+              const st = stazioneScoperta(s, c);
+              if(st){ code = c; stazione = st; break; }
+            }
+            // Poi il riposo, se lo slot lo ammette fra i suoi codici.
+            if(!code && slot.codes.includes(REST_CODE)) code = REST_CODE;
+            // Altrimenti niente: riposo, e lo slot RESTA NEL POOL. È il punto
+            // della correzione. La quota non spesa oggi tiene alta
+            // `quotaLavoroResidua`, che nei giorni successivi porta questa
+            // persona davanti agli altri fra i candidati: la quota si sposta
+            // dai giorni in cui non serviva a quelli in cui servirà, invece di
+            // bruciarsi il lunedì e mancare il sabato.
+            if(!code){ assigned[s.id][day] = REST_CODE; return; }
+          }
+          pools[s.id].splice(bestIdx,1);
           assigned[s.id][day] = code;
           oreFatte[s.id] += oreDi(code);   // vedi sopra: sono ore vere
-          if(WORKING_CODES.includes(code)){
-            const qualified = (s.stations&&s.stations.length) ? s.stations : [];
-            if(qualified.length) stationAssign[s.id][day] = qualified[Math.floor(rand()*qualified.length)];
+          if(stazione){
+            stationAssign[s.id][day] = stazione;
+            consumaCopertura(code, stazione);
           }
         } else {
           assigned[s.id][day] = REST_CODE;
@@ -462,7 +659,20 @@ function computeShifts(staffList, staffingNeeds, options){
   const nonPianificabili = staffList
     .filter(s=> !(s.stations && s.stations.length))
     .map(s=> ({staffId:s.id, staffName:s.name, motivo:'nessuna stazione'}));
-  return { newShifts, shortfalls, extras, nonPianificabili };
+  // Quota di lavoro rimasta in tasca: slot che la persona aveva e che il
+  // fabbisogno non ha chiesto. Da quando il motore non rabbocca piu' i turni
+  // che non servono, questo numero puo' essere > 0 — e allora nella colonna
+  // Ore la persona risulta sotto le ore contrattuali. E' un numero VERO, dove
+  // prima c'era un pareggio ottenuto con turni finti, ma va spiegato: chi lo
+  // vede senza spiegazione pensa a un difetto del generatore.
+  const quotaNonSpesa = staffList
+    .map(s=> ({
+      staffId: s.id, staffName: s.name,
+      turni: (pools[s.id]||[]).filter(slot=>
+        slot.codes.some(c=> WORKING_CODES.includes(c))).length,
+    }))
+    .filter(x=> x.turni > 0);
+  return { newShifts, shortfalls, extras, nonPianificabili, quotaNonSpesa };
 }
 
 // ----------------------------------------------------------------------------
@@ -475,6 +685,7 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
   options = options || {};
   const dates = (options.dates && options.dates.length) ? options.dates : weekDates(new Date());
   const newShifts = {}, shortfalls = [], extras = [];
+  const nonSpesaPerPersona = {};
   staffList.forEach(s=>{ newShifts[s.id] = {}; });
 
   groupByWeek(dates).forEach((settimana, i)=>{
@@ -488,6 +699,12 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
     staffList.forEach(s=>{ Object.assign(newShifts[s.id], res.newShifts[s.id]||{}); });
     shortfalls.push(...res.shortfalls);
     extras.push(...res.extras);
+    // La quota e' settimanale: quella non spesa si SOMMA settimana per
+    // settimana, non si ricalcola. Una persona con un turno avanzato in
+    // ognuna delle quattro settimane di un mese ne ha quattro, non uno.
+    (res.quotaNonSpesa||[]).forEach(q=>{
+      nonSpesaPerPersona[q.staffId] = (nonSpesaPerPersona[q.staffId]||0) + q.turni;
+    });
   });
 
   // Non dipende dalla settimana: si calcola una volta sola, altrimenti la
@@ -496,7 +713,11 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
     .filter(s=> !(s.stations && s.stations.length))
     .map(s=> ({staffId:s.id, staffName:s.name, motivo:'nessuna stazione'}));
 
-  return { newShifts, shortfalls, extras, nonPianificabili };
+  const quotaNonSpesa = staffList
+    .map(s=> ({staffId:s.id, staffName:s.name, turni: nonSpesaPerPersona[s.id]||0}))
+    .filter(x=> x.turni > 0);
+
+  return { newShifts, shortfalls, extras, nonPianificabili, quotaNonSpesa };
 }
 
 export {

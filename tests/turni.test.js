@@ -255,21 +255,35 @@ test('generazione mensile: le quote ripartono ogni settimana, senza turni oltre 
   assert.equal(shortfalls.length, 0, 'nessun giorno deve restare scoperto');
 
   const lavorati = id => Object.values(newShifts[id]).filter(c=>c.code==='P').length;
-  // Ogni giorno deve avere qualcuno al pranzo. Non "esattamente uno": chi ha
-  // ancora quota da smaltire viene schedulato comunque, ed è giusto così — la
-  // quota dice quanti turni deve fare quella persona, non solo quanti ne servono.
+  // ESATTAMENTE uno al pranzo, non "almeno uno". Qui prima c'era scritto il
+  // contrario — "chi ha ancora quota da smaltire viene schedulato comunque, ed
+  // è giusto così" — e quella riga era il difetto peggiore del generatore
+  // messo per iscritto: la quota bruciata dove non serve è la quota che manca
+  // il sabato, e diventa un turno extra. Parole dello chef: "sul fabbisogno
+  // c'è scritto 1 e così deve essere, altrimenti servono troppi extra poi per
+  // coprire la settimana".
   dates.forEach(d=>{
     const presenti = staff.filter(s=> newShifts[s.id][d].code === 'P').length;
-    assert.ok(presenti >= 1, `il ${d} non c'è nessuno al pranzo`);
+    assert.equal(presenti, 1, `il ${d} al pranzo ci sono ${presenti} persone, il fabbisogno ne chiede 1`);
   });
+  // E in totale: un posto al giorno, nessuno in più.
+  const totLavorati = staff.reduce((n,s)=> n + lavorati(s.id), 0);
+  assert.equal(totLavorati, dates.length,
+    `${totLavorati} turni di lavoro per ${dates.length} giorni da coprire`);
   // Il mese tocca 5 settimane di calendario (la prima e l'ultima parziali), e
   // ogni settimana toccata porta la sua quota: il tetto è 5 turni per settimana
   // toccata, non 5 per ogni sette giorni di calendario.
   const settimane = groupByWeek(dates).length;
   staff.forEach(s=>{
     const riposi = Object.values(newShifts[s.id]).filter(c=>c.code==='R').length;
-    assert.ok(lavorati(s.id) >= 15,
+    // Con la copertura esatta il totale e' fissato dal fabbisogno (un posto al
+    // giorno), quindi due persone se lo dividono: 15 e 15 nel caso perfetto,
+    // 14 e 16 va altrettanto bene. Quello che conta e' che nessuno resti
+    // fermo, cioe' che le quote ripartano ogni settimana invece di esaurirsi.
+    assert.ok(lavorati(s.id) >= 12,
       `${s.name} lavora solo ${lavorati(s.id)} giorni: le quote non stanno ripartendo ogni settimana`);
+    assert.ok(Math.abs(lavorati(staff[0].id) - lavorati(staff[1].id)) <= 4,
+      `il lavoro e' spartito male: ${lavorati(staff[0].id)} contro ${lavorati(staff[1].id)}`);
     assert.ok(lavorati(s.id) <= settimane*5,
       `${s.name} supera i 5 turni settimanali di quota (${lavorati(s.id)} su ${settimane} settimane)`);
     assert.ok(riposi >= 5, `${s.name} deve avere dei riposi, ne ha ${riposi}`);
@@ -649,10 +663,18 @@ test('gli extra si concentrano su una persona sola, non su tutta la brigata', ()
 });
 
 test('il motore sa quanto dura un turno e pareggia le ore fra pari qualifica', () => {
-  // PRIMA il motore non guardava mai le ore: SP (11h) e P (8h) erano la stessa
-  // cosa, e a parità di qualifica decideva solo il caso. Scarto max-min entro la
-  // singola settimana: media 6,45 ore, caso peggiore 12. DOPO: media 2,60, caso
-  // peggiore 6. La soglia sta in mezzo apposta.
+  // Questo test e' stato ri-tarato quando e' arrivata la copertura esatta, e
+  // vale la pena dire perche' invece di cambiare il numero in silenzio.
+  //
+  // PRIMA della copertura esatta il riempimento finale rabboccava sempre la
+  // quota fino in fondo, anche dove il fabbisogno non chiedeva nessuno: le ore
+  // risultavano pareggiate, ma pareggiate con turni finti. Media 2,60.
+  // DOPO, il motore produce solo i turni che servono, e le ore diventano quelle
+  // vere. Misurato su 300 generazioni: media 9,00 e caso peggiore 9.
+  //
+  // Il criterio delle ore non pareggia piu' la media (senza di lui e' 8,60,
+  // quindi perfino un filo meglio): quello che fa adesso e' TAGLIARE LA CODA.
+  // Senza, il caso peggiore sale a 15. La soglia sta fra 9 e 15.
   const staff = Array.from({length:4}, (_,i)=>({
     id:'h'+i, name:'H'+i, stations:['a'],
     weeklyQuota:[{count:5,codes:['SP','P','S']},{count:2,codes:['R']}],
@@ -664,7 +686,7 @@ test('il motore sa quanto dura un turno e pareggia le ore fra pari qualifica', (
     const ore = staff.map(s=> Object.values(newShifts[s.id])
       .reduce((n,c)=> n + ((BASE.turnoDef[c.code]||{}).hours||0), 0));
     const scarto = Math.max(...ore) - Math.min(...ore);
-    assert.ok(scarto <= 8, `una settimana con ${scarto} ore di scarto fra pari qualifica`);
+    assert.ok(scarto <= 11, `una settimana con ${scarto} ore di scarto fra pari qualifica`);
   }
 });
 
@@ -832,27 +854,28 @@ test('la quota residua guida la scelta quando le quote NON sono tutte uguali', (
   assert.ok(peggiore <= 1, `caso peggiore ${peggiore} extra: la quota residua non sta guidando la scelta`);
 });
 
-test('le ore contate nel riempimento finale pareggiano la MEDIA, non solo il caso peggiore', () => {
-  // Il test gemello più sopra guarda il caso peggiore (scarto <= 8), ma il
-  // conteggio delle ore nel riempimento finale agisce sulla MEDIA: il caso
-  // peggiore resta 6 con e senza. Misurato su 300 generazioni: media 2,48
-  // contando le ore, 3,79 senza. La soglia sta in mezzo.
+test('il criterio delle ore taglia la coda: senza, il caso peggiore raddoppia', () => {
+  // Questo test sostituisce uno che asseriva sulla MEDIA. Era giusto quando
+  // l'ho scritto e non lo e' piu': con la copertura esatta il criterio delle
+  // ore non migliora la media (9,00 con, 8,60 senza) ma dimezza il caso
+  // peggiore (9 con, 15 senza). Un test che continuasse a guardare la media
+  // fallirebbe difendendo una cosa che il codice non fa piu'.
   const staff = Array.from({length:4}, (_,i)=>({
     id:'m'+i, name:'M'+i, stations:['a'],
     weeklyQuota:[{count:5,codes:['SP','P','S']},{count:2,codes:['R']}],
   }));
   const needs = { colazione:[],
     pranzo:[{stationId:'a',count:2}], cena:[{stationId:'a',count:2}] };
-  const N = 200;
-  let somma = 0;
-  for(let i=0;i<N;i++){
+  let peggiore = 0;
+  for(let i=0;i<200;i++){
     const { newShifts } = computeShifts(staff, needs, {config:BASE});
     const ore = staff.map(s=> Object.values(newShifts[s.id])
       .reduce((n,c)=> n + ((BASE.turnoDef[c.code]||{}).hours||0), 0));
-    somma += Math.max(...ore) - Math.min(...ore);
+    const scarto = Math.max(...ore) - Math.min(...ore);
+    if(scarto > peggiore) peggiore = scarto;
   }
-  const media = somma / N;
-  assert.ok(media <= 3.2, `scarto medio ${media.toFixed(2)} ore: il riempimento finale non sta contando le ore`);
+  assert.ok(peggiore <= 11,
+    `caso peggiore ${peggiore} ore di scarto: il criterio delle ore non sta tagliando la coda`);
 });
 
 test('un tetto agli extra pari a zero vuol dire NESSUN extra, non extra a volonta', () => {

@@ -66,7 +66,7 @@ async function generateRandomShifts(){
       if(!constraints[staffId][d]) constraints[staffId][d] = {blocked:'R'};
     });
   });
-  const { newShifts, shortfalls, extras, nonPianificabili } = computeShiftsForDates(state.staff, state.staffingNeeds,
+  const { newShifts, shortfalls, extras, nonPianificabili, quotaNonSpesa } = computeShiftsForDates(state.staff, state.staffingNeeds,
     {config: refreshShiftConfig(), dates, constraints});
   // Si sovrascrivono SOLO le date del periodo: i turni delle altre settimane
   // gia' pianificate non devono sparire perche' se ne rigenera una.
@@ -113,6 +113,17 @@ async function generateRandomShifts(){
     const nomi = nonPianificabili.map(p=> esc(p.staffName)).join(', ');
     premessa += `<div class="alert-box">Il generatore non ha dato turni a ${nomi}: ${nonPianificabili.length>1?'non hanno':'non ha'} nessuna stazione assegnata, e un turno senza stazione non copre nessun servizio — conterebbe nelle ore ma non coprirebbe niente. ` +
       `Nella griglia ${nonPianificabili.length>1?'restano visibili, marcati':'resta visibile, marcato'} con un pallino vuoto: i turni si assegnano a mano, oppure si assegnano le stazioni nella scheda della persona.</div>`;
+  }
+  if(quotaNonSpesa && quotaNonSpesa.length){
+    // Da quando il generatore non rabbocca piu' i turni che non servono,
+    // qualcuno puo' chiudere la settimana sotto le ore contrattuali. E' un
+    // numero vero — prima il pareggio si otteneva assegnando turni che non
+    // coprivano nessun servizio — ma senza questa riga sembra un difetto.
+    const chi = quotaNonSpesa.map(q=> `${esc(q.staffName)} (${q.turni})`).join(', ');
+    const tot = quotaNonSpesa.reduce((n2,q)=> n2+q.turni, 0);
+    premessa += `<div class="ok-box">${tot} turn${tot>1?'i':'o'} di quota non ${tot>1?'sono stati':'e stato'} assegnat${tot>1?'i':'o'}: il fabbisogno impostato non ${tot>1?'li':'lo'} chiedeva — ${chi}. ` +
+      `Nella colonna Ore queste persone risultano sotto le ore contrattuali, ed e corretto: prima il conto tornava perche l'app assegnava turni che non coprivano nessun servizio. ` +
+      `Se devono comunque lavorare, alza il fabbisogno di quel servizio oppure assegna i turni a mano.</div>`;
   }
   if(nRichieste){
     premessa += `<div class="ok-box">Rispettate le richieste approvate: ${nRichieste} giorni vincolati su ${nPersoneRichieste} person${nPersoneRichieste>1?'e':'a'}.</div>`;
