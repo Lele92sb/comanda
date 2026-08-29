@@ -800,3 +800,73 @@ test('il jolly non viene sprecato nemmeno fra i turni oltre quota', () => {
       'la stazione a è stata coperta dal jolly, che serviva altrove'));
   }
 });
+
+// ----------------------------------------------------------------------------
+// I tre test che seguono nascono da una verifica avversariale: si è provato a
+// CANCELLARE il codice che dichiaravano di proteggere, e la suite restava
+// verde. Un test che sopravvive alla rimozione di ciò che difende non difende
+// niente. Le soglie non sono scelte a occhio: stanno in mezzo fra la misura col
+// codice e la misura senza, così il test è rosso sul motore mutilato.
+// ----------------------------------------------------------------------------
+
+test('la quota residua guida la scelta quando le quote NON sono tutte uguali', () => {
+  // Il test che c'era usava sei persone identiche: con quote uguali "quota
+  // residua" e "ore già fatte" ordinano allo stesso modo, quindi ciascuno dei
+  // due criteri da solo dava lo stesso risultato e togliendone uno non
+  // cambiava niente. Serve una brigata ETEROGENEA per vederli separati.
+  // Misurato su 300 generazioni: col criterio 1,00 extra (peggiore 1);
+  // senza, 2,00 (peggiore 2).
+  const staff = [
+    { id:'L1', name:'L1', stations:['a'], weeklyQuota:[{count:3,codes:['SP']},{count:4,codes:['R']}] },
+    { id:'L2', name:'L2', stations:['a'], weeklyQuota:[{count:3,codes:['SP']},{count:4,codes:['R']}] },
+    { id:'C1', name:'C1', stations:['a'], weeklyQuota:[{count:6,codes:['P']},{count:1,codes:['R']}] },
+    { id:'C2', name:'C2', stations:['a'], weeklyQuota:[{count:6,codes:['P']},{count:1,codes:['R']}] },
+  ];
+  const needs = { colazione:[],
+    pranzo:[{stationId:'a',count:2}], cena:[{stationId:'a',count:1}] };
+  let peggiore = 0;
+  for(let i=0;i<120;i++){
+    const { extras } = computeShifts(staff, needs, {config:BASE});
+    if(extras.length > peggiore) peggiore = extras.length;
+  }
+  assert.ok(peggiore <= 1, `caso peggiore ${peggiore} extra: la quota residua non sta guidando la scelta`);
+});
+
+test('le ore contate nel riempimento finale pareggiano la MEDIA, non solo il caso peggiore', () => {
+  // Il test gemello più sopra guarda il caso peggiore (scarto <= 8), ma il
+  // conteggio delle ore nel riempimento finale agisce sulla MEDIA: il caso
+  // peggiore resta 6 con e senza. Misurato su 300 generazioni: media 2,48
+  // contando le ore, 3,79 senza. La soglia sta in mezzo.
+  const staff = Array.from({length:4}, (_,i)=>({
+    id:'m'+i, name:'M'+i, stations:['a'],
+    weeklyQuota:[{count:5,codes:['SP','P','S']},{count:2,codes:['R']}],
+  }));
+  const needs = { colazione:[],
+    pranzo:[{stationId:'a',count:2}], cena:[{stationId:'a',count:2}] };
+  const N = 200;
+  let somma = 0;
+  for(let i=0;i<N;i++){
+    const { newShifts } = computeShifts(staff, needs, {config:BASE});
+    const ore = staff.map(s=> Object.values(newShifts[s.id])
+      .reduce((n,c)=> n + ((BASE.turnoDef[c.code]||{}).hours||0), 0));
+    somma += Math.max(...ore) - Math.min(...ore);
+  }
+  const media = somma / N;
+  assert.ok(media <= 3.2, `scarto medio ${media.toFixed(2)} ore: il riempimento finale non sta contando le ore`);
+});
+
+test('un tetto agli extra pari a zero vuol dire NESSUN extra, non extra a volonta', () => {
+  // Prima 0 non era né regola né preferenza: il filtro "extra fatti < 0" era
+  // vuoto al primo giro, il tetto non scattava mai e si ripiegava sui candidati
+  // liberi. Chi scriveva 0 per non avere extra otteneva sette extra tutti sulla
+  // stessa persona: l'esatto contrario di quello che aveva chiesto.
+  const staff = Array.from({length:3}, (_,i)=>({
+    id:'z'+i, name:'Z'+i, stations:['a'], weeklyQuota:[{count:7,codes:['R']}],
+  }));
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const dal = '2026-09-07', al = '2026-09-13';
+  const { extras, shortfalls } = computeShiftsForDates(staff, needs,
+    { config:BASE, dal, al, maxExtraPerPersona:0 });
+  assert.equal(extras.length, 0, `tetto a zero ma ${extras.length} extra assegnati`);
+  assert.ok(shortfalls.length > 0, 'il buco va dichiarato, non nascosto');
+});

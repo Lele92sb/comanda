@@ -39,7 +39,7 @@
         </button>
       </div>
       <div class="acts">
-        <button id="ab-team" class="hidden" data-t>Squadra</button>
+        <button id="ab-team" class="hidden" data-t>Accessi</button>
         <button id="ab-switch" data-t>Cambia cucina</button>
         <button id="ab-logout" data-t>Esci</button>
         <!-- Ultimo a destra: è la posizione dove si cerca, ed è una scelta
@@ -321,10 +321,11 @@
   </div>
 </div>
 
-<!-- Gestione squadra (solo per il titolare della cucina) -->
+<!-- Chi ha accesso all'app (solo per il titolare della cucina).
+     NON e' la brigata: quella sta in Brigata, ed e' un altro elenco. -->
 <div class="overlay" id="team">
   <div class="sheet">
-    <div class="logo"><span class="mark"></span>Squadra</div>
+    <div class="logo"><span class="mark"></span>Accessi</div>
     <p class="lead" id="team-kitchen"></p>
     <div id="team-error" class="gate-error hidden" ></div>
     <div id="team-body"></div>

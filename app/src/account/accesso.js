@@ -197,7 +197,7 @@ function readonlyGuard(e){
 }
 ['click','change','input','keydown'].forEach(ev=>document.addEventListener(ev, readonlyGuard, true));
 
-/* ---- Gestione squadra (titolare) ---- */
+/* ---- Chi ha accesso all'app (titolare) ---- */
 const teamEl = document.getElementById('team');
 document.getElementById('team-close').addEventListener('click', ()=>teamEl.classList.remove('show'));
 
@@ -383,9 +383,9 @@ document.getElementById('ab-kitchen-sel').addEventListener('change', e=>{
 });
 document.getElementById('ab-team').addEventListener('click', openTeam);
 document.getElementById('ab-rename').addEventListener('click', async ()=>{
-  const nome = await chiediTesto('Il tuo nome in cucina', 'Come ti chiamano',
+  const nome = await chiediTesto("Il tuo nome nell'app", 'Come ti chiamano',
                       Cloud.myDisplayName || '',
-                      'È il nome con cui ti vede chi gestisce la cucina.');
+                      'È il nome con cui compari fra chi ha accesso a questa cucina. Non è la scheda della brigata: quella la gestisce il titolare in Brigata.');
   if(nome === null) return;
   try{ await Cloud.setMyDisplayName(nome); renderAccountBar(); toast('Nome aggiornato'); }
   catch(e){ toast(humanError(e)); }

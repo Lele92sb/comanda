@@ -221,7 +221,18 @@ function computeShifts(staffList, staffingNeeds, options){
   const rand = (options.seed != null) ? mulberry32(semeNumerico(options.seed)) : Math.random;
   // Tetto ai turni oltre quota per persona. Di default non c'è: chi non lo
   // imposta ha il comportamento di sempre.
-  const maxExtra = (options.maxExtraPerPersona != null) ? options.maxExtraPerPersona : Infinity;
+  // Il tetto agli extra ha due letture diverse, e non è una svista:
+  //   0 (o meno) = "nessun extra", ed è una REGOLA. Vale come chi ha detto di no:
+  //                si dichiara la scopertura, non si chiama nessuno lo stesso.
+  //   1 o più    = "non più di N a testa", ed è una PREFERENZA forte: se
+  //                rispettarla lascerebbe una postazione scoperta, si sfora.
+  // Prima 0 non era né l'una né l'altra cosa: il filtro `extraFatti < 0` era
+  // vuoto al primo giro, quindi il tetto non scattava mai e si ripiegava sui
+  // candidati liberi. Chi scriveva 0 per non avere extra otteneva il massimo
+  // di concentrazione: l'esatto contrario.
+  const tetto = options.maxExtraPerPersona;
+  const extraVietati = (tetto != null) && !(tetto > 0);
+  const maxExtra = (tetto != null && tetto > 0) ? tetto : Infinity;
 
   const pools = buildStaffPools(staffList, rand);
   const assigned = {}, stationAssign = {}, extraFlag = {};
@@ -291,7 +302,7 @@ function computeShifts(staffList, staffingNeeds, options){
             // non fra i candidati di quota poche righe sopra: sono due cose
             // diverse, e messo lì toglierebbe alla persona anche i turni che le
             // spettano.
-            candidates = staffList.filter(s=> !assigned[s.id][day] && puoFareExtra(s)
+            candidates = extraVietati ? [] : staffList.filter(s=> !assigned[s.id][day] && puoFareExtra(s)
               && s.stations && s.stations.includes(stationId) && codiciUtili(s).length);
             // Il tetto, se c'è, è una preferenza forte, non un divieto: se
             // rispettarlo significa lasciare la postazione scoperta si sfora e

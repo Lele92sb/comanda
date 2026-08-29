@@ -1,7 +1,7 @@
 import { t } from '../core/lingua.ts';
 import { SERVICE_LABEL, conferma, esc, periodDates, refreshShiftConfig, save, setPeriodAnchor, setPeriodMode, shiftPeriod, state, toast } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
-import { REST_CODE, computeShiftsForDates, constraintFor, parseISO, puoFareExtra } from '../lib/logic.js';
+import { REST_CODE, codeAllowed, computeShiftsForDates, constraintFor, parseISO, puoFareExtra } from '../lib/logic.js';
 import { renderDashboard } from '../viste/dashboard.js';
 import { renderOreExtra, renderTurni } from './griglia.js';
 import { caricaRichieste, constraintsFromRequests } from './richieste.js';
@@ -21,10 +21,18 @@ import { caricaRichieste, constraintsFromRequests } from './richieste.js';
    e chi ha una richiesta approvata che blocca il giorno non e' libero comunque
    — quello e' un vincolo assoluto, non una preferenza. */
 function rinunciatariPer(sf, constraints){
+  const cfg = refreshShiftConfig();
+  // Non basta che sia a riposo e qualificato: deve poter fare PROPRIO QUESTO
+  // servizio. Chi ha una richiesta approvata "solo pranzo" non è un
+  // rinunciatario su una scopertura di cena — è un vincolo concordato, e
+  // riaccendergli gli extra non coprirebbe comunque quel buco.
+  const puoCoprireIlServizio = s => (cfg.serviceCodes[sf.service] || [])
+    .some(c => codeAllowed(constraints, s.id, sf.day, c, cfg.codeToServices));
   return state.staff.filter(s=>
     !puoFareExtra(s)
     && s.stations && s.stations.includes(sf.stationId)
     && !(constraintFor(constraints, s.id, sf.day) || {}).blocked
+    && puoCoprireIlServizio(s)
     && (((state.shifts[s.id]||{})[sf.day]||{}).code || '') === REST_CODE
   ).map(s=> s.name);
 }
