@@ -241,6 +241,23 @@ function apriSceltaTurno(staffId, day){
 
 function aggiornaTutto(){ renderTurni(); renderOreExtra(); renderDashboard(); }
 
+/* Girare il telefono cambia la larghezza delle colonne, quindi cambia cosa ci
+   sta dentro. Le due passate di misura vanno rifatte: senza, restano in piedi
+   le decisioni prese per l'altra larghezza e il testo torna tagliato — provato
+   passando da 900px a 375px senza ridisegnare, e si leggeva di nuovo "Antipa",
+   "Pastic", "Lavagg". Si rimisura soltanto, senza ridisegnare: la griglia
+   scorsa a metà mese resta dov'era. */
+let attesaRiadatta = 0;
+window.addEventListener('resize', ()=>{
+  clearTimeout(attesaRiadatta);
+  attesaRiadatta = setTimeout(()=>{
+    const tab = document.querySelector('#turni-panel .shift-table');
+    if(!tab) return;
+    accorciaNomi(tab);
+    adattaTesti(tab);
+  }, 120);
+});
+
 export function renderTurni(){
   const el = document.getElementById('turni-panel');
   document.getElementById('period-label').textContent = periodLabel();
@@ -249,6 +266,10 @@ export function renderTurni(){
   if(!state.staff.length){ el.innerHTML = `<div class="empty">Aggiungi prima persone alla brigata.</div>`; return; }
   const dates = periodDates();
   const oggi = isoDate(new Date());
+  // Le ore per persona le calcola già weeklyExtraFromTurni(): si riusa, non si
+  // duplica — e viene fuori nello stesso ordine di state.staff, quindi la riga
+  // i-esima della griglia e la riga i-esima del conteggio sono la stessa persona.
+  const ore = weeklyExtraFromTurni();
 
   // L'ORDINE DELLE RIGHE È L'ORDINE DI state.staff, cioè quello che il titolare
   // ha deciso con i pulsanti su/giù nella brigata. Non si riordina qui: due
@@ -257,22 +278,24 @@ export function renderTurni(){
     <div class="shift-scroll">
     <table class="shift-table">
       <colgroup>
-        <col class="c-nome">${dates.map(()=>`<col class="c-giorno">`).join('')}
+        <col class="c-nome">${dates.map(()=>`<col class="c-giorno">`).join('')}<col class="c-ore">
       </colgroup>
       <thead><tr><th class="name-col left">Persona</th>${dates.map(d=>{
         const g = dayName(d), weekend = (g==='Sab'||g==='Dom');
         return `<th class="${d===oggi?'today':''} ${weekend?'weekend':''}">${g}<br>${parseISO(d).getDate()}</th>`;
-      }).join('')}</tr></thead>
+      }).join('')}<th class="ore-col">Ore</th></tr></thead>
       <tbody>
-        ${state.staff.map(s=>`
+        ${state.staff.map((s,i)=>`
           <tr>
             <td class="name ${senzaStazioni(s)?'senza-stazioni':''}" title="${esc(s.name + (senzaStazioni(s)?' — nessuna stazione assegnata: il generatore non lo assegna':''))}">
               <i class="ct-pallino vuoto" aria-hidden="true"></i><span class="nome-persona" data-nome="${esc(s.name)}">${esc(s.name)}</span>
             </td>
             ${dates.map(d=> cellaHtml(s, d, oggi)).join('')}
+            ${orePersonaHtml(ore[i])}
           </tr>
         `).join('')}
       </tbody>
+      ${totaliHtml(dates, oggi, ore)}
     </table>
     </div>
   `;
@@ -304,6 +327,47 @@ function cellaHtml(s, d, oggi){
         : ''}</span>
     </button>
   </td>`;
+}
+
+/* ---- I totali dentro la griglia -----------------------------------------
+   Il dato che serve — quante ore ho fatto, il giovedì è coperto — c'era già,
+   ma stava altrove: le ore per persona in un riquadro separato, il totale per
+   giorno da nessuna parte. Qui non compare nessun numero nuovo: la colonna
+   riusa lo stesso calcolo del riquadro "Ore extra del periodo", che sta nella
+   stessa scheda ed è sempre stato visibile a chiunque veda questa griglia. */
+function orePersonaHtml(r){
+  const scarto = r.extra > 0 ? '+' + r.extra.toFixed(1) + 'h'
+               : (r.under > 0 ? '−' + r.under.toFixed(1) + 'h' : 'in linea');
+  const classe = r.extra > 0 ? 'extra' : (r.under > 0 ? 'under' : '');
+  const titolo = r.name + ' · ' + r.totalHours.toFixed(1) + 'h pianificate'
+    + (r.contracted ? ' su ' + r.contracted.toFixed(1) + 'h contrattuali nel periodo' : '');
+  return `<td class="ore" title="${esc(titolo)}">
+    <span class="ore-tot">${r.totalHours.toFixed(1)}h</span>
+    <span class="ore-scarto ${classe}">${esc(scarto)}</span>
+  </td>`;
+}
+
+/* Riga dei totali per giorno: ore e teste. È il controllo che mancava del
+   tutto — si vede a colpo d'occhio se un giovedì è scoperto. */
+function totaliHtml(dates, oggi, ore){
+  const celle = dates.map(d=>{
+    let h = 0, teste = 0;
+    state.staff.forEach(s=>{
+      const code = ((state.shifts[s.id]||{})[d]||{}).code || '';
+      h += CODE_HOURS(code);
+      if(WORKING_CODES().includes(code)) teste++;
+    });
+    const titolo = dataLunga(d) + ' · ' + h.toFixed(1) + 'h su ' + teste + (teste===1?' persona':' persone');
+    return `<td class="${d===oggi?'today-col':''}" title="${esc(titolo)}">
+      <span class="ore-tot">${h.toFixed(1)}h</span>
+      <span class="ore-scarto">${teste}</span>
+    </td>`;
+  }).join('');
+  const totale = ore.reduce((n,r)=> n + r.totalHours, 0);
+  return `<tfoot><tr>
+    <th class="name-col left">Totale</th>${celle}
+    <td class="ore"><span class="ore-tot">${totale.toFixed(1)}h</span><span class="ore-scarto">periodo</span></td>
+  </tr></tfoot>`;
 }
 
 /* La legenda non è decorativa: quando il nome della stazione non entra nella

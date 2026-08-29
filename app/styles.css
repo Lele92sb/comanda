@@ -268,6 +268,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .shift-table{
   --turni-col:56px;        /* larghezza MINIMA di una colonna-giorno */
   --turni-nome:132px;
+  --turni-ore:76px;
   --turni-cella-h:54px;    /* bersaglio per il dito: prima 23,3px, minimo 44 */
   --turni-sigla:13px;
   --turni-dettaglio:9.5px;
@@ -276,13 +277,14 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
   width:100%;
   /* Sotto questa larghezza si scorre invece di spremere: --n-giorni lo scrive
      la griglia (7 o 31), è un dato del periodo, non una scelta di stile. */
-  min-width:calc(var(--turni-nome) + var(--n-giorni,7) * var(--turni-col));
+  min-width:calc(var(--turni-nome) + var(--turni-ore) + var(--n-giorni,7) * var(--turni-col));
   border-collapse:separate;border-spacing:0;
   font-family:var(--font-mono);font-size:var(--turni-dettaglio);
 }
 .shift-table.con-orario{--riga-orario:12px;}
 @media(max-width:560px){ .shift-table{--turni-nome:92px;} }
 .shift-table col.c-nome{width:var(--turni-nome);}
+.shift-table col.c-ore{width:var(--turni-ore);}
 .shift-table th,.shift-table td{border:1px solid var(--line);padding:var(--space-1);text-align:center;vertical-align:middle;}
 .shift-table th{font-weight:400;color:var(--brass);text-transform:uppercase;font-size:var(--turni-dettaglio);line-height:1.35;}
 .shift-table td.name{text-align:left;padding-left:6px;white-space:nowrap;}
@@ -303,6 +305,27 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
    l'intestazione ferma in alto. Senza altezza massima non scorrerebbe mai in
    verticale e `position:sticky` non avrebbe nulla a cui aggrapparsi. */
 .shift-scroll{overflow:auto;max-width:100%;max-height:70vh;}
+
+/* --- Colonna delle ore e riga dei totali ---------------------------------
+   La colonna delle ore è appiccicata a destra, simmetrica a quella dei nomi —
+   ma SOLO su schermo largo: su un telefono da 375px la griglia utile è larga
+   302px, e togliendone altri 76 fissi i giorni visibili scenderebbero da 3,8 a
+   2,4, cioè meno di prima del ridisegno. Sotto i 560px la colonna resta in
+   coda alla riga e la si raggiunge scorrendo. Misurato a schermo, non deciso a
+   tavolino. */
+.shift-table td.ore,.shift-table th.ore-col{background:var(--bg-elev);}
+.shift-table .ore-tot,.shift-table .ore-scarto{display:block;line-height:1.5;}
+.shift-table .ore-scarto{color:var(--brass);}
+.shift-table .ore-scarto.extra{color:var(--copper-light);font-weight:700;}
+.shift-table .ore-scarto.under{color:var(--brass);}
+@media(min-width:561px){
+  .shift-table td.ore,.shift-table th.ore-col{position:sticky;right:0;z-index:2;}
+  .shift-table thead th.ore-col{z-index:4;}
+  .shift-table tfoot td.ore{z-index:4;}
+}
+.shift-table tfoot th,.shift-table tfoot td{position:sticky;bottom:0;z-index:3;
+  background:var(--bg-elev);border-top:1px solid var(--line-strong);color:var(--paper-dim);}
+.shift-table tfoot th.name-col{left:0;z-index:4;color:var(--brass);text-transform:uppercase;}
 
 /* Nome della persona: si accorcia cambiando FORMA (nome e iniziale, poi solo
    nome, poi le iniziali), non tagliando con i puntini — vedi accorciaNomi().
