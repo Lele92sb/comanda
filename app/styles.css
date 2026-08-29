@@ -253,17 +253,121 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .alert-box{background:var(--alert-soft);border:1px solid rgba(168,65,47,0.4);border-radius:6px;padding:12px 14px;margin-bottom:10px;font-size:13px;}
 .ok-box{background:var(--sage-soft);border:1px solid rgba(107,128,100,0.4);border-radius:6px;padding:12px 14px;margin-bottom:10px;font-size:13px;}
 
-.shift-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;}
-.shift-table th,.shift-table td{border:1px solid var(--line);padding:4px;text-align:center;}
-.shift-table th{font-family:var(--font-mono);font-weight:400;color:var(--brass);text-transform:uppercase;font-size:9px;}
-.shift-table td.name{text-align:left;font-family:var(--font-mono);font-size:10.5px;padding-left:6px;}
+/* ============================================================================
+   GRIGLIA DEI TURNI
+
+   GEOMETRIA DICHIARATA, non emergente. Prima non c'era `table-layout:fixed`:
+   le colonne si "spremevano" da sole e la stessa tendina della stazione
+   misurava 91,3px in vista settimana e 52,0px in vista mese. Qualunque
+   taratura in pixel valeva per una vista sola.
+
+   DUE SOLE TAGLIE DI CARATTERE, al posto delle sei di prima (8, 9, 10, 10,5,
+   12 e 13,5px), e la più grande sulla sigla del turno invece che sul testo che
+   non entrava.
+   ========================================================================== */
+.shift-table{
+  --turni-col:56px;        /* larghezza MINIMA di una colonna-giorno */
+  --turni-nome:132px;
+  --turni-cella-h:54px;    /* bersaglio per il dito: prima 23,3px, minimo 44 */
+  --turni-sigla:13px;
+  --turni-dettaglio:9.5px;
+  --riga-orario:0px;       /* acceso da .con-orario — vedi adattaTesti() */
+  table-layout:fixed;
+  width:100%;
+  /* Sotto questa larghezza si scorre invece di spremere: --n-giorni lo scrive
+     la griglia (7 o 31), è un dato del periodo, non una scelta di stile. */
+  min-width:calc(var(--turni-nome) + var(--n-giorni,7) * var(--turni-col));
+  border-collapse:separate;border-spacing:0;
+  font-family:var(--font-mono);font-size:var(--turni-dettaglio);
+}
+.shift-table.con-orario{--riga-orario:12px;}
+@media(max-width:560px){ .shift-table{--turni-nome:92px;} }
+.shift-table col.c-nome{width:var(--turni-nome);}
+.shift-table th,.shift-table td{border:1px solid var(--line);padding:var(--space-1);text-align:center;vertical-align:middle;}
+.shift-table th{font-weight:400;color:var(--brass);text-transform:uppercase;font-size:var(--turni-dettaglio);line-height:1.35;}
+.shift-table td.name{text-align:left;padding-left:6px;white-space:nowrap;}
 /* Su un mese sono 31 colonne: la colonna dei nomi resta ferma mentre si scorre,
    altrimenti a metà mese non si sa più di chi sia la riga che si sta guardando. */
-.shift-table th.name-col,.shift-table td.name{position:sticky;left:0;z-index:2;background:var(--bg-elev);min-width:104px;}
-.shift-table th.name-col{z-index:3;}
-.shift-table th.today,.shift-table td.today-col{background:rgba(176,107,52,0.14);}
+.shift-table th.name-col,.shift-table td.name{position:sticky;left:0;z-index:2;background:var(--bg-elev);}
+/* ...e le date restano ferme mentre si scorre in basso. Con 12-15 persone in
+   brigata si arrivava in fondo senza sapere più che giorno si stava guardando:
+   lo stesso problema che la colonna ferma risolve nell'altra direzione. */
+.shift-table thead th{position:sticky;top:0;z-index:3;background:var(--bg-elev);}
+.shift-table thead th.name-col{z-index:4;}
+/* Il fondo di "oggi" nell'intestazione dev'essere OPACO: una tinta trasparente
+   su un elemento appiccicato lascia vedere le righe che gli scorrono sotto. */
+.shift-table th.today{background-color:var(--bg-elev);background-image:linear-gradient(rgba(176,107,52,0.14),rgba(176,107,52,0.14));}
+.shift-table td.today-col{background:rgba(176,107,52,0.14);}
 .shift-table th.weekend{color:var(--copper-light);}
-.shift-scroll{overflow-x:auto;max-width:100%;}
+/* Il contenitore scorre in ENTRAMBE le direzioni: è ciò che rende possibile
+   l'intestazione ferma in alto. Senza altezza massima non scorrerebbe mai in
+   verticale e `position:sticky` non avrebbe nulla a cui aggrapparsi. */
+.shift-scroll{overflow:auto;max-width:100%;max-height:70vh;}
+
+/* Nome della persona: si accorcia cambiando FORMA (nome e iniziale, poi solo
+   nome, poi le iniziali), non tagliando con i puntini — vedi accorciaNomi().
+   Il pallino vuoto marca chi non ha stazioni; per gli altri resta al suo posto
+   invisibile, così tutti i nomi partono dalla stessa colonna. */
+.shift-table td.name .ct-pallino{visibility:hidden;margin-right:5px;}
+.shift-table td.name.senza-stazioni{color:var(--brass);}
+.shift-table td.name.senza-stazioni .ct-pallino{visibility:visible;}
+.shift-table .nome-persona{display:inline-block;width:calc(100% - 14px);overflow:hidden;white-space:nowrap;vertical-align:middle;}
+
+/* --- La cella: un solo bersaglio, di misura dichiarata ------------------- */
+.cella-turno{
+  position:relative;display:grid;gap:1px;
+  grid-template-rows:19px var(--riga-orario) 13px;
+  align-content:center;justify-items:center;
+  width:100%;height:var(--turni-cella-h);padding:0;
+  background:transparent;border:none;border-radius:var(--radius-sm);
+  color:var(--paper);font-family:var(--font-mono);font-size:var(--turni-dettaglio);
+}
+.cella-turno:hover{background:var(--bg-elev2);}
+.cella-turno:focus-visible{outline:2px solid var(--copper);outline-offset:-2px;}
+.ct-sigla{
+  display:flex;align-items:center;justify-content:center;
+  min-width:32px;height:19px;padding:0 6px;border-radius:var(--radius-sm);
+  background:var(--bg-elev2);border:1px solid var(--line-strong);
+  font-size:var(--turni-sigla);line-height:1;
+}
+.ct-sigla.C{background:#d38f57;border-color:#d38f57;color:#1d1b18;font-weight:700;}
+.ct-sigla.P{background:#b06b34;border-color:#b06b34;color:#1d1b18;font-weight:700;}
+.ct-sigla.S{background:#332c24;border-color:#4a4036;color:#f3eee2;font-weight:700;}
+.ct-sigla.SP{background:#6b8064;border-color:#6b8064;color:#1d1b18;font-weight:700;}
+.ct-sigla.M{background:#a8412f;border-color:#a8412f;color:#f3eee2;font-weight:700;}
+.ct-sigla.F{background:#5a5a5a;border-color:#5a5a5a;color:#f3eee2;font-weight:700;}
+.ct-orario,.ct-stazione{display:flex;align-items:center;justify-content:center;gap:4px;
+  max-width:100%;overflow:hidden;white-space:nowrap;color:var(--brass);}
+.ct-orario{height:var(--riga-orario);}
+.ct-nome-stazione{overflow:hidden;white-space:nowrap;color:var(--paper-dim);}
+.shift-table:not(.con-stazione) .ct-nome-stazione{display:none;}
+.ct-pallino{display:inline-block;flex:0 0 auto;width:7px;height:7px;border-radius:50%;
+  background:var(--pallino,var(--brass));}
+.ct-pallino.vuoto{background:transparent;border:1px solid var(--brass);}
+
+/* Turno extra. Prima era un `outline:2px` sulla <td>: disegnato FUORI dal
+   riquadro, invadeva di 2px le quattro celle confinanti, e il `border-radius`
+   non si vedeva perché il fondo della cella restava quadrato. Ora sta tutto
+   dentro il bottone. */
+.cella-turno.extra{background:rgba(211,143,87,0.14);box-shadow:inset 0 0 0 1px var(--copper-light);}
+.cella-turno.extra::after{content:"";position:absolute;top:0;right:0;
+  border-top:6px solid var(--copper-light);border-left:6px solid transparent;}
+
+/* --- Legenda: il pallino è l'unica cosa che resta quando il nome della
+       stazione non entra nella cella, quindi qui si legge cosa vuol dire. --- */
+#turni-legend .riga-legenda{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);margin-top:var(--space-2);}
+#turni-legend .voce-legenda{display:inline-flex;align-items:flex-start;gap:5px;}
+#turni-legend .voce-legenda .ct-pallino{position:relative;top:4px;}
+
+/* --- Il foglio di scelta: qui l'etichetta intera ci sta ------------------ */
+.foglio-turno{max-height:86vh;overflow:auto;}
+.foglio-turno label{margin-top:var(--space-3);}
+.foglio-turno .chip-toggle button{display:inline-flex;align-items:center;gap:6px;
+  padding:8px 12px;min-height:36px;text-align:left;}
+.foglio-turno .nota-foglio{font-family:var(--font-mono);font-size:var(--text-xs);
+  color:var(--brass);line-height:1.6;margin:var(--space-2) 0 0;
+  background:var(--bg-elev2);padding:var(--space-2);border-radius:var(--radius-sm);}
+.foglio-turno .nota-foglio.accento{color:var(--copper-light);}
 
 .period-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
 .period-modes{display:flex;gap:4px;}
@@ -273,14 +377,6 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .period-nav button{background:transparent;border:1px solid var(--line-strong);color:var(--paper);font-family:var(--font-mono);font-size:12px;padding:5px 10px;border-radius:5px;}
 .period-nav button:hover{border-color:var(--copper);}
 #period-label{font-family:var(--font-mono);font-size:12px;color:var(--copper-light);min-width:150px;text-align:center;text-transform:capitalize;}
-.shift-select{width:52px;background:var(--bg-elev2);border:1px solid var(--line-strong);color:var(--paper);font-size:10px;padding:4px 2px;border-radius:4px;text-align:center;}
-.shift-select.C{background:#d38f57;color:#1d1b18;font-weight:700;}
-.shift-select.P{background:#b06b34;color:#1d1b18;font-weight:700;}
-.shift-select.S{background:#332c24;color:#f3eee2;font-weight:700;}
-.shift-select.SP{background:#6b8064;color:#1d1b18;font-weight:700;}
-.shift-select.M{background:#a8412f;color:#f3eee2;font-weight:700;}
-.shift-select.F{background:#5a5a5a;color:#f3eee2;font-weight:700;}
-.shift-table td.extra-cell{outline:2px solid var(--copper-light);border-radius:5px;background:rgba(211,143,87,0.12);}
 
 .hours-table{width:100%;border-collapse:collapse;font-size:12.5px;}
 .hours-table th,.hours-table td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;}
@@ -394,6 +490,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
    capisce che quella funzione esiste, e che a lui non è concessa. */
 body.readonly main .btn:not(#btn-export),
 body.readonly main .card-actions button,
+body.readonly main .cella-turno,
 body.readonly main input:not(#chat-input),
 body.readonly main select,
 body.readonly main textarea:not(#chat-input),
