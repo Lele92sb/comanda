@@ -1278,3 +1278,91 @@ test('spalmare i riposi non chiama nessuno oltre quota', () => {
   assert.ok(peggio <= 1,
     `${peggio} riposi di scarto fra il giorno piu' pieno e il piu' scarico`);
 });
+
+/* ===================== GLI SPEZZATI A GIRO =====================
+   Difetto vero, visto sul prospetto: a parita' di cinque giorni lavorati una
+   persona faceva 52 ore e un'altra 43, perche' gli spezzati da undici ore
+   finivano sempre sulle stesse teste mentre alle altre toccavano i turni
+   singoli da otto. Il criterio delle ore c'era gia', ma sceglieva la PERSONA
+   senza sapere quanto sarebbe durato il TURNO che stava per darle. */
+
+const ORE_DI = c => (BASE.turnoDef[c] || {}).hours || 0;
+// Lo scarto che conta e' fra chi ha lavorato lo STESSO numero di giorni: chi
+// ne fa quattro invece di cinque ha meno ore per un motivo che non e' questo.
+function scartoOreAPariGiorni(staff, newShifts){
+  const perGiorni = {};
+  staff.forEach(s=>{
+    const ore = DAYS7.reduce((n,d)=> n + ORE_DI(newShifts[s.id][d].code), 0);
+    const giorni = DAYS7.filter(d=> ORE_DI(newShifts[s.id][d].code) > 0).length;
+    (perGiorni[giorni] = perGiorni[giorni] || []).push(ore);
+  });
+  let x = 0;
+  Object.keys(perGiorni).forEach(g=>{
+    if(perGiorni[g].length > 1) x = Math.max(x, Math.max(...perGiorni[g]) - Math.min(...perGiorni[g]));
+  });
+  return x;
+}
+
+test('gli spezzati vanno a giro: a parita di giorni lavorati le ore non si sbilanciano', () => {
+  // Sei persone a pari quota su due partite, tre di casa alla prima e tre alla
+  // seconda. Misurato su 300 settimane a semi fissi: 9,00 ore di scarto medio
+  // fra chi ha lavorato gli stessi giorni, 6,00 dopo. La soglia sta in mezzo.
+  const staff = Array.from({length:6}, (_,i)=>({
+    id:'z'+i, name:'z'+i,
+    stations: i<3 ? ['a','b'] : ['b','a'],
+    weeklyQuota: [{count:5,codes:['P','S','SP']},{count:2,codes:['R']}],
+  }));
+  const needs = { colazione:[],
+    pranzo:[{stationId:'a',count:2},{stationId:'b',count:1}],
+    cena:  [{stationId:'a',count:2},{stationId:'b',count:1}] };
+  let somma = 0, peggio = 0;
+  for(let i=0;i<200;i++){
+    const { newShifts } = computeShifts(staff, needs, {config:BASE, seed:'o'+i});
+    const x = scartoOreAPariGiorni(staff, newShifts);
+    somma += x; if(x > peggio) peggio = x;
+  }
+  assert.ok(somma/200 <= 7.5,
+    `${(somma/200).toFixed(2)} ore di scarto medio fra chi ha lavorato gli stessi giorni: gli spezzati stanno ancora sulle stesse teste`);
+  assert.ok(peggio <= 6, `punta di ${peggio} ore di scarto`);
+});
+
+test('il turno lungo a chi ha meno ore non toglie copertura alla brigata grande', () => {
+  // Stessa brigata da dodici del piano dei riposi. Il metro e' il comportamento
+  // precedente sugli stessi semi: 18,00 ore di scarto medio e 87 posti scoperti
+  // su 300 settimane. Dopo: 15,03 e zero scoperti — il criterio delle ore non
+  // si paga in copertura, la migliora.
+  let somma = 0, scoperti = 0;
+  for(let i=0;i<200;i++){
+    const r = computeShifts(BRIGATA12, FABBISOGNO12, {config:BASE, seed:'o'+i});
+    somma += scartoOreAPariGiorni(BRIGATA12, r.newShifts);
+    scoperti += r.shortfalls.reduce((n,x)=> n + x.missing, 0);
+  }
+  assert.ok(somma/200 <= 16.5,
+    `${(somma/200).toFixed(2)} ore di scarto medio, contro le 18,00 di prima`);
+  assert.equal(scoperti, 0,
+    `${scoperti} posti scoperti: il criterio delle ore sta togliendo copertura`);
+});
+
+test('quando la sera la copre solo lo spezzato, il turno corto non passa davanti', () => {
+  // Due persone che in quota hanno solo lo spezzato, due che hanno solo il
+  // turno di pranzo. La sera nessuno la copre da solo: la copre chi fa lo
+  // spezzato, e quel turno va trattato per quello che e' — lungo — anche
+  // quando il budget della giornata direbbe di no. Ignorandolo, davanti
+  // andavano i due del pranzo, la sera restava comunque a uno spezzato, e si
+  // ritrovavano tre persone al lavoro per due posti: quota bruciata un giorno
+  // prima e un secondo turno oltre quota la domenica.
+  const staff = [
+    { id:'L1', name:'L1', stations:['a'], weeklyQuota:[{count:3,codes:['SP']},{count:4,codes:['R']}] },
+    { id:'L2', name:'L2', stations:['a'], weeklyQuota:[{count:3,codes:['SP']},{count:4,codes:['R']}] },
+    { id:'C1', name:'C1', stations:['a'], weeklyQuota:[{count:6,codes:['P']},{count:1,codes:['R']}] },
+    { id:'C2', name:'C2', stations:['a'], weeklyQuota:[{count:6,codes:['P']},{count:1,codes:['R']}] },
+  ];
+  const needs = { colazione:[],
+    pranzo:[{stationId:'a',count:2}], cena:[{stationId:'a',count:1}] };
+  for(let i=0;i<60;i++){
+    const r = computeShifts(staff, needs, {config:BASE, seed:'e'+i});
+    assert.equal(r.shortfalls.length, 0, 'la brigata bastava');
+    assert.equal(r.extras.length, 1,
+      `${r.extras.length} turni oltre quota invece di 1: la sera ha sprecato un turno di pranzo`);
+  }
+});

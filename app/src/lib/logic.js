@@ -687,6 +687,61 @@ function computeShifts(staffList, staffingNeeds, options){
           // chi ce l'ha come seconda gli sta dietro e viene chiamato solo
           // quando i primi sono finiti o sono gia' occupati altrove.
           const perPriorita = (a,b)=> prioritaDi(a, stationId) - prioritaDi(b, stationId);
+          // LO SPEZZATO E' UN TURNO DA UNDICI ORE, E VA A GIRO.
+          // Difetto vero, misurato: a parita' di cinque giorni lavorati una
+          // persona faceva 52 ore e un'altra 43, perche' gli spezzati finivano
+          // sempre sulle stesse teste. Il criterio delle ore c'era gia', ma
+          // guardava solo una meta' della cosa: sceglieva la PERSONA e non
+          // sapeva quanto sarebbe durato il TURNO che stava per darle.
+          // Quanto durera' pero' si sa gia' qui, prima di scegliere: dipende da
+          // quali posti restano scoperti su questa partita e dal budget della
+          // giornata, non da chi lo prende. Se sta per uscire un accorpato il
+          // turno lungo va a chi finora ha fatto meno ore; se sta per uscire un
+          // turno singolo, quello corto va a chi ne ha gia' fatte di piu'.
+          // Prima la direzione era una sola, e "prima chi ha meno ore" davanti
+          // a un turno corto premiava di nuovo chi era gia' indietro.
+          //
+          // Il criterio resta in CODA, dietro alla partita principale, e non e'
+          // una scelta timida: metterlo davanti pareggia le ore molto meglio
+          // (su sei persone a pari quota lo scarto va a zero) e raddoppia le
+          // scoperture, da 54 a 100 su 300 settimane. Vale la stessa regola
+          // scritta venti righe piu' su — prima la copertura, poi la forma — e
+          // qui la partita principale difende anche la copertura, perche' e' lo
+          // stesso ordine con cui la capienza della settimana e' stata
+          // ripartita. Andare contro quella ripartizione giorno per giorno
+          // lascia i turni sulla partita sbagliata.
+          //
+          // E c'e' un limite che nessun ordinamento supera: se una partita ha
+          // piu' posti che turni ci si fanno solo spezzati, e chi ci sta di
+          // casa fa cinque giorni da undici ore. Sulla brigata dello chef le
+          // insalate le sanno fare in due, e sono gli stessi due che tengono
+          // gli antipasti: 55 ore a testa non e' una scelta del motore, e' la
+          // brigata. Per abbassarle bisogna insegnare quella partita a
+          // qualcun altro, non riordinare i candidati.
+          const altriScoperti = SERVICES.filter(sv2=>
+            sv2 !== sv && (remain[sv2]||{})[stationId] > 0);
+          // Quando l'accorpato e' l'UNICO modo di coprire l'altro servizio, il
+          // turno e' lungo anche se il budget della giornata dice di no — e
+          // ignorarlo costava caro. Caso vero, gia' nei test: due persone con
+          // in quota solo lo spezzato e due con solo il turno di pranzo. La
+          // sera nessuno la copre da solo, la copre chi fa lo spezzato. Con il
+          // budget a zero il turno risultava "corto", davanti andava chi aveva
+          // gia' piu' ore — i due del pranzo — e la sera restava a uno
+          // spezzato: tre persone al lavoro per due posti, quota bruciata un
+          // giorno prima e un turno oltre quota in piu' la domenica.
+          const copribileDaSolo = sv2 => staffList.some(s2=>{
+            if(assigned[s2.id][day]) return false;
+            if(!(s2.stations && s2.stations.includes(stationId))) return false;
+            const cod = (SERVICE_CODES[sv2]||[]).filter(c=>
+              (CODE_TO_SERVICES[c]||[]).length === 1
+              && codeAllowed(constraints, s2.id, day, c, CODE_TO_SERVICES));
+            return cod.length > 0 && pools[s2.id].some(slot=> slot.codes.some(c=> cod.includes(c)));
+          });
+          const turnoLungo = altriScoperti.length > 0
+            && (budgetSpezzati[stationId] > 0 || altriScoperti.some(sv2=> !copribileDaSolo(sv2)));
+          const perOre = turnoLungo
+            ? (a,b)=> oreFatte[a.id] - oreFatte[b.id]
+            : (a,b)=> oreFatte[b.id] - oreFatte[a.id];
           if(isExtra){
             // Fra chi si può chiamare oltre quota va per primo chi ne ha fatti
             // MENO. Qui prima c'era il contrario, e la spiegazione suonava bene:
@@ -705,7 +760,7 @@ function computeShifts(staffList, staffingNeeds, options){
             candidates.sort((a,b)=> perStazioni(a,b)
               || (extraFatti[a.id] - extraFatti[b.id])
               || perPriorita(a,b)
-              || (oreFatte[a.id] - oreFatte[b.id]));
+              || perOre(a,b));
           } else {
             // A parità di qualifica lavora prima chi ha più quota da smaltire: la
             // quota consumata in modo uniforme non si esaurisce tutta il venerdì
@@ -722,7 +777,7 @@ function computeShifts(staffList, staffingNeeds, options){
             candidates.sort((a,b)=> perStazioni(a,b)
               || (quotaLavoroResidua(b) - quotaLavoroResidua(a))
               || perPriorita(a,b)
-              || (oreFatte[a.id] - oreFatte[b.id]));
+              || perOre(a,b));
           }
           const chosen = candidates[0];
           const pool = pools[chosen.id];
