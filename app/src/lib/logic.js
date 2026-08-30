@@ -282,6 +282,191 @@ function costruisciCoperture(stazioni){
   return chiusura;
 }
 
+// ----------------------------------------------------------------------------
+// IL CONTO DI CAPIENZA — quello che lo chef fa a mente PRIMA di cominciare.
+//
+// «Io NON guardo giorno per giorno, prima mi faccio un'idea in testa e poi
+// inizio.» L'idea in testa e' un'aritmetica, e finora il generatore non la
+// faceva: per ogni partita, quanti posti servono in settimana, quanti ne
+// coprono le persone che la sanno fare con le quote che hanno, e quindi quanti
+// extra saranno inevitabili. Si sa PRIMA di generare, non leggendo le
+// scoperture nel prospetto quando ormai il danno e' fatto.
+//
+// L'unita' di misura e' il POSTO-SERVIZIO: la quaterna (giorno, servizio,
+// stazione, k-esima persona richiesta). «Due al lavaggio» a pranzo e a cena
+// fanno 4 posti in una giornata, 28 in una settimana. NON e' la giornata: chi
+// conta in giornate trova 14 dove lo chef ne conta 28, ed e' il motivo per cui
+// i due conti non tornavano mai fra loro.
+//
+// Il conto dello chef sul lavaggio — 28 richiesti, 32 di capienza, 6 spesi
+// altrove, 26 disponibili, 2 mancanti — esce da queste regole:
+//
+//   1. Il valore di uno slot di quota e' il numero di servizi che il suo codice
+//      copre: uno spezzato vale 2 posti, un turno singolo 1, R/M/F zero. Sono i
+//      posti che quella persona chiude con quel giorno di lavoro.
+//   2. LA CAPIENZA DI CHI FA DUE PARTITE NON SI SOMMA SU ENTRAMBE. E' una sola
+//      e si spende da una parte o dall'altra. Chi sta su insalate e lavaggio e'
+//      dentro i 32 della capienza lorda del lavaggio, ma i suoi 6 se li
+//      prendono le insalate e al lavaggio ne restano 26. Il -6 non arriva da
+//      fuori: si DEDUCE dal fabbisogno delle insalate. Sommare la capienza due
+//      volte farebbe sparire i 2 extra del lavaggio, che invece sono veri.
+//   3. Si allocano le partite in ordine di RARITA' crescente — quante persone
+//      in brigata la sanno fare — e dentro ogni partita prima chi ce l'ha come
+//      principale, poi chi ce l'ha come seconda (`prioritaDi`). E' lo stesso
+//      ordine con cui il motore riempie i giorni.
+//   4. LE QUOTE SONO SETTIMANALI. Su un periodo piu' lungo il conto si fa per
+//      settimana e si somma: fatto in un blocco solo, su due settimane la
+//      capienza risulterebbe la meta' di quella vera e una partita scoperta
+//      sembrerebbe coperta.
+//
+// LA MANO DI RIMBALZO E' UN'ALTRA COSA, e va contata in un altro modo. «Quando
+// Rakib sta alle insalate lo conto comunque nei due del lavaggio»: quel turno
+// non si spende due volte, chiude un posto alle insalate E uno al lavaggio
+// nello stesso momento. Quindi la copertura di rimbalzo non toglie niente a
+// nessuna tasca — si aggiunge, gratis. Contarla come una spesa direbbe che alla
+// brigata di Rakib mancano 14 posti quando il generatore li copre tutti.
+// Perche' il conto sia giusto, chi DA' una mano va allocato prima di chi la
+// riceve: e' lo stesso ordine, e per lo stesso motivo, che il motore usa sui
+// giorni.
+//
+// Quello che questo conto NON sa, ed e' giusto saperlo leggendolo: e' un tetto
+// superiore. Non guarda le richieste approvate (ferie, riposi concordati), che
+// tolgono capienza, e non guarda se i servizi che un codice copre sono proprio
+// quelli che la partita chiede. Serve a dire «qui mancano due posti, preparati»,
+// non a promettere che due bastino.
+// ----------------------------------------------------------------------------
+
+// Quanti posti-servizio chiude uno slot di quota. Lo slot puo' elencare piu'
+// codici alternativi (['P','S','SP']): vale il migliore, perche' la capienza e'
+// il massimo che quella persona puo' dare, non la media.
+function valoreSlot(codes, cfg){
+  let v = 0;
+  (codes || [REST_CODE]).forEach(c=>{
+    const n = (cfg.codeToServices[c] || []).length;
+    if(n > v) v = n;
+  });
+  return v;
+}
+// Capienza di una persona in UNA settimana, in posti-servizio.
+// Il tetto dei 7 slot e' lo stesso di buildStaffPools: una quota che ne dichiara
+// di piu' non fa comparire un ottavo giorno nella settimana. Qui pero' si
+// tengono i primi 7 nell'ordine dichiarato invece di sorteggiarli: un conto che
+// si fa prima di generare non puo' cambiare a ogni lettura.
+function capienzaSettimanale(s, cfg){
+  let posti = 0, slot = 0;
+  for(const g of (s.weeklyQuota || [])){
+    const n = parseInt(g.count) || 0;
+    for(let k=0; k<n && slot<7; k++){
+      slot++;
+      posti += valoreSlot((g.codes && g.codes.length) ? g.codes : [REST_CODE], cfg);
+    }
+  }
+  return posti;
+}
+
+function contoCapienza(staffList, staffingNeeds, options){
+  options = options || {};
+  const cfg = options.config || buildShiftConfig(null, null);
+  const SERVICES = cfg.serviceIds;
+  staffList = staffList || [];
+  staffingNeeds = staffingNeeds || {};
+
+  // Il periodo. `dates` (date vere) e' quello che passa il generatore; `days`
+  // (nomi dei giorni) e' la forma vecchia, ed e' una settimana sola.
+  const giorni = (options.dates && options.dates.length) ? options.dates
+    : (options.days && options.days.length) ? options.days : DAYS;
+  const sonoDate = giorni.every(d=> /^\d{4}-\d{2}-\d{2}$/.test(String(d)));
+  const settimane = sonoDate ? groupByWeek(giorni) : [giorni];
+
+  // Posti-servizio richiesti in UNA giornata, partita per partita.
+  const postiAlGiorno = {};
+  SERVICES.forEach(sv=> (staffingNeeds[sv] || []).forEach(n=>{
+    const c = parseInt(n.count) || 0;
+    if(c > 0) postiAlGiorno[n.stationId] = (postiAlGiorno[n.stationId] || 0) + c;
+  }));
+
+  const copreOltre = costruisciCoperture(options.stazioni);
+  const riceveDaAltri = {};
+  Object.keys(copreOltre).forEach(d=> copreOltre[d].forEach(r=>{ riceveDaAltri[r] = true; }));
+  // Chi da' una mano a questa partita restando sulla propria.
+  const donatoriDi = st => Object.keys(copreOltre).filter(y=> copreOltre[y].includes(st));
+
+  const partite = Object.keys(postiAlGiorno);
+  const suoi = {};
+  partite.forEach(st=>{ suoi[st] = staffList.filter(s=> (s.stations||[]).includes(st)); });
+  // L'ordine di allocazione, identico a quello con cui il motore copre le
+  // stazioni dentro un servizio, e per gli stessi motivi:
+  //   - una partita che nessuno in brigata sa fare va in fondo: da sola non si
+  //     chiude in nessun caso, e mandarla avanti per rarita' non serve;
+  //   - chi DA' una mano prima di chi la riceve, altrimenti la mano arriva a
+  //     giochi fatti e non vale niente;
+  //   - poi rarita' crescente.
+  // Il sort di JS e' stabile: a pari chiave resta l'ordine in cui le partite
+  // compaiono nel fabbisogno, che e' un ordine che il titolare vede.
+  const ordine = partite.slice().sort((a,b)=>{
+    const qa = suoi[a].length, qb = suoi[b].length;
+    if((qa?0:1) !== (qb?0:1)) return (qa?0:1) - (qb?0:1);
+    const ra = riceveDaAltri[a] ? 1 : 0, rb = riceveDaAltri[b] ? 1 : 0;
+    if(ra !== rb) return ra - rb;
+    return qa - qb;
+  });
+
+  const conto = {};
+  partite.forEach(st=>{ conto[st] = {
+    stationId: st, domanda:0, capienza:0, spesaAltrove:0, disponibile:0,
+    rimbalzo:0, allocata:0, mancanti:0, qualificati: suoi[st].map(s=> s.id),
+  }; });
+
+  settimane.forEach(sett=>{
+    // Una sola tasca per persona, per tutta la settimana. E' il punto 2.
+    const residua = {};
+    staffList.forEach(s=>{ residua[s.id] = capienzaSettimanale(s, cfg); });
+    // Turni che ogni partita si prende dalle proprie tasche: e' la quantita'
+    // che poi da' una mano alle partite di rimbalzo. Non ci si mette dentro la
+    // mano ricevuta, o una catena A→B→C la conterebbe due volte (la chiusura
+    // transitiva di `copreOltre` gia' porta A fino a C).
+    const dalleTasche = {};
+
+    ordine.forEach(st=>{
+      const domanda = (postiAlGiorno[st] || 0) * sett.length;
+      const lorda = suoi[st].reduce((n,s)=> n + capienzaSettimanale(s, cfg), 0);
+      const disponibile = suoi[st].reduce((n,s)=> n + residua[s.id], 0);
+      // La mano che arriva da un'altra partita: gratis, non si spende due volte.
+      const rimbalzo = Math.min(domanda,
+        donatoriDi(st).reduce((n,y)=> n + (dalleTasche[y] || 0), 0));
+      // Dentro la partita: prima chi ce l'ha come principale.
+      const inOrdine = suoi[st].slice().sort((a,b)=> prioritaDi(a, st) - prioritaDi(b, st));
+      let daCoprire = domanda - rimbalzo;
+      let presi = 0;
+      for(const p of inOrdine){
+        if(daCoprire <= 0) break;
+        const preso = Math.min(residua[p.id], daCoprire);
+        residua[p.id] -= preso; daCoprire -= preso; presi += preso;
+      }
+      dalleTasche[st] = presi;
+      conto[st].domanda      += domanda;
+      conto[st].capienza     += lorda;
+      conto[st].disponibile  += disponibile;
+      conto[st].spesaAltrove += (lorda - disponibile);
+      conto[st].rimbalzo     += rimbalzo;
+      conto[st].allocata     += rimbalzo + presi;
+      conto[st].mancanti     += Math.max(0, domanda - rimbalzo - presi);
+    });
+  });
+
+  const elenco = ordine.map(st=> conto[st]);
+  return {
+    giorni: giorni.length,
+    settimane: settimane.length,
+    partite: elenco,
+    // Gli extra che il conto dice inevitabili: nessuna scelta di chi va dove li
+    // fa sparire, perche' la capienza proprio non c'e'. Sono STRUTTURALI, e si
+    // leggono come «o si assume, o si alza una quota, o si abbassa il
+    // fabbisogno» — non come un difetto del generatore.
+    extraStrutturali: elenco.reduce((n,p)=> n + p.mancanti, 0),
+  };
+}
+
 function computeShifts(staffList, staffingNeeds, options){
   options = options || {};
   const cfg = options.config || buildShiftConfig(null, null);
@@ -1070,4 +1255,5 @@ export {
   constraintFor,
   codeAllowed,
   puoFareExtra,
+  contoCapienza,
 };

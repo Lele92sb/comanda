@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { computeShifts, buildShiftConfig, computeShiftsForDates,
          weekDates, monthDates, groupByWeek, isoDate, startOfWeek, dayName,
-         codeAllowed } from '../app/src/lib/logic.js';
+         codeAllowed, contoCapienza } from '../app/src/lib/logic.js';
 
 // Configurazione classica (colazione/pranzo/cena con spezzato): è quella che
 // l'app crea da sola per chi non ne ha una propria.
@@ -1365,4 +1365,202 @@ test('quando la sera la copre solo lo spezzato, il turno corto non passa davanti
     assert.equal(r.extras.length, 1,
       `${r.extras.length} turni oltre quota invece di 1: la sera ha sprecato un turno di pranzo`);
   }
+});
+
+/* ===================== IL CONTO DI CAPIENZA =====================
+   «Io NON guardo giorno per giorno, prima mi faccio un'idea in testa e poi
+   inizio.» Il conto che lo chef fa prima di cominciare, e che il generatore
+   non faceva: quanti posti servono per partita, quanti ne coprono le persone
+   che la sanno fare, quanti extra sono quindi inevitabili.
+   L'unita' e' il POSTO-SERVIZIO (giorno, servizio, stazione, k-esima persona),
+   non la giornata: «due al lavaggio» a pranzo e a cena fanno 28 posti in
+   settimana, non 14. */
+
+// La brigata su cui lo chef ha fatto il conto a voce. Yuri sta su DUE partite
+// (insalate e lavaggio, in quest'ordine: le insalate sono la sua partita di
+// casa) — e' il caso in cui la capienza e' una sola e non si somma su
+// entrambe. Diverso da Rakib, che sta solo alle insalate e da' una mano al
+// lavaggio senza spendere niente in piu': quello e' `copreAnche`, e si conta
+// in un altro modo (test piu' sotto).
+const BRIGATA_CONTO = [
+  { id:'yuri', name:'Yuri', stations:['insalate','lavaggio'],
+    weeklyQuota:[{count:3,codes:['SP']},{count:4,codes:['R']}] },   // 3 spezzati = 6 posti
+  { id:'i2',   name:'I2',   stations:['insalate'],
+    weeklyQuota:[{count:4,codes:['SP']},{count:3,codes:['R']}] },   // 4 spezzati = 8 posti
+  { id:'l1',   name:'L1',   stations:['lavaggio'],
+    weeklyQuota:[{count:7,codes:['SP']}] },                          // 7 spezzati = 14 posti
+  { id:'l2',   name:'L2',   stations:['lavaggio'],
+    weeklyQuota:[{count:6,codes:['SP']},{count:1,codes:['R']}] },   // 6 spezzati = 12 posti
+];
+// Il lavaggio ne chiede due a pranzo e due a cena: 4 al giorno, 28 in settimana.
+// Le insalate uno e uno: 2 al giorno, 14 in settimana. Il lavaggio e' scritto
+// per primo apposta — e' la partita MENO rara, e deve essere allocata per
+// seconda lo stesso.
+const FABBISOGNO_CONTO = { colazione:[],
+  pranzo:[{stationId:'lavaggio',count:2},{stationId:'insalate',count:1}],
+  cena:  [{stationId:'lavaggio',count:2},{stationId:'insalate',count:1}] };
+
+const partitaDi = (conto, st) => conto.partite.find(p=> p.stationId === st);
+
+test('il conto dello chef sul lavaggio: 28 richiesti, 32 di capienza, 26 disponibili, 2 mancanti', () => {
+  const conto = contoCapienza(BRIGATA_CONTO, FABBISOGNO_CONTO, {config:BASE});
+  const lav = partitaDi(conto, 'lavaggio');
+  assert.equal(lav.domanda, 28,
+    'i posti-servizio del lavaggio in settimana sono 28 (2+2 al giorno per 7), non 14 giornate');
+  assert.equal(lav.capienza, 32,
+    'la capienza lorda del lavaggio e 14+12+6: Yuri ci sta dentro anche se le insalate sono la sua partita di casa');
+  assert.equal(lav.spesaAltrove, 6,
+    'i 6 posti di Yuri se li prendono le insalate: la sua capienza e una sola e non si somma su entrambe le partite');
+  assert.equal(lav.disponibile, 26, '32 meno i 6 spesi alle insalate');
+  assert.equal(lav.allocata, 26);
+  assert.equal(lav.mancanti, 2, 'restano 2 posti che nessuna quota copre');
+
+  const ins = partitaDi(conto, 'insalate');
+  assert.equal(ins.domanda, 14);
+  assert.equal(ins.mancanti, 0, 'le insalate si chiudono: 6 di Yuri piu 8 di I2');
+
+  assert.equal(conto.extraStrutturali, 2,
+    'due posti mancanti sono due posti di extra strutturale, e si sanno prima di generare');
+});
+
+test('i 6 spesi altrove si deducono dal fabbisogno delle insalate, non si ricevono da fuori', () => {
+  // Stessa identica brigata, ma alle insalate non serve nessuno: la capienza di
+  // Yuri non ha piu' dove andare e torna tutta al lavaggio. Se il -6 fosse un
+  // numero passato da fuori questo conto non cambierebbe.
+  const soloLavaggio = { colazione:[],
+    pranzo:[{stationId:'lavaggio',count:2}], cena:[{stationId:'lavaggio',count:2}] };
+  const lav = partitaDi(contoCapienza(BRIGATA_CONTO, soloLavaggio, {config:BASE}), 'lavaggio');
+  assert.equal(lav.capienza, 32, 'la capienza lorda e la stessa di prima');
+  assert.equal(lav.spesaAltrove, 0, 'senza fabbisogno alle insalate non c e niente di speso altrove');
+  assert.equal(lav.disponibile, 32);
+  assert.equal(lav.mancanti, 0, 'con i 6 di Yuri i 28 posti si coprono tutti');
+});
+
+test('i 2 posti mancanti sono il turno oltre quota che il generatore poi chiama davvero', () => {
+  // Il conto e' una previsione, e va verificata contro chi genera. Due posti
+  // mancanti su una partita che ha lo spezzato sono UN turno oltre quota: la
+  // stessa persona chiude pranzo e cena.
+  for(let seed=0; seed<30; seed++){
+    const r = computeShifts(BRIGATA_CONTO, FABBISOGNO_CONTO, {config:BASE, seed});
+    assert.equal(r.shortfalls.length, 0, 'con un extra la brigata copre tutto');
+    assert.equal(r.extras.length, 1,
+      `seme ${seed}: ${r.extras.length} turni oltre quota, il conto ne prevedeva 1 (2 posti / 2 servizi)`);
+  }
+});
+
+test('su due settimane il conto raddoppia: le quote sono settimanali e ripartono', () => {
+  // Fatto in un blocco solo, il periodo lungo gonfia la capienza: 32 contro una
+  // domanda di 56, e il lavaggio sembrerebbe quasi coperto invece di mancare 4.
+  const lunedi = startOfWeek(new Date(2026, 8, 14));
+  const dueSettimane = Array.from({length:14}, (_,i)=>{
+    const d = new Date(lunedi); d.setDate(lunedi.getDate()+i); return isoDate(d);
+  });
+  const conto = contoCapienza(BRIGATA_CONTO, FABBISOGNO_CONTO,
+    {config:BASE, dates:dueSettimane});
+  assert.equal(conto.settimane, 2, 'quattordici giorni sono due settimane di quota, non una');
+  const lav = partitaDi(conto, 'lavaggio');
+  assert.equal(lav.domanda, 56);
+  assert.equal(lav.capienza, 64, 'la capienza si ricarica ogni lunedi: 32 piu 32');
+  assert.equal(lav.spesaAltrove, 12);
+  assert.equal(lav.mancanti, 4, 'due posti mancanti a settimana fanno quattro, non due');
+});
+
+test('la mano di rimbalzo non si spende: si aggiunge, e il conto lo dice come il generatore', () => {
+  // Rakib sta alle insalate e conta nei due del lavaggio. Quel turno chiude un
+  // posto alle insalate E uno al lavaggio nello stesso momento: contarlo come
+  // una spesa direbbe che mancano 14 posti dove il generatore non ne lascia
+  // scoperto nessuno. Il metro e' il generatore stesso, sulla stessa brigata.
+  const senza = contoCapienza(BRIGATA_RAKIB, FABBISOGNO_RAKIB, {config:BASE});
+  assert.equal(partitaDi(senza, 'lavaggio').mancanti, 14,
+    'senza la doppia partita il conto deve prevedere i 14 posti che il generatore lascia scoperti');
+  assert.equal(senza.extraStrutturali, 14);
+
+  const con = contoCapienza(BRIGATA_RAKIB, FABBISOGNO_RAKIB, {config:BASE, stazioni:STAZ_RAKIB});
+  const lav = partitaDi(con, 'lavaggio');
+  assert.equal(lav.rimbalzo, 14, 'i 14 posti di Rakib alle insalate valgono anche al lavaggio');
+  assert.equal(lav.spesaAltrove, 0, 'la mano di rimbalzo non toglie niente a nessuna tasca');
+  assert.equal(con.extraStrutturali, 0,
+    'il generatore su questa brigata non lascia niente scoperto: il conto deve dire la stessa cosa');
+});
+
+test('la partita piu rara si alloca per prima, anche se nel fabbisogno e scritta per seconda', () => {
+  // Il pass lo sa fare solo PA, che pero' ha gli antipasti come partita di casa.
+  // Se si allocasse per prima la partita scritta per prima, gli antipasti si
+  // prenderebbero tutta la sua settimana e il pass resterebbe scoperto sette
+  // volte, pur avendo la persona giusta in brigata.
+  const staff = [
+    { id:'pa', name:'PA', stations:['antipasti','pass'], weeklyQuota:[{count:7,codes:['P']}] },
+    { id:'pb', name:'PB', stations:['antipasti'],        weeklyQuota:[{count:7,codes:['P']}] },
+  ];
+  const needs = { colazione:[],
+    pranzo:[{stationId:'antipasti',count:1},{stationId:'pass',count:1}], cena:[] };
+  const conto = contoCapienza(staff, needs, {config:BASE});
+  assert.equal(conto.partite[0].stationId, 'pass',
+    'il pass ha un solo qualificato in brigata: si conta per primo');
+  assert.equal(conto.extraStrutturali, 0,
+    'la brigata basta: allocando la partita rara per prima non manca niente');
+});
+
+test('dentro la partita si parte da chi ce l ha come principale', () => {
+  // B ha il pass come partita di casa e la griglia come seconda. Se la griglia
+  // si prendesse lui invece di A — che la griglia ce l'ha come unica partita —
+  // al pass resterebbe solo C, che ha tre giorni di quota su sette richiesti.
+  const staff = [
+    { id:'b', name:'B', stations:['pass','griglia'], weeklyQuota:[{count:7,codes:['P']}] },
+    { id:'a', name:'A', stations:['griglia'],        weeklyQuota:[{count:7,codes:['P']}] },
+    { id:'c', name:'C', stations:['pass'],
+      weeklyQuota:[{count:3,codes:['P']},{count:4,codes:['R']}] },
+  ];
+  const needs = { colazione:[],
+    pranzo:[{stationId:'griglia',count:1},{stationId:'pass',count:1}], cena:[] };
+  const conto = contoCapienza(staff, needs, {config:BASE});
+  assert.equal(partitaDi(conto, 'pass').mancanti, 0,
+    'la griglia ha preso B invece di A, e al pass sono rimasti solo i tre giorni di C');
+  assert.equal(conto.extraStrutturali, 0);
+});
+
+test('dati vecchi: senza opzioni e senza campi nuovi il conto si fa lo stesso', () => {
+  // Retrocompatibilita': una brigata salvata prima che esistessero `stazioni`,
+  // `copreAnche` e l'ordine delle partite. Nessuna opzione, nessuna data: sette
+  // giorni e una settimana, come ha sempre fatto il generatore.
+  const vecchi = [
+    { id:'p1', name:'Marco', stations:['st1'], weeklyQuota:[{count:5, codes:['P']}] },
+    { id:'p2', name:'Luca',  stations:['st1','st2'], weeklyQuota:[{count:5, codes:['P']}] },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'st1',count:1},{stationId:'st2',count:1}], cena:[] };
+  const conto = contoCapienza(vecchi, needs);
+  assert.equal(conto.giorni, 7);
+  assert.equal(conto.settimane, 1);
+  assert.equal(partitaDi(conto, 'st2').domanda, 7);
+  assert.equal(partitaDi(conto, 'st2').capienza, 5, 'cinque turni di pranzo sono cinque posti');
+  // Dieci posti di capienza contro quattordici richiesti: ne mancano quattro, e
+  // sono gli stessi che il generatore deve tappare oltre quota.
+  assert.equal(conto.extraStrutturali, 4);
+});
+
+test('nel conto, chi da una mano si alloca prima di chi la riceve', () => {
+  // Stessa brigata del test sul generatore: il lavaggio e' anche la partita
+  // piu' RARA (due qualificati contro tre), quindi la sola rarita' lo
+  // manderebbe davanti — e la mano dalle insalate arriverebbe a giochi fatti,
+  // cioe' non varrebbe niente. Il conto direbbe sette posti mancanti dove il
+  // generatore non ne lascia scoperto nessuno.
+  const staff = [
+    { id:'l1', name:'L1', stations:['lavaggio'], weeklyQuota:[{count:7,codes:['P']}] },
+    { id:'l2', name:'L2', stations:['lavaggio'], weeklyQuota:[{count:7,codes:['R']}], puoFareExtra:false },
+    { id:'r1', name:'R1', stations:['insalate'], weeklyQuota:[{count:7,codes:['P']}] },
+    { id:'r2', name:'R2', stations:['insalate'], weeklyQuota:[{count:7,codes:['R']}], puoFareExtra:false },
+    { id:'r3', name:'R3', stations:['insalate'], weeklyQuota:[{count:7,codes:['R']}], puoFareExtra:false },
+  ];
+  const needs = { colazione:[],
+    pranzo:[{stationId:'lavaggio',count:2},{stationId:'insalate',count:1}], cena:[] };
+  const stazioni = [
+    {id:'lavaggio', name:'Lavaggio'},
+    {id:'insalate', name:'Insalate', copreAnche:['lavaggio']},
+  ];
+  const conto = contoCapienza(staff, needs, {config:BASE, stazioni});
+  assert.equal(conto.partite[0].stationId, 'insalate',
+    'le insalate danno la mano: vanno contate prima del lavaggio che la riceve');
+  assert.equal(partitaDi(conto, 'lavaggio').rimbalzo, 7);
+  assert.equal(conto.extraStrutturali, 0,
+    'il generatore su questa brigata copre tutto: il conto deve dire la stessa cosa');
 });
