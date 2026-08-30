@@ -1,6 +1,11 @@
 import { CODE_HOURS, CODE_LABEL, SERVICE_LABEL, SHIFT_CONFIG, TURNO_DEF, WORKING_CODES, esc, periodDates, periodLabel, periodMode, save, state } from '../core/state.js';
 import { assegnaStazione, dayName, isoDate, normalizzaCella, parseISO, serviziDelCodice, stazioneDi, stazioniDi } from '../lib/logic.js';
 import { renderDashboard } from '../viste/dashboard.js';
+// fabbisogno.js importa da qui `coloreStazione`, e qui si importa `renderCapienza`
+// da lì: i due moduli si citano a vicenda. È lecito perché nessuno dei due usa
+// l'altro mentre viene caricato — solo dentro funzioni, chiamate dopo. Stessa
+// coppia che griglia.js e dashboard.js formano da sempre due righe più su.
+import { renderCapienza } from './fabbisogno.js';
 /* ============================= TURNI: griglia =============================
 
    UNA CELLA = UN SOLO BERSAGLIO.
@@ -44,7 +49,7 @@ const SIGLA_VUOTA = '—';
    nell'elenco spargendo le tonalità sul giro completo, invece di pescare da
    una tavolozza a cicli: con più stazioni della tavolozza due partite
    finirebbero dello stesso colore e il pallino direbbe una cosa falsa. */
-function coloreStazione(stationId){
+export function coloreStazione(stationId){
   const i = state.stations.findIndex(st=>st.id===stationId);
   if(i < 0) return 'var(--brass)';
   const n = Math.max(state.stations.length, 1);
@@ -292,6 +297,15 @@ window.addEventListener('resize', ()=>{
 
 export function renderTurni(){
   const el = document.getElementById('turni-panel');
+  // Il conto di capienza sta sopra il pulsante che genera, ma dipende dalle
+  // stesse tre cose di questa griglia — periodo, brigata, fabbisogno — e
+  // renderTurni() è l'unica funzione che gira a ogni cambio di tutte e tre
+  // (cambio periodo, ingresso nella scheda, modifica di una cella). Agganciarlo
+  // qui vuol dire che non può restare indietro; agganciato alla sola scheda
+  // Fabbisogno resterebbe fermo sul periodo di prima.
+  // Prima del `return` per la brigata vuota: senza persone il conto dice
+  // «servono 28, coperti 0», ed è esattamente quello che si vuole leggere.
+  renderCapienza();
   document.getElementById('period-label').textContent = periodLabel();
   document.querySelectorAll('.period-modes button').forEach(b=>
     b.classList.toggle('active', b.dataset.period === periodMode));
