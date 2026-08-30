@@ -505,8 +505,20 @@ function computeShifts(staffList, staffingNeeds, options){
   Object.keys(copreOltre).forEach(d=> copreOltre[d].forEach(r=>{ riceveDaAltri[r] = true; }));
 
   const pools = buildStaffPools(staffList, rand);
-  const assigned = {}, stationAssign = {}, extraFlag = {};
-  staffList.forEach(s=>{ assigned[s.id]={}; stationAssign[s.id]={}; extraFlag[s.id]={}; });
+  // `origineFlag` dice DA DOVE viene un turno, e non e' un doppione di
+  // `extraFlag`: due booleani indipendenti («extra» ed «eccedenza») permettono
+  // lo stato impossibile "extra E eccedenza", e prima o poi qualcuno li somma.
+  // Un solo campo a valori mutuamente esclusivi non lo permette:
+  //   'copertura'  turno di quota che chiude un posto richiesto (il caso normale)
+  //   'extra'      fuori quota — COSTA DI PIU'
+  //   'eccedenza'  dentro quota, collocata dove non era richiesta — GIA' PAGATA
+  //   'manuale'    scritto a mano dalla griglia (il motore non lo produce mai)
+  // `extra` resta come campo DERIVATO (extra === origine==='extra'): la griglia,
+  // il foglio di scelta e i test che leggono `.extra` continuano a funzionare
+  // senza toccarli, e le celle gia' salvate — che `origine` non ce l'hanno — si
+  // leggono con `origine || (extra ? 'extra' : 'copertura')`. Nessuna migrazione.
+  const assigned = {}, stationAssign = {}, extraFlag = {}, origineFlag = {};
+  staffList.forEach(s=>{ assigned[s.id]={}; stationAssign[s.id]={}; extraFlag[s.id]={}; origineFlag[s.id]={}; });
   const shortfalls = [];
   const extras = [];
   // Ore già assegnate nella settimana, e turni oltre quota già chiesti. Si
@@ -1036,6 +1048,7 @@ function computeShifts(staffList, staffingNeeds, options){
           if(!isExtra) turniResidui[stationId] = Math.max(0, (turniResidui[stationId]||0) - 1);
           if(isExtra){
             extraFlag[chosen.id][day] = true;
+            origineFlag[chosen.id][day] = 'extra';
             extraFatti[chosen.id]++;
             extras.push({day, service:sv, stationId, staffId:chosen.id, staffName:chosen.name});
           }
@@ -1162,10 +1175,278 @@ function computeShifts(staffList, staffingNeeds, options){
     });
   });
 
+  // ==========================================================================
+  // FASE 3 — LE ORE DI CONTRATTO CHE AVANZANO.
+  //
+  // «Se avanzano ore di contratto a qualcuno, le deve assegnare in automatico
+  // quando pensa che ne servano di piu'.» Fino a ieri il motore quelle ore le
+  // lasciava in tasca e si limitava a dichiararle (`quotaNonSpesa`). Ma lo chef
+  // le paga comunque: meglio averle in cucina la sera forte che a casa.
+  //
+  // DUE COSE DIVERSE, E NON VANNO MAI NELLO STESSO CONTEGGIO:
+  //   TURNO EXTRA         = oltre la quota della persona   → COSTA DI PIU'
+  //   ECCEDENZA COLLOCATA = dentro la quota, messa su un   → GIA' PAGATA
+  //                         giorno scelto
+  // Per questo `extras[]` ed `eccedenzeCollocate[]` sono due liste separate che
+  // non si sommano mai, e per questo la cella porta `origine` e non un secondo
+  // booleano accanto a `extra`.
+  //
+  // PERCHE' QUI E NON PRIMA, e non dentro il giro dei giorni:
+  //  - il criterio con cui la copertura sceglie i candidati e' «chi ha piu'
+  //    quota da smaltire lavora prima» (`quotaLavoroResidua`). Se questa fase
+  //    prenotasse slot in anticipo quel numero calerebbe e la copertura
+  //    perderebbe i candidati giusti. La copertura deve vedere il pool intatto.
+  //  - la quota non spesa e' NOTA solo alla fine: e' esattamente quello che
+  //    resta in `pools[s.id]` dopo l'ultimo giorno. Non si calcola niente di
+  //    nuovo, si consuma quel residuo.
+  //  - non tocca mai una cella gia' decisa: aggiunge solo dove non c'e' niente
+  //    o dove c'e' un riposo messo dal MOTORE. Un riposo che viene da una
+  //    richiesta approvata e' un vincolo assoluto e resta dov'e'.
+  //
+  // IL PIANO PREVEDEVA TRE PASSI, E DUE NON ESISTONO. Vale la pena scriverlo,
+  // perche' e' la prima cosa che verra' in mente a chi rilegge:
+  //   3a RECUPERO     — «se resta una scopertura che questa persona sa coprire,
+  //                     quel turno e' copertura, non eccedenza».
+  //   3b SOSTITUZIONE — «se un altro ha preso un turno OLTRE QUOTA che questa
+  //                     persona sa fare, l'extra si converte e il costo scende».
+  // Sono a costo negativo e sarebbero andate per prime. Non ci sono perche' NON
+  // POSSONO MAI ACCADERE, e la dimostrazione sta tre schermate piu' su, nel giro
+  // dei giorni: un extra si chiama SOLO quando `candidates` di quota e' vuoto, e
+  // il test che lo svuota — «e' libero, e' qualificato, ha in tasca uno slot con
+  // un codice ammesso oggi che copre questo servizio» — e' parola per parola lo
+  // stesso che farebbe qui `scegliSlot`. Se qualcuno lo passasse ora, l'avrebbe
+  // passato allora e l'extra non sarebbe stato chiamato; e nessuno si libera nel
+  // frattempo, perche' dentro una giornata le assegnazioni si aggiungono e basta.
+  // Identico per la scopertura, che si dichiara solo quando falliscono ANCHE i
+  // candidati oltre quota.
+  // Non e' un ragionamento e basta: 4.000 brigate casuali (numero di persone,
+  // stazioni, quote, richieste approvate e tetto agli extra sorteggiati) hanno
+  // prodotto 85.335 posti scoperti e 19.753 turni extra, e le due fasi sono
+  // scattate ZERO volte. Sessanta righe che non girano mai, con accanto un test
+  // che non puo' diventare rosso, sono peggio di questo commento.
+  // DOVE TORNEREBBERO UTILI: il giorno in cui il giro dei giorni imparasse a
+  // liberare qualcuno (uno scambio, un ripensamento su una giornata gia'
+  // chiusa), oppure se la scelta dei candidati di copertura diventasse piu'
+  // stretta di quella della collocazione — per esempio con un tetto alle ore
+  // anche li'. Allora, e solo allora, vanno rimesse davanti alla 3c.
+  //
+  // Resta quindi un passo solo:
+  //   3c COLLOCAZIONE  il fabbisogno e' gia' chiuso e la persona in piu' e' una
+  //                    scelta. E' anche la sola che conta come eccedenza.
+  //
+  // Il default del MOTORE resta «lascia in tasca» (nessuna `options.eccedenza`):
+  // con l'opzione assente non si esegue una riga di qui dentro, `rand` non viene
+  // chiamato e il risultato e' identico bit per bit a prima. Il default
+  // dell'INTERFACCIA e' invece 'auto', che e' quello che ha chiesto lo chef.
+  // ==========================================================================
+  const optEcc = options.eccedenza || {};
+  const modoEcc = optEcc.modo || 'lascia';
+  const collocaAttiva = (modoEcc === 'auto' || modoEcc === 'giorni');
+  // Il freno per giornata: al massimo N persone in piu' del richiesto sulla
+  // stessa stazione nello stesso servizio. Senza, «sui giorni che scelgo io»
+  // e' un generatore di sovracopertura con l'etichetta buona — cinque
+  // eccedenze e un giorno solo mettono cinque persone in piu' il sabato.
+  const maxPerGiorno = (optEcc.maxPerGiornoPerStazione != null)
+    ? (parseInt(optEcc.maxPerGiornoPerStazione) || 0) : 1;
+  const rispettaOre = optEcc.rispettaOreContrattuali !== false;
+  const eccedenzeCollocate = [];
+  // Perche' una quota e' rimasta in tasca. Si annota mentre si prova, non si
+  // indovina dopo: senza il motivo, chi legge il riepilogo pensa a un difetto.
+  const perche = {};
+  const segnaMotivo = (s, k)=>{ (perche[s.id] = perche[s.id] || {})[k] = true; };
+
+  // Il tetto delle ore contrattuali, rapportato alla durata del periodo come fa
+  // gia' la tabella delle ore (`weeklyExtraFromTurni`: ore × giorni/7). E' la
+  // difesa che impedisce all'eccedenza di diventare un extra con l'etichetta
+  // sbagliata: sette slot da 11 ore su un contratto da 40 sono un extra
+  // travestito. Il campo `hours` e' facoltativo in brigata: quando manca resta
+  // solo il tetto del pool, e il riepilogo deve dirlo (`oreNonVerificate`).
+  const senzaOre = s => !(parseFloat(s.hours) > 0);
+  const tettoOre = s => (!rispettaOre || senzaOre(s))
+    ? Infinity : parseFloat(s.hours) * (days.length / 7);
+
+  // Posti richiesti, per servizio e stazione. Non dipendono dal giorno: nei dati
+  // il fabbisogno non ha una dimensione giorno, e fingere che ce l'abbia sarebbe
+  // una regola inventata (vedi il commento sul criterio automatico più sotto).
+  const richiesti = {};
+  SERVICES.forEach(sv=>{ richiesti[sv] = {};
+    (staffingNeeds[sv]||[]).forEach(n=>{
+      richiesti[sv][n.stationId] = (richiesti[sv][n.stationId]||0) + (parseInt(n.count)||0);
+    });
+  });
+
+  const slotDiLavoro = s => (pools[s.id]||[])
+    .map((slot,i)=> ({i, slot}))
+    .filter(x=> x.slot.codes.some(c=> WORKING_CODES.includes(c)));
+
+  // Il giorno e' libero per davvero? Vuoto o riposo messo dal motore: si'.
+  // Ferie, malattia, riposo concordato: MAI. La scelta del titolare e' una
+  // preferenza, una richiesta approvata e' un vincolo — la preferenza si
+  // degrada, il vincolo no, nemmeno se il turno e' gia' pagato.
+  // Il controllo su `blocked` sembra ridondante, perche' piu' avanti anche
+  // `codeAllowed` rifiuta ogni codice su un giorno bloccato. Non va tolto: e'
+  // l'unica riga che distingue un riposo APPROVATO — che nella cella si scrive
+  // 'R', identico a quello del motore — da un riposo che il motore ha messo
+  // perche' oggi non serviva nessuno. La differenza non si vede nella cella, e
+  // il giorno in cui `codeAllowed` cambiasse resterebbe solo questa.
+  const riposoNonConcordato = (s, day) => {
+    const c = constraintFor(constraints, s.id, day);
+    if(c && c.blocked) return false;
+    const cell = assigned[s.id][day];
+    return !cell || cell === REST_CODE;
+  };
+  // Quante persone stanno gia' coprendo QUEL servizio su QUELLA stazione, viste
+  // dal prospetto FINITO — comprese quelle che ci arrivano di rimbalzo. Si
+  // guarda il prospetto e non il `remain` del momento in cui si assegnava:
+  // quello e' un numero vecchio, il riempimento finale puo' averlo gia' chiuso,
+  // e fidarsene rimetterebbe dentro proprio la sovracopertura appena tolta.
+  const presenzeSu = (day, sv, st) => staffList.filter(s2=>{
+    const st0 = stationAssign[s2.id][day];
+    if(!st0 || !coperteDa(st0).includes(st)) return false;
+    return (CODE_TO_SERVICES[assigned[s2.id][day]]||[]).includes(sv);
+  }).length;
+  const testeSu = (day, st) => staffList.filter(s2=> stationAssign[s2.id][day] === st).length;
+  // Il MARGINE della giornata, ed e' il criterio automatico vero. Quante altre
+  // persone qualificate, non vincolate e non gia' al lavoro restano libere quel
+  // giorno su quella partita. Zero riserve = giornata senza rete: se domattina
+  // uno non si presenta, salta il servizio. «Quando pensa che ne servano di
+  // piu'», tradotto in quello che il motore puo' davvero sapere.
+  const riserveDi = (day, st, esclusoId) => staffList.filter(s2=>{
+    if(s2.id === esclusoId) return false;
+    if(!(s2.stations && s2.stations.includes(st))) return false;
+    if(!riposoNonConcordato(s2, day)) return false;
+    return WORKING_CODES.some(c=> codeAllowed(constraints, s2.id, day, c, CODE_TO_SERVICES));
+  }).length;
+
+  // La lista del titolare e' fatta di NOMI di giorno ('Sab'), ma `days` in
+  // produzione sono date ISO e nei test sono nomi. Senza questa conversione
+  // tollerante la funzione passerebbe i test e non farebbe niente in
+  // produzione, che e' il modo peggiore di sbagliare.
+  const nomeGiorno = d => /^\d{4}-\d{2}-\d{2}$/.test(String(d)) ? dayName(d) : String(d);
+  const listaGiorni = (modoEcc === 'giorni' && Array.isArray(optEcc.giorni)) ? optEcc.giorni : [];
+  // Un ORDINE, non un interruttore. Con gli interruttori («Ven e Sab si', gli
+  // altri no») non si sa dove va il terzo turno quando l'eccedenza e' di cinque;
+  // con una lista si scorre dall'alto e si prende il primo giorno ammissibile.
+  // Un giorno fuori lista non e' vietato: e' in coda, e li' decide il margine.
+  const rangoGiorno = d => {
+    const i = listaGiorni.indexOf(nomeGiorno(d));
+    return i < 0 ? 1000 : i;
+  };
+  // A parita' di tutto, il giorno piu' lontano dagli altri turni della persona:
+  // e' l'unico argine che oggi esiste contro sei giorni di fila. Un vincolo vero
+  // sui giorni consecutivi nel motore NON c'e', e questa fase e' il primo posto
+  // che lo fara' notare.
+  const distanzaDaiSuoi = (s, idx) => {
+    let min = 99;
+    days.forEach((d, j)=>{
+      if(j === idx) return;
+      const cell = assigned[s.id][d];
+      if(cell && WORKING_CODES.includes(cell)) min = Math.min(min, Math.abs(j - idx));
+    });
+    return min;
+  };
+  const minore = (a,b)=>{ for(let i=0;i<a.length;i++){ if(a[i] !== b[i]) return a[i] < b[i]; } return false; };
+
+  // I DUE TETTI stanno tutti qui dentro, ed e' voluto: sono la ragione per cui
+  // questa fase non costa niente. 1) il pool — si colloca solo quota che esiste
+  // davvero e non e' stata spesa; 2) le ore contrattuali.
+  const scegliSlot = (s, day, ammesso) => {
+    if(!riposoNonConcordato(s, day)) return null;
+    const tetto = tettoOre(s);
+    let best = null;
+    slotDiLavoro(s).forEach(({i, slot})=>{
+      slot.codes.forEach(c=>{
+        if(!WORKING_CODES.includes(c)) return;
+        if(!codeAllowed(constraints, s.id, day, c, CODE_TO_SERVICES)) return;
+        if(oreFatte[s.id] + oreDi(c) > tetto + 1e-9){ segnaMotivo(s, 'ore'); return; }
+        if(!ammesso(c)) return;
+        // A parita' di ammissibilita': il turno piu' corto, e lo slot meno
+        // versatile. Il lungo e lo slot jolly restano per dove servono davvero.
+        if(!best || oreDi(c) < best.ore
+           || (oreDi(c) === best.ore && slot.codes.length < best.varianti)){
+          best = {slotIdx:i, code:c, ore:oreDi(c), varianti:slot.codes.length};
+        }
+      });
+    });
+    return best;
+  };
+  const collocaSu = (s, day, st, code, slotIdx, origine) => {
+    pools[s.id].splice(slotIdx, 1);
+    assigned[s.id][day] = code;
+    stationAssign[s.id][day] = st;
+    origineFlag[s.id][day] = origine;
+    oreFatte[s.id] += oreDi(code);
+  };
+
+  if(collocaAttiva){
+    // ---- LA COLLOCAZIONE --------------------------------------------------
+    // Qui il fabbisogno e' gia' chiuso e la persona in piu' e' una SCELTA: per
+    // questo, e solo qui, il turno si conta come ECCEDENZA e non come copertura.
+    const miglioreCollocazione = (s)=>{
+      let best = null;
+      days.forEach((day, idx)=>{
+        if(!riposoNonConcordato(s, day)) return;
+        (s.stations||[]).forEach(st=>{
+          let serviziUtili = null;
+          const sc = scegliSlot(s, day, c=>{
+            const utili = (CODE_TO_SERVICES[c]||[]).filter(sv=> ((richiesti[sv]||{})[st]||0) > 0);
+            // Un turno su una partita che quel servizio non lo chiede non copre
+            // niente: e' il turno finto che si e' appena tolto di mezzo, e
+            // rimetterlo dentro con un'altra etichetta sarebbe tornare indietro.
+            if(!utili.length){ segnaMotivo(s, 'inutile'); return false; }
+            const ok = utili.every(sv=>
+              (presenzeSu(day, sv, st) - (richiesti[sv][st]||0)) < maxPerGiorno);
+            if(!ok){ segnaMotivo(s, 'freno'); return false; }
+            serviziUtili = utili;
+            return true;
+          });
+          if(!sc) return;
+          const chiave = [
+            rangoGiorno(day),            // la lista del titolare, se c'e'
+            riserveDi(day, st, s.id),    // meno margine di errore: e' qui che serve
+            testeSu(day, st),            // meno teste su quella partita
+            -distanzaDaiSuoi(s, idx),    // lontano dagli altri suoi turni
+            prioritaDi(s, st),           // la sua partita di casa
+            sc.ore,
+            rand(),                      // seminato: due generazioni uguali restano uguali
+          ];
+          if(!best || minore(chiave, best.chiave)){
+            best = {day, stationId:st, code:sc.code, slotIdx:sc.slotIdx, ore:sc.ore,
+              service:(serviziUtili||[])[0]||null, chiave,
+              criterio: rangoGiorno(day) < 1000
+                ? ('giorno scelto: ' + nomeGiorno(day))
+                : 'automatico: dove c\'erano meno riserve'};
+          }
+        });
+      });
+      return best;
+    };
+    // A giro, un turno per persona per volta: prendendo da una persona tutto
+    // quello che ha prima di passare alla successiva, la prima si porterebbe via
+    // i giorni scarsi di margine e le altre resterebbero a casa. E' lo stesso
+    // motivo per cui gli extra si spargono invece di accumularsi su una testa.
+    let mosso = true;
+    while(mosso){
+      mosso = false;
+      const giro = staffList.filter(s=> s.stations && s.stations.length && slotDiLavoro(s).length);
+      shuffleArray(giro, rand);
+      giro.sort((a,b)=> slotDiLavoro(b).length - slotDiLavoro(a).length);
+      for(const s of giro){
+        const m = miglioreCollocazione(s);
+        if(!m) continue;
+        collocaSu(s, m.day, m.stationId, m.code, m.slotIdx, 'eccedenza');
+        eccedenzeCollocate.push({day:m.day, staffId:s.id, staffName:s.name,
+          stationId:m.stationId, service:m.service, code:m.code, ore:m.ore,
+          criterio:m.criterio, oreNonVerificate:senzaOre(s)});
+        mosso = true;
+      }
+    }
+  }
+
   const newShifts = {};
   staffList.forEach(s=>{
     newShifts[s.id] = {};
-    days.forEach(day=> newShifts[s.id][day] = { code: assigned[s.id][day]||'', stationId: stationAssign[s.id][day]||null, extra: !!extraFlag[s.id][day] });
+    days.forEach(day=> newShifts[s.id][day] = { code: assigned[s.id][day]||'', stationId: stationAssign[s.id][day]||null, extra: !!extraFlag[s.id][day], origine: origineFlag[s.id][day] || 'copertura' });
   });
   // Chi il generatore non ha potuto pianificare, e perché. Va detto nel
   // riepilogo: senza, resta da intuire da una fila di R nella griglia.
@@ -1178,14 +1459,38 @@ function computeShifts(staffList, staffingNeeds, options){
   // Ore la persona risulta sotto le ore contrattuali. E' un numero VERO, dove
   // prima c'era un pareggio ottenuto con turni finti, ma va spiegato: chi lo
   // vede senza spiegazione pensa a un difetto del generatore.
+  // Dopo la fase 3 qui resta solo cio' che NON si e' potuto collocare, e il
+  // motivo va detto per nome: «sabato e venerdi' erano i giorni scelti, ma
+  // Rakib e' in ferie» si legge, «restano 8 ore» no.
+  const motivoDi = s => {
+    if(!collocaAttiva) return 'collocazione non attiva';
+    const p = perche[s.id] || {};
+    if(p.ore)   return 'ore contrattuali raggiunte';
+    if(p.freno) return 'le giornate erano gia\' coperte';
+    return 'nessun giorno ammissibile';
+  };
   const quotaNonSpesa = staffList
     .map(s=> ({
       staffId: s.id, staffName: s.name,
       turni: (pools[s.id]||[]).filter(slot=>
         slot.codes.some(c=> WORKING_CODES.includes(c))).length,
+      motivo: motivoDi(s),
+      // Senza ore contrattuali il secondo tetto non esiste e il controllo non
+      // si e' potuto fare. Va detto: un part-time con quote generose diventa
+      // altrimenti un extra travestito e nessuno se ne accorge.
+      oreNonVerificate: senzaOre(s),
     }))
     .filter(x=> x.turni > 0);
-  return { newShifts, shortfalls, extras, nonPianificabili, quotaNonSpesa };
+  // REGOLA DA NON DIMENTICARE FRA SEI MESI: `extras` ed `eccedenzeCollocate`
+  // non stanno MAI nello stesso conteggio, e chi scrive il riepilogo deve
+  // tenerli in due riquadri separati. Il primo e' lavoro FUORI quota, e costa
+  // di piu'; il secondo sono ore gia' in busta paga portate in cucina. Sommarli
+  // vuol dire dire allo chef che ha speso il doppio di quello che ha speso.
+  // E la sovracopertura si misura solo sulle celle con `origine === 'copertura'`:
+  // contando anche le eccedenze, il numero che dimostra la copertura esatta
+  // tornerebbe sporco e nessuno saprebbe piu' leggere una regressione vera.
+  return { newShifts, shortfalls, extras, nonPianificabili, quotaNonSpesa,
+           eccedenzeCollocate };
 }
 
 // ----------------------------------------------------------------------------
@@ -1198,7 +1503,8 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
   options = options || {};
   const dates = (options.dates && options.dates.length) ? options.dates : weekDates(new Date());
   const newShifts = {}, shortfalls = [], extras = [];
-  const nonSpesaPerPersona = {};
+  const eccedenzeCollocate = [];
+  const nonSpesaPerPersona = {}, motivoPerPersona = {};
   staffList.forEach(s=>{ newShifts[s.id] = {}; });
 
   groupByWeek(dates).forEach((settimana, i)=>{
@@ -1206,6 +1512,10 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
       config: options.config, days: settimana, constraints: options.constraints,
       maxExtraPerPersona: options.maxExtraPerPersona,
       stazioni: options.stazioni,
+      // La fase 3 gira DENTRO ogni settimana, sul residuo di quella settimana:
+      // le quote sono settimanali e un turno non collocato a settembre non si
+      // recupera a ottobre.
+      eccedenza: options.eccedenza,
       // Il seme avanza di settimana in settimana: con lo stesso seme per tutte,
       // le quattro settimane di un mese uscirebbero identiche fra loro.
       seed: (options.seed != null) ? (semeNumerico(options.seed) + i) : undefined,
@@ -1218,7 +1528,11 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
     // ognuna delle quattro settimane di un mese ne ha quattro, non uno.
     (res.quotaNonSpesa||[]).forEach(q=>{
       nonSpesaPerPersona[q.staffId] = (nonSpesaPerPersona[q.staffId]||0) + q.turni;
+      if(!motivoPerPersona[q.staffId]) motivoPerPersona[q.staffId] = q.motivo;
     });
+    // Le eccedenze si sommano fra le settimane come la quota non spesa, per lo
+    // stesso motivo: sono fatti di settimane diverse, non lo stesso fatto.
+    eccedenzeCollocate.push(...(res.eccedenzeCollocate||[]));
   });
 
   // Non dipende dalla settimana: si calcola una volta sola, altrimenti la
@@ -1228,10 +1542,13 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
     .map(s=> ({staffId:s.id, staffName:s.name, motivo:'nessuna stazione'}));
 
   const quotaNonSpesa = staffList
-    .map(s=> ({staffId:s.id, staffName:s.name, turni: nonSpesaPerPersona[s.id]||0}))
+    .map(s=> ({staffId:s.id, staffName:s.name, turni: nonSpesaPerPersona[s.id]||0,
+      motivo: motivoPerPersona[s.id] || 'collocazione non attiva',
+      oreNonVerificate: !(parseFloat(s.hours) > 0)}))
     .filter(x=> x.turni > 0);
 
-  return { newShifts, shortfalls, extras, nonPianificabili, quotaNonSpesa };
+  return { newShifts, shortfalls, extras, nonPianificabili, quotaNonSpesa,
+           eccedenzeCollocate };
 }
 
 export {

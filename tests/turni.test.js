@@ -3,7 +3,7 @@
 // che deve restare semplice da eseguire ovunque con "npm test".
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeShifts, buildShiftConfig, computeShiftsForDates,
+import { DAYS, computeShifts, buildShiftConfig, computeShiftsForDates,
          weekDates, monthDates, groupByWeek, isoDate, startOfWeek, dayName,
          codeAllowed, contoCapienza } from '../app/src/lib/logic.js';
 
@@ -1563,4 +1563,320 @@ test('nel conto, chi da una mano si alloca prima di chi la riceve', () => {
   assert.equal(partitaDi(conto, 'lavaggio').rimbalzo, 7);
   assert.equal(conto.extraStrutturali, 0,
     'il generatore su questa brigata copre tutto: il conto deve dire la stessa cosa');
+});
+
+// ============================================================================
+// LE ORE DI CONTRATTO CHE AVANZANO.
+// «Se avanzano ore di contratto a qualcuno, le deve assegnare in automatico
+// quando pensa che ne servano di piu'.» Lo chef quelle ore le paga comunque:
+// meglio averle in cucina la sera forte che a casa. Ma la copertura esatta
+// resta l'invariante — si colloca DOPO, e solo con la quota che avanza.
+// ============================================================================
+
+// Brigata di misura: otto persone, cinque partite, due a testa, quaranta ore a
+// testa e cinque turni da otto in quota. Il fabbisogno ne chiede 35 in
+// settimana e la brigata ne ha 40: cinque avanzano, ed e' esattamente il caso
+// di cui parla lo chef.
+const BRIGATA_ORE = [
+  {id:'a1', name:'Anna',  hours:40, stations:['primi','pass'],         weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}]},
+  {id:'a2', name:'Bruno', hours:40, stations:['primi','secondi'],      weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}]},
+  {id:'b1', name:'Carla', hours:40, stations:['secondi','primi'],      weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}]},
+  {id:'b2', name:'Dario', hours:40, stations:['secondi','pass'],       weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}]},
+  {id:'c1', name:'Elena', hours:40, stations:['antipasti','insalate'], weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}]},
+  {id:'c2', name:'Fabio', hours:40, stations:['antipasti','insalate'], weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}]},
+  {id:'d1', name:'Gina',  hours:40, stations:['insalate','antipasti'], weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}]},
+  {id:'d2', name:'Hamid', hours:40, stations:['pass','primi'],         weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}]},
+];
+const NEEDS_ORE = { colazione:[], cena:[], pranzo:[
+  {stationId:'primi',count:1},{stationId:'secondi',count:1},{stationId:'antipasti',count:1},
+  {stationId:'insalate',count:1},{stationId:'pass',count:1}] };
+
+// Ore pianificate in settimana, come le conta la tabella della griglia.
+function orePianificate(staff, newShifts, giorni){
+  const out = {};
+  staff.forEach(s=>{
+    out[s.id] = giorni.reduce((n,d)=>
+      n + ((BASE.turnoDef[(newShifts[s.id][d]||{}).code] || {}).hours || 0), 0);
+  });
+  return out;
+}
+// Sovracopertura contata SOLO sui turni di copertura: e' il numero che dimostra
+// la copertura esatta, e se ci finissero dentro anche le eccedenze tornerebbe
+// sporco e nessuno saprebbe piu' leggere una regressione vera.
+function sovracoperturaDiCopertura(staff, needs, newShifts, giorni){
+  let n = 0;
+  for(const d of giorni){
+    for(const sv of BASE.serviceIds){
+      for(const nd of (needs[sv]||[])){
+        let presenti = 0;
+        for(const s of staff){
+          const c = newShifts[s.id][d] || {};
+          if(c.stationId !== nd.stationId) continue;
+          if((c.origine || (c.extra ? 'extra' : 'copertura')) !== 'copertura') continue;
+          if(!(BASE.codeToServices[c.code]||[]).includes(sv)) continue;
+          presenti++;
+        }
+        n += Math.max(0, presenti - nd.count);
+      }
+    }
+  }
+  return n;
+}
+
+test('senza l impostazione le ore avanzate restano in tasca, esattamente come prima', () => {
+  // Retrocompatibilita' numero uno: chi ha gia' i turni salvati e pubblicati non
+  // deve vedere cambiare niente. Con l'opzione assente non gira una riga della
+  // collocazione, e 'lascia' e' l'assenza scritta per esteso.
+  const senza = computeShifts(BRIGATA_ORE, NEEDS_ORE, {config:BASE, seed:'x1'});
+  const lascia = computeShifts(BRIGATA_ORE, NEEDS_ORE,
+    {config:BASE, seed:'x1', eccedenza:{modo:'lascia', giorni:['Sab']}});
+  assert.deepEqual(lascia.newShifts, senza.newShifts, 'con "lascia" il prospetto deve restare identico');
+  assert.deepEqual(lascia.extras, senza.extras);
+  assert.deepEqual(lascia.shortfalls, senza.shortfalls);
+  assert.equal(senza.eccedenzeCollocate.length, 0);
+  assert.equal(lascia.eccedenzeCollocate.length, 0);
+  assert.equal(senza.quotaNonSpesa.reduce((n,q)=>n+q.turni,0), 5,
+    'cinque turni di quota avanzano, e restano dichiarati come prima');
+});
+
+test('le ore gia pagate finiscono in cucina invece che a casa, e la copertura non si muove', () => {
+  const senza = computeShifts(BRIGATA_ORE, NEEDS_ORE, {config:BASE, seed:'x2'});
+  const con = computeShifts(BRIGATA_ORE, NEEDS_ORE,
+    {config:BASE, seed:'x2', eccedenza:{modo:'auto'}});
+  // 1. La copertura non peggiora di un posto: e' l'invariante che viene prima.
+  assert.deepEqual(con.shortfalls, senza.shortfalls, 'la collocazione non deve aprire buchi');
+  assert.deepEqual(con.extras, senza.extras, 'la collocazione non deve chiamare nessuno oltre quota');
+  assert.equal(sovracoperturaDiCopertura(BRIGATA_ORE, NEEDS_ORE, senza.newShifts, DAYS), 0);
+  assert.equal(sovracoperturaDiCopertura(BRIGATA_ORE, NEEDS_ORE, con.newShifts, DAYS), 0,
+    'la sovracopertura di sola copertura deve restare zero: e il numero che dimostra il lavoro fatto prima');
+  // 2. Le cinque ore avanzate sono state collocate.
+  assert.equal(con.eccedenzeCollocate.length, 5, 'i cinque turni avanzati vanno collocati');
+  assert.equal(con.quotaNonSpesa.length, 0, 'e allora in tasca non resta piu niente');
+  // 3. Le ore lavorate salgono, ma la colonna "Extra" della tabella ore NO.
+  const oreSenza = orePianificate(BRIGATA_ORE, senza.newShifts, DAYS);
+  const oreCon   = orePianificate(BRIGATA_ORE, con.newShifts, DAYS);
+  let sottoSenza = 0, sottoCon = 0;
+  for(const s of BRIGATA_ORE){
+    assert.ok(oreCon[s.id] <= s.hours + 1e-9,
+      s.name+': '+oreCon[s.id]+'h pianificate contro '+s.hours+'h contrattuali — l eccedenza e diventata un extra travestito');
+    sottoSenza += Math.max(0, s.hours - oreSenza[s.id]);
+    sottoCon   += Math.max(0, s.hours - oreCon[s.id]);
+  }
+  assert.equal(sottoSenza, 40, 'cinque turni da otto ore non lavorati');
+  assert.equal(sottoCon, 0, 'e la colonna "sotto le contrattuali" e proprio quella che deve scendere');
+});
+
+test('una eccedenza non e un turno extra, e la differenza sta nei dati', () => {
+  // La distinzione che costa soldi veri se si sbaglia. Un solo campo a valori
+  // esclusivi, non due booleani che permettono lo stato impossibile.
+  const r = computeShifts(BRIGATA_ORE, NEEDS_ORE, {config:BASE, seed:'x3', eccedenza:{modo:'auto'}});
+  let collocate = 0;
+  for(const s of BRIGATA_ORE){
+    for(const d of DAYS){
+      const c = r.newShifts[s.id][d];
+      assert.ok(['copertura','extra','eccedenza'].includes(c.origine), 'origine sempre valorizzata');
+      assert.equal(c.extra, c.origine === 'extra', 'extra deve restare il campo derivato da origine');
+      if(c.origine === 'eccedenza'){
+        collocate++;
+        assert.equal(c.extra, false, 'una eccedenza non e mai un extra: e gia pagata');
+        assert.ok(c.stationId, 'un turno senza stazione non copre niente e non va collocato');
+        assert.equal(r.extras.some(e=> e.staffId===s.id && e.day===d), false,
+          'e non deve comparire nel conteggio degli extra');
+      }
+    }
+  }
+  assert.equal(collocate, r.eccedenzeCollocate.length, 'le celle collocate e la lista devono dire lo stesso numero');
+});
+
+test('il tetto delle ore contrattuali: quaranta ore restano quaranta', () => {
+  // Sette slot da undici ore su un contratto da quaranta sono un extra
+  // travestito. La quota e' in NUMERO DI TURNI, il contratto e' in ORE: senza
+  // il secondo tetto la collocazione le sfonda senza accorgersene.
+  const staff = [1,2,3].map(i=>
+    ({id:'u'+i, name:'U'+i, hours:40, stations:['a'], weeklyQuota:[{count:7,codes:['SP']}]}));
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[{stationId:'a',count:1}] };
+  const r = computeShifts(staff, needs, {config:BASE, seed:'x4', eccedenza:{modo:'auto'}});
+  const ore = orePianificate(staff, r.newShifts, DAYS);
+  for(const s of staff){
+    assert.ok(ore[s.id] <= 40 + 1e-9, s.name+' arriva a '+ore[s.id]+'h contro 40h di contratto');
+  }
+  assert.ok(r.quotaNonSpesa.length > 0, 'la quota che non ci sta nelle ore resta in tasca');
+  assert.ok(r.quotaNonSpesa.every(q=> q.motivo === 'ore contrattuali raggiunte'),
+    'e il riepilogo deve dire perche, non lasciarlo indovinare');
+  // La controprova: e' il tetto a fermarla, non la mancanza di quota. Tolto il
+  // tetto la stessa brigata sfonda le quaranta ore, ed e' esattamente la cosa
+  // che si sta impedendo.
+  const senzaTetto = computeShifts(staff, needs, {config:BASE, seed:'x4',
+    eccedenza:{modo:'auto', rispettaOreContrattuali:false}});
+  const oreLibere = orePianificate(staff, senzaTetto.newShifts, DAYS);
+  assert.ok(staff.some(s=> oreLibere[s.id] > 40),
+    'senza tetto la quota in turni sfonda il contratto in ore: e la ragione per cui il tetto esiste');
+});
+
+test('ferie e riposi concordati non si spostano, nemmeno per ore gia pagate', () => {
+  // LA REGOLA MADRE: la scelta del titolare e' una preferenza, una richiesta
+  // approvata e' un vincolo. La preferenza si degrada, il vincolo mai.
+  const staff = [
+    {id:'v1', name:'Vito',  hours:40, stations:['a'], weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}]},
+    {id:'v2', name:'Zaira', hours:40, stations:['a'], weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}]},
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const ferie = { v1:{} };
+  DAYS.forEach(d=>{ ferie.v1[d] = {blocked:'F'}; });
+  const r = computeShifts(staff, needs, {config:BASE, seed:'x5',
+    constraints:ferie, eccedenza:{modo:'giorni', giorni:['Sab','Ven']}});
+  DAYS.forEach(d=> assert.equal(r.newShifts['v1'][d].code, 'F',
+    'una settimana di ferie resta una settimana di ferie'));
+  assert.equal(r.eccedenzeCollocate.some(e=> e.staffId==='v1'), false,
+    'a chi e in ferie non si colloca niente, nemmeno un turno gia pagato');
+  const suo = r.quotaNonSpesa.find(q=> q.staffId==='v1');
+  assert.ok(suo && suo.turni > 0, 'la sua quota resta in tasca');
+  assert.equal(suo.motivo, 'nessun giorno ammissibile', 'e il riepilogo lo dice per nome e con il motivo');
+});
+
+test('un riposo CONCORDATO il giorno scelto non si tocca: la lista e una preferenza, la richiesta approvata no', () => {
+  // Il caso che la ferie NON prova. Una cella di ferie si scrive 'F' e non
+  // somiglia a un riposo; un riposo APPROVATO si scrive 'R', identico a quello
+  // che mette il motore. Se la collocazione guardasse solo la lettera nella
+  // cella se lo prenderebbe — ed e' il riposo che la persona si e' fatta
+  // approvare. Il sabato qui e' anche il giorno in cima alla lista del
+  // titolare, cioe' il posto dove la collocazione vuole andare per prima.
+  const staff = [
+    {id:'v1', name:'Vito',  stations:['a'], weeklyQuota:[{count:4,codes:['P']},{count:3,codes:['R']}]},
+    {id:'v2', name:'Zaira', stations:['a'], weeklyQuota:[{count:4,codes:['P']},{count:3,codes:['R']}]},
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const constraints = { v1:{ Sab:{blocked:'R'} }, v2:{ Sab:{blocked:'R'} } };
+  const r = computeShifts(staff, needs, {config:BASE, seed:'x6',
+    constraints, eccedenza:{modo:'giorni', giorni:['Sab','Mer']}});
+  assert.equal(r.newShifts['v1']['Sab'].code, 'R');
+  assert.equal(r.newShifts['v2']['Sab'].code, 'R');
+  assert.equal(r.eccedenzeCollocate.some(e=> e.day === 'Sab'), false,
+    'il sabato erano tutti a riposo concordato: li nessuna ora si colloca, nemmeno se gia pagata');
+  assert.ok(r.eccedenzeCollocate.length > 0, 'ma la quota avanzata va collocata lo stesso, altrove');
+});
+
+test('una partita che quel servizio non lo chiede non riceve nessuna ora collocata', () => {
+  // Una persona ha due partite, ma della seconda il fabbisogno non chiede
+  // nessuno. Collocarcela sarebbe di nuovo il TURNO FINTO: conta nelle ore, fa
+  // scattare i falsi sforamenti e non copre niente. Ed e' anche la partita che
+  // vincerebbe il confronto, perche' li non c'e' nessuno e sembra la piu
+  // scoperta di tutte.
+  const staff = [
+    {id:'n1', name:'N1', stations:['a'],             weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}]},
+    {id:'n2', name:'N2', stations:['a','magazzino'], weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}]},
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const r = computeShifts(staff, needs, {config:BASE, seed:'xd', eccedenza:{modo:'auto'}});
+  assert.ok(r.eccedenzeCollocate.length > 0, 'la quota avanzata va collocata');
+  assert.ok(r.eccedenzeCollocate.every(e=> e.stationId === 'a'),
+    'il magazzino non e nel fabbisogno: un turno li non copre niente');
+  DAYS.forEach(d=> assert.notEqual(r.newShifts['n2'][d].stationId, 'magazzino'));
+});
+
+test('il freno per giornata: cinque eccedenze e un giorno solo non fanno cinque persone in piu il sabato', () => {
+  // Senza il freno, «sui giorni che scelgo io» e' un generatore di
+  // sovracopertura con l'etichetta buona.
+  const staff = [1,2,3,4,5].map(i=>
+    ({id:'q'+i, name:'Q'+i, stations:['a'], weeklyQuota:[{count:7,codes:['P']}]}));
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const presenzeAlGiorno = (r) => DAYS.map(d=>
+    staff.filter(s=> r.newShifts[s.id][d].stationId === 'a').length);
+  const uno = computeShifts(staff, needs, {config:BASE, seed:'x7',
+    eccedenza:{modo:'giorni', giorni:['Sab']}});
+  assert.deepEqual(presenzeAlGiorno(uno), [2,2,2,2,2,2,2],
+    'una persona richiesta piu una collocata: il freno di default e uno per stazione e servizio');
+  assert.equal(uno.eccedenzeCollocate.length, 7);
+  // Alzando il freno il titolare ottiene quello che ha chiesto, ma dichiarandolo.
+  const tre = computeShifts(staff, needs, {config:BASE, seed:'x7',
+    eccedenza:{modo:'giorni', giorni:['Sab'], maxPerGiornoPerStazione:3}});
+  assert.equal(presenzeAlGiorno(tre)[5], 4, 'il sabato: uno richiesto piu tre collocati');
+  assert.equal(tre.eccedenzeCollocate.length, 21);
+});
+
+test('stesso seme, stesse eccedenze: due generazioni si possono confrontare', () => {
+  const opts = {config:BASE, seed:'stessoseme', eccedenza:{modo:'auto'}};
+  const a = computeShifts(BRIGATA_ORE, NEEDS_ORE, opts);
+  const b = computeShifts(BRIGATA_ORE, NEEDS_ORE, opts);
+  assert.deepEqual(a.newShifts, b.newShifts, 'stesso seme, prospetto diverso: la collocazione usa ancora il caso');
+  assert.deepEqual(a.eccedenzeCollocate, b.eccedenzeCollocate);
+});
+
+test('i giorni si scelgono per nome anche quando il periodo e fatto di date vere', () => {
+  // In produzione `days` sono date ISO, nei test sono nomi. Senza la
+  // conversione tollerante la funzione passa i test e non fa niente in
+  // produzione, che e il modo peggiore di sbagliare.
+  const staff = [1,2,3,4,5,6].map(i=>
+    ({id:'w'+i, name:'W'+i, stations:['a'], weeklyQuota:[{count:2,codes:['P']},{count:5,codes:['R']}]}));
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const dates = weekDates(new Date(2026,8,16));
+  const r = computeShiftsForDates(staff, needs, {config:BASE, dates, seed:'x8',
+    eccedenza:{modo:'giorni', giorni:['Sab'], maxPerGiornoPerStazione:9}});
+  const sabato = dates.find(d=> dayName(d) === 'Sab');
+  assert.ok(r.eccedenzeCollocate.filter(e=> e.day === sabato).length >= 3,
+    'il titolare ha scritto "Sab": con le date vere deve valere lo stesso');
+  r.eccedenzeCollocate.forEach(e=>{
+    if(e.day === sabato) return;
+    const cella = r.newShifts[e.staffId][sabato];
+    assert.ok(cella.code && cella.code !== 'R',
+      'un giorno diverso dal sabato si ammette solo a chi il sabato stava gia lavorando');
+  });
+});
+
+test('un giorno scelto fuori dal periodo non blocca la collocazione: si degrada al criterio automatico', () => {
+  // Si genera lunedi-mercoledi e la lista dice "Sab". La lista e' un ORDINE, non
+  // un obbligo: i giorni fuori lista stanno in coda, non sono vietati.
+  const staff = [
+    {id:'y1', name:'Y1', stations:['a'], weeklyQuota:[{count:3,codes:['P']}]},
+    {id:'y2', name:'Y2', stations:['a'], weeklyQuota:[{count:3,codes:['P']}]},
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const giorni = ['Lun','Mar','Mer'];
+  const r = computeShifts(staff, needs, {config:BASE, days:giorni, seed:'x9',
+    eccedenza:{modo:'giorni', giorni:['Sab']}});
+  assert.equal(r.eccedenzeCollocate.length, 3,
+    'tre giorni, due persone, tre turni di copertura e tre avanzati: vanno collocati lo stesso');
+  assert.ok(r.eccedenzeCollocate.every(e=> giorni.includes(e.day)));
+});
+
+test('senza ore contrattuali si colloca lo stesso, ma il riepilogo dichiara il controllo mancato', () => {
+  // Il campo `hours` e' facoltativo in brigata e resta spesso vuoto. Sparisce il
+  // secondo tetto e resta solo il pool: va detto, o un part-time con quote
+  // generose diventa un extra travestito e nessuno se ne accorge.
+  const staff = [
+    {id:'z1', name:'Z1', stations:['a'], weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}]},
+    {id:'z2', name:'Z2', stations:['a'], weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}]},
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const r = computeShifts(staff, needs, {config:BASE, seed:'xa', eccedenza:{modo:'auto'}});
+  assert.ok(r.eccedenzeCollocate.length > 0);
+  assert.ok(r.eccedenzeCollocate.every(e=> e.oreNonVerificate === true),
+    'senza ore contrattuali il controllo sulle ore non si e potuto fare, e va scritto');
+});
+
+test('a chi non ha stazioni non si collocano ore: sarebbe di nuovo il turno finto', () => {
+  const staff = [
+    {id:'k1', name:'K1', hours:40, stations:['a'], weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}]},
+    {id:'k2', name:'K2', hours:40, stations:[],    weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}]},
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const r = computeShifts(staff, needs, {config:BASE, seed:'xb', eccedenza:{modo:'auto'}});
+  DAYS.forEach(d=> assert.equal(r.newShifts['k2'][d].code, 'R',
+    'un turno senza stazione conta nelle ore e non copre niente: resta fuori'));
+  assert.equal(r.eccedenzeCollocate.some(e=> e.staffId==='k2'), false);
+});
+
+test('su un mese le eccedenze si sommano fra le settimane, non si ricalcolano', () => {
+  const staff = [1,2,3].map(i=>
+    ({id:'m'+i, name:'M'+i, stations:['a'], weeklyQuota:[{count:4,codes:['P']},{count:3,codes:['R']}]}));
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const dates = monthDates(new Date(2026,8,1));
+  const mese = computeShiftsForDates(staff, needs, {config:BASE, dates, seed:'xc',
+    eccedenza:{modo:'auto'}});
+  const settimane = groupByWeek(dates).length;
+  assert.ok(mese.eccedenzeCollocate.length >= settimane,
+    'ogni settimana riparte con le quote piene e ha la sua eccedenza');
+  const giorniCollocati = new Set(mese.eccedenzeCollocate.map(e=> e.day));
+  assert.equal(giorniCollocati.size, mese.eccedenzeCollocate.length,
+    'due collocazioni sullo stesso giorno vorrebbero dire che una settimana ha riscritto l altra');
 });
