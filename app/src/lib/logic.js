@@ -438,6 +438,40 @@ function computeShifts(staffList, staffingNeeds, options){
   perRarita.forEach(st=> alloca(st, Math.ceil((postiAlGiorno[st]*days.length) / postiPerTurno(st))));
   perRarita.forEach(st=> alloca(st, postiAlGiorno[st]*days.length));
 
+  // --------------------------------------------------------------------------
+  // DOVE STANNO I RIPOSI. Secondo pezzo dell'idea che lo chef si fa in testa
+  // prima di cominciare: «li divido equamente in tutti i giorni della settimana
+  // in modo che ogni giorno riposino lo stesso numero di persone o quasi, per
+  // non avere giorni in cui ho 6 persone di riposo e altri in cui ce ne sta una
+  // sola».
+  //
+  // Il riposo non si assegna: è quello che resta a chi oggi non serve. Quindi
+  // non si pianificano i riposi, si pianifica il loro complemento — quante
+  // persone lavorano ogni giorno — e il numero esce da un conto che a questo
+  // punto è già fatto: i turni che le partite hanno in cassa (`turniResidui`)
+  // contro le presenze possibili (pianificabili × giorni).
+  //
+  // Chi non ha nessuna stazione è fuori dal conto: riposa comunque tutti i
+  // giorni, e contarlo gonfierebbe il totale dei riposi da spalmare. Onestà
+  // sul suo peso: il risultato non cambia, e non è un'opinione — ogni presenza
+  // in più porta con sé esattamente un riposo in più al giorno, quindi la
+  // differenza si annulla. Il filtro c'è perché `riposiTotali` sia il numero
+  // che dice di essere, non perché sposti l'esito; provato col mutante,
+  // toglierlo non fa diventare rosso nessun test, e infatti non gli è stato
+  // messo accanto un test che finge di difenderlo.
+  //
+  // Il resto della divisione si sparge invece di cadere tutto in testa alla
+  // settimana: `floor((i+1)·R/D) − floor(i·R/D)` mette i due riposi in più di
+  // una settimana da sedici il giovedì e la domenica, non lunedì e martedì.
+  // Concentrarli all'inizio è lo stesso difetto in scala ridotta.
+  // --------------------------------------------------------------------------
+  const pianificabili = staffList.filter(s=> s.stations && s.stations.length).length;
+  const turniPianificati = Object.keys(turniResidui)
+    .reduce((n,st)=> n + (turniResidui[st]||0), 0);
+  const riposiTotali = Math.max(0, pianificabili*days.length - turniPianificati);
+  const riposiDelGiorno = days.map((_,i)=>
+    Math.floor(riposiTotali*(i+1)/days.length) - Math.floor(riposiTotali*i/days.length));
+
   days.forEach((day, indiceGiorno)=>{
     // Le richieste approvate si applicano prima di ogni altra cosa: la persona
     // è già "occupata" per quel giorno e nessuna logica successiva la tocca.
@@ -462,10 +496,80 @@ function computeShifts(staffList, staffingNeeds, options){
     SERVICES.forEach(sv=> Object.keys(remain[sv]).forEach(st=>{
       postiOggi[st] = (postiOggi[st]||0) + remain[sv][st];
     }));
+    // Quante persone devono lavorare oggi. Il piano dei riposi lo dice, ma non
+    // comanda da solo: non si spendono più turni di quelli che restano davvero
+    // in cassa, altrimenti il budget degli spezzati andrebbe a zero su una
+    // settimana che di gente non ne ha.
+    const turniRimasti = Object.keys(turniResidui)
+      .reduce((n,st)=> n + (turniResidui[st]||0), 0);
+    // E nemmeno più di quante persone oggi un turno di lavoro ce l'hanno
+    // davvero in tasca. Senza questo tetto il piano chiede un giorno "da sei" a
+    // una brigata che oggi ne ha cinque con la quota buona: il motore preferisce
+    // i turni singoli, li esaurisce, e l'ultima partita della giornata finisce
+    // a chiamare qualcuno oltre quota. Misurato su 300 settimane: 78 turni extra
+    // comparsi dal nulla, contro zero. Un extra è una spesa vera, e non è quello
+    // che si sta cercando di sistemare qui.
+    const conQuotaOggi = staffList.filter(s=> s.stations && s.stations.length
+      && !(constraintFor(constraints, s.id, day)||{}).blocked
+      && pools[s.id].some(slot=> !slot.codes.includes(REST_CODE))).length;
+    const lavoratoriOggi = Math.max(0, Math.min(
+      pianificabili - riposiDelGiorno[indiceGiorno], turniRimasti, conQuotaOggi));
+
+    // Da "quante persone lavorano oggi" a "quanti turni per partita".
+    // Prima ogni partita si arrotondava per conto suo — `round(residui/giorni)`
+    // — e nessuno guardava la somma: cinque arrotondamenti indipendenti fanno
+    // un giorno da sette lavoratori e il giorno dopo da cinque, cioè
+    // esattamente i giorni con un riposo solo che lo chef non vuole. Ora la
+    // somma è fissata prima (è `lavoratoriOggi`) e le partite si spartiscono
+    // QUEL numero: parte intera a ciascuna, e i posti che restano ai resti più
+    // grossi. Nessuna partita riceve più turni dei posti che ha oggi né più di
+    // quelli che le restano in cassa: sarebbero turni che non può spendere, e
+    // li toglierebbe a chi invece li userebbe.
+    const stazioniOggi = Object.keys(postiOggi);
+    const esatto = {}, turniOggi = {};
+    stazioniOggi.forEach(st=>{
+      esatto[st] = (turniResidui[st]||0) / giorniRimasti;
+      turniOggi[st] = Math.min(Math.floor(esatto[st]), postiOggi[st], turniResidui[st]||0);
+    });
+    let assegnati = stazioniOggi.reduce((n,st)=> n + turniOggi[st], 0);
+    const perResto = stazioniOggi.slice()
+      .sort((a,b)=> (esatto[b]-Math.floor(esatto[b])) - (esatto[a]-Math.floor(esatto[a])));
+    // Più giri: al primo una stazione può essere già al suo tetto, al secondo
+    // un'altra che ne ha ancora spazio se lo prende. Si esce quando un giro
+    // intero non ha piazzato niente, così il ciclo finisce sempre.
+    let mosso = true;
+    while(assegnati < lavoratoriOggi && mosso){
+      mosso = false;
+      for(const st of perResto){
+        if(assegnati >= lavoratoriOggi) break;
+        if(turniOggi[st] < Math.min(postiOggi[st], turniResidui[st]||0)){
+          turniOggi[st]++; assegnati++; mosso = true;
+        }
+      }
+    }
+    // E si toglie, quando le parti intere da sole passano il segno. Serve
+    // soprattutto all'ULTIMO giorno, dove `esatto` è tutto il residuo e ogni
+    // partita chiederebbe una persona per posto: la domenica arrivava a
+    // pretendere due teste al pass quando in cassa ce n'era una, e il motore
+    // tappava il buco chiamando qualcuno oltre quota. Un turno in meno qui
+    // significa uno spezzato: la stessa persona copre pranzo e cena, che è
+    // esattamente la frase dello chef «se uno riposa l'altro fa spezzato».
+    // Misurato su 300 settimane: 78 extra prima di questo taglio, 0 dopo.
+    // Si toglie dai resti più piccoli — l'ordine di `perResto` letto al
+    // contrario — perché sono le partite che meno avevano diritto al turno in
+    // più, e mai sotto zero.
+    let calare = true;
+    while(assegnati > lavoratoriOggi && calare){
+      calare = false;
+      for(let i=perResto.length-1; i>=0; i--){
+        if(assegnati <= lavoratoriOggi) break;
+        const st = perResto[i];
+        if(turniOggi[st] > 0){ turniOggi[st]--; assegnati--; calare = true; }
+      }
+    }
     const budgetSpezzati = {};
-    Object.keys(postiOggi).forEach(st=>{
-      const turniOggi = Math.round((turniResidui[st]||0) / giorniRimasti);
-      budgetSpezzati[st] = Math.max(0, postiOggi[st] - turniOggi);
+    stazioniOggi.forEach(st=>{
+      budgetSpezzati[st] = Math.max(0, postiOggi[st] - turniOggi[st]);
     });
 
     // Un turno assegnato chiude dei posti: su tutti i servizi che il codice

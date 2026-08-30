@@ -1168,3 +1168,113 @@ test('la doppia partita vale anche generando un mese intero', () => {
   assert.equal(con.shortfalls.length, 0,
     'stazioni non e arrivata fino al motore settimana per settimana');
 });
+
+/* ===================== I RIPOSI SPALMATI =====================
+   «Li divido equamente in tutti i giorni della settimana in modo che ogni
+   giorno riposi lo stesso numero di persone o quasi, per non avere giorni in
+   cui ho 6 persone di riposo e altri in cui ce ne sta una sola.» E soprattutto:
+   «io NON guardo giorno per giorno, prima mi faccio un'idea in testa e poi
+   inizio» — quindi il conto si fa PRIMA del primo giorno, non aggiustando
+   strada facendo. */
+
+const DAYS7 = ["Lun","Mar","Mer","Gio","Ven","Sab","Dom"];
+function riposiPerGiorno(staff, newShifts){
+  return DAYS7.map(d=> staff.filter(s=> newShifts[s.id][d].code === 'R').length);
+}
+function scartoRiposi(staff, newShifts){
+  const r = riposiPerGiorno(staff, newShifts);
+  return Math.max(...r) - Math.min(...r);
+}
+
+// Brigata di misura: dodici persone su sei partite, quote diverse fra loro (chi
+// sei giorni, chi cinque, chi quattro). E' la taglia in cui il difetto si
+// vedeva a occhio nudo: senza pianificazione i riposi uscivano con 4,50 di
+// scarto medio fra il giorno piu' scarico e il piu' pieno, con punte di 5 —
+// cioe' proprio la settimana con sei a casa un giorno e uno solo il giorno dopo.
+const Q6 = [{count:6,codes:['P','S','SP']},{count:1,codes:['R']}];
+const Q5 = [{count:5,codes:['P','S','SP']},{count:2,codes:['R']}];
+const Q4 = [{count:4,codes:['P','S','SP']},{count:3,codes:['R']}];
+const BRIGATA12 = [
+  {id:'1', name:'1', stations:['primi','secondi'],      weeklyQuota:Q6},
+  {id:'2', name:'2', stations:['primi','pass'],         weeklyQuota:Q5},
+  {id:'3', name:'3', stations:['secondi','primi'],      weeklyQuota:Q5},
+  {id:'4', name:'4', stations:['secondi','pass'],       weeklyQuota:Q4},
+  {id:'5', name:'5', stations:['antipasti','insalate'], weeklyQuota:Q6},
+  {id:'6', name:'6', stations:['antipasti','primi'],    weeklyQuota:Q5},
+  {id:'7', name:'7', stations:['insalate','antipasti'], weeklyQuota:Q5},
+  {id:'8', name:'8', stations:['pass','secondi'],       weeklyQuota:Q4},
+  {id:'9', name:'9', stations:['lavaggio'],             weeklyQuota:Q6},
+  {id:'10',name:'10',stations:['lavaggio','insalate'],  weeklyQuota:Q4},
+  {id:'11',name:'11',stations:['primi','antipasti'],    weeklyQuota:Q5},
+  {id:'12',name:'12',stations:['pass','insalate'],      weeklyQuota:Q4},
+];
+const UNO = n => ({stationId:n, count:1});
+const PARTITE6 = ['primi','secondi','antipasti','insalate','pass','lavaggio'];
+const FABBISOGNO12 = { colazione:[], pranzo:PARTITE6.map(UNO), cena:PARTITE6.map(UNO) };
+
+// La brigata dello chef: otto persone, due partite a testa, cinque turni di
+// quota. Serve piu' avanti, dove il conto deve tornare esatto.
+const QUOTA5 = [{count:5,codes:['P','S','SP']},{count:2,codes:['R']}];
+const BRIGATA8 = [
+  { id:'P1', name:'P1', stations:['primi','secondi'],      weeklyQuota:QUOTA5 },
+  { id:'P2', name:'P2', stations:['primi','pass'],         weeklyQuota:QUOTA5 },
+  { id:'S1', name:'S1', stations:['secondi','primi'],      weeklyQuota:QUOTA5 },
+  { id:'S2', name:'S2', stations:['secondi','pass'],       weeklyQuota:QUOTA5 },
+  { id:'A1', name:'A1', stations:['antipasti','insalate'], weeklyQuota:QUOTA5 },
+  { id:'A2', name:'A2', stations:['antipasti','primi'],    weeklyQuota:QUOTA5 },
+  { id:'I1', name:'I1', stations:['insalate','antipasti'], weeklyQuota:QUOTA5 },
+  { id:'I2', name:'I2', stations:['pass','secondi'],       weeklyQuota:QUOTA5 },
+];
+const PARTITE5 = ['primi','secondi','antipasti','insalate','pass'];
+const FABBISOGNO8 = { colazione:[], pranzo:PARTITE5.map(UNO), cena:PARTITE5.map(UNO) };
+
+test('i riposi si spalmano sui giorni: mai sei a casa un giorno e uno solo il giorno dopo', () => {
+  // Misurato su 200 settimane con gli stessi semi: scarto medio 4,50 e punta 5
+  // prima della pianificazione, 2,00 e punta 2 dopo. La soglia sta in mezzo,
+  // non a occhio.
+  let somma = 0, peggio = 0;
+  for(let i=0;i<80;i++){
+    const { newShifts } = computeShifts(BRIGATA12, FABBISOGNO12, {config:BASE, seed:'r'+i});
+    const x = scartoRiposi(BRIGATA12, newShifts);
+    somma += x; if(x > peggio) peggio = x;
+  }
+  assert.ok(peggio <= 3,
+    `${peggio} riposi di scarto fra il giorno piu' pieno e il piu' scarico: non sono spalmati`);
+  assert.ok(somma/80 <= 2.6,
+    `scarto medio ${(somma/80).toFixed(2)} su 80 settimane: i riposi non sono spalmati`);
+});
+
+test('spalmare i riposi non apre buchi: la copertura viene prima della forma', () => {
+  // Il piano dei riposi e' un vincolo MORBIDO: se rispettarlo lasciasse una
+  // postazione scoperta, si sfora. Il metro e' il comportamento precedente
+  // sulla stessa brigata e sugli stessi semi — 99 posti scoperti su 200
+  // settimane. Se pianificare costasse copertura questo numero salirebbe;
+  // invece scende a 51, perche' i turni smettono di ammucchiarsi nei primi
+  // giorni e ne restano per il sabato.
+  let scoperti = 0;
+  for(let i=0;i<200;i++){
+    scoperti += computeShifts(BRIGATA12, FABBISOGNO12, {config:BASE, seed:'s'+i})
+      .shortfalls.reduce((n,x)=> n + x.missing, 0);
+  }
+  assert.ok(scoperti <= 70,
+    `${scoperti} posti scoperti su 200 settimane, contro i 99 di prima: il piano dei riposi sta togliendo copertura`);
+});
+
+test('spalmare i riposi non chiama nessuno oltre quota', () => {
+  // Un piano che pretende piu' gente di quanta ne resta in cassa si paga in
+  // turni extra, e un extra e' una spesa vera. La prima versione ne faceva
+  // comparire 78 su 300 settimane, tutti all'ultimo giorno e tutti sulla
+  // partita con piu' turni allocati: il piano chiedeva due teste dove ne era
+  // rimasta una, invece di far fare a quella uno spezzato.
+  let extra = 0, peggio = 0;
+  for(let i=0;i<120;i++){
+    const r = computeShifts(BRIGATA8, FABBISOGNO8, {config:BASE, seed:'m'+i});
+    extra += r.extras.length;
+    const x = scartoRiposi(BRIGATA8, r.newShifts);
+    if(x > peggio) peggio = x;
+  }
+  assert.equal(extra, 0,
+    `${extra} turni oltre quota: il piano dei riposi chiede piu' gente di quanta ce n'e'`);
+  assert.ok(peggio <= 1,
+    `${peggio} riposi di scarto fra il giorno piu' pieno e il piu' scarico`);
+});
