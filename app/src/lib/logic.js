@@ -210,6 +210,28 @@ function codeAllowed(constraints, staffId, day, code, codeToServices){
 // coprire un buco, senza che nessuno l'abbia deciso.
 function puoFareExtra(s){ return s.puoFareExtra !== false; }
 
+// ----------------------------------------------------------------------------
+// PRIORITA' DI PARTITA. `staff.stations` e' sempre stato un array, e l'ordine
+// c'era gia': semplicemente nessuno lo guardava. Adesso l'ordine E' la
+// priorita' — la prima stazione e' la partita principale della persona, le
+// successive sono quelle su cui si sposta quando serve.
+//
+// Nessuna coppia di partite e' cablata qui dentro. Parole dello chef: «tu
+// menzioni sempre primi e pass, ma alcune persone magari fanno primi e secondi
+// o secondi e pass, quindi la priorita' la deve impostare sempre il titolare».
+// Vale per qualunque combinazione, e non c'e' niente da migrare: chi ha gia' i
+// dati salvati ha gia' un ordine, quello in cui le stazioni sono state spuntate.
+// Nel peggiore dei casi e' un ordine casuale, e il motore si comporta come
+// prima; appena il titolare lo sistema, il motore lo segue.
+//
+// 999 per chi non ha quella stazione: non dovrebbe capitare (i candidati sono
+// gia' filtrati per qualifica) ma un -1 dell'indexOf finirebbe DAVANTI a tutti
+// e ribalterebbe il criterio invece di non applicarlo.
+function prioritaDi(s, stationId){
+  const i = (s.stations||[]).indexOf(stationId);
+  return i < 0 ? 999 : i;
+}
+
 function computeShifts(staffList, staffingNeeds, options){
   options = options || {};
   const cfg = options.config || buildShiftConfig(null, null);
@@ -318,8 +340,19 @@ function computeShifts(staffList, staffingNeeds, options){
   // quella partita può contare di avere in settimana — non chi li fa: il "chi"
   // lo decide il giro sui giorni, con i criteri che già esistono.
   const alloca = (st, tetto)=>{
+    // Stessa gerarchia dei candidati sui giorni, e per lo stesso motivo: prima
+    // chi sa fare meno stazioni, poi — a pari flessibilita' — chi ha QUESTA
+    // come partita principale. E' letteralmente «mi divido prima le persone a
+    // partita»: la capienza della settimana va sulla partita di casa, e solo
+    // quella che avanza finisce sulle secondarie.
+    // Non e' un abbellimento, e' la meta' che conta: guardare l'ordine solo
+    // sui giorni e non qui lascia la capienza sulla partita sbagliata e a fine
+    // settimana manca dove serviva. Misurato su una brigata di otto persone
+    // con due partite a testa, 20 lotti da 120 generazioni: con questo
+    // criterio 30-59 scoperture per lotto, senza 114-155.
     const qualificati = staffList.filter(s=> s.stations && s.stations.includes(st))
-      .sort((a,b)=> a.stations.length - b.stations.length);
+      .sort((a,b)=> (a.stations.length - b.stations.length)
+        || (prioritaDi(a, st) - prioritaDi(b, st)));
     // Un turno alla volta, a giro. Prendendo da ciascuno TUTTO quello che ha
     // prima di passare al successivo, la prima persona dell'elenco si porta via
     // la partita e la seconda resta a guardare: misurato su due pari qualifica
@@ -432,6 +465,29 @@ function computeShifts(staffList, staffingNeeds, options){
           candidates = shuffleArray(candidates, rand);
           const perStazioni = (a,b)=>
             (a.stations?a.stations.length:999) - (b.stations?b.stations.length:999);
+          // LA PARTITA PRINCIPALE, e dove si infila fra i criteri che c'erano.
+          // La regola per decidere l'ordine e' una sola: prima i criteri che
+          // difendono la COPERTURA, poi quelli che difendono la FORMA del
+          // prospetto. Un buco manda qualcuno a cercare un problema vero; un
+          // prospetto che copre tutto ma non somiglia a come lo chef si divide
+          // la brigata e' solo da risistemare a mano.
+          //   1. «chi sa fare meno stazioni» — copertura: sbagliarlo brucia il
+          //      jolly e lascia scoperta una stazione che nessun altro sa fare.
+          //      E' una regressione gia' pagata in produzione, e resta prima.
+          //   2. «chi ha piu' quota da smaltire» (o, fra gli extra, «chi ne ha
+          //      fatti meno») — copertura anche questo: e' cio' che impedisce
+          //      di bruciare i turni il lunedi' e arrivare a sabato a secco.
+          //   3. «di chi e' questa partita» — forma. Ed e' qui.
+          // Nella pratica decide quasi sempre lei lo stesso, perche' le brigate
+          // vere sono fatte di persone con lo stesso numero di partite (due a
+          // testa, nel caso dello chef) e con quote identiche: i primi due
+          // criteri pareggiano, e resta questo.
+          // La frase «le secondarie solo quando la principale e' gia' coperta»
+          // non e' scritta da nessuna parte: esce da sola da questo confronto.
+          // Finche' su una stazione c'e' qualcuno che ce l'ha come principale,
+          // chi ce l'ha come seconda gli sta dietro e viene chiamato solo
+          // quando i primi sono finiti o sono gia' occupati altrove.
+          const perPriorita = (a,b)=> prioritaDi(a, stationId) - prioritaDi(b, stationId);
           if(isExtra){
             // Fra chi si può chiamare oltre quota va per primo chi ne ha fatti
             // MENO. Qui prima c'era il contrario, e la spiegazione suonava bene:
@@ -442,8 +498,14 @@ function computeShifts(staffList, staffingNeeds, options){
             // riuscito a coprire tutti i turni con soli 6 extra dati a 6 persone
             // diverse". Sei extra su una testa sola sono una settimana rovinata
             // a una persona; sparsi, sono un turno in più a testa.
+            // Qui la priorita' di partita sta DIETRO alla spartizione degli
+            // extra, e solo qui: un extra e' una telefonata a chi era libero, e
+            // «a chi ne ha gia' fatti meno» pesa piu' di «di chi e' la
+            // partita». Fra due persone con lo stesso numero di extra alle
+            // spalle, allora si', va chi ci sta di casa.
             candidates.sort((a,b)=> perStazioni(a,b)
               || (extraFatti[a.id] - extraFatti[b.id])
+              || perPriorita(a,b)
               || (oreFatte[a.id] - oreFatte[b.id]));
           } else {
             // A parità di qualifica lavora prima chi ha più quota da smaltire: la
@@ -451,8 +513,16 @@ function computeShifts(staffList, staffingNeeds, options){
             // lasciando il weekend agli extra. Poi, sempre a parità, chi finora ha
             // fatto meno ore — prima di questo criterio a decidere era solo il caso,
             // e il motore non sapeva nemmeno che SP dura 11 ore e P ne dura 8.
+            // La priorita' di partita sta DIETRO alla quota residua, e la
+            // misura ha corretto la prima versione: messa davanti sembrava piu'
+            // fedele allo chef, ma la quota residua non e' un pareggiamento del
+            // carico — e' il criterio che impedisce di bruciare i turni a
+            // inizio settimana. Scavalcandolo, sulla brigata di misura le
+            // scoperture salivano da 0,71 a 1,30 a settimana. Dietro, scendono
+            // a 0,39 E la quota sulla partita principale sale lo stesso.
             candidates.sort((a,b)=> perStazioni(a,b)
               || (quotaLavoroResidua(b) - quotaLavoroResidua(a))
+              || perPriorita(a,b)
               || (oreFatte[a.id] - oreFatte[b.id]));
           }
           const chosen = candidates[0];

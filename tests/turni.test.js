@@ -906,3 +906,119 @@ test('un tetto agli extra pari a zero vuol dire NESSUN extra, non extra a volont
   assert.equal(extras.length, 0, `tetto a zero ma ${extras.length} extra assegnati`);
   assert.ok(shortfalls.length > 0, 'il buco va dichiarato, non nascosto');
 });
+
+/* ===================== PRIORITA' DI PARTITA =====================
+   `staff.stations` e' sempre stato un array, e l'ordine c'era gia': adesso
+   quell'ordine E' la priorita', la prima stazione e' la partita principale.
+   Nessuna coppia di partite e' cablata: la decide il titolare, e vale per
+   qualunque combinazione. Parole dello chef: «alcune persone magari fanno primi
+   e secondi o secondi e pass, quindi la priorita' la deve impostare sempre il
+   titolare o chi per lui gestisce i dipendenti sulla piattaforma». */
+
+test('la partita principale viene servita per prima, e a deciderlo e l ORDINE di stations', () => {
+  // Due persone, le stesse due partite, ordini opposti. Nessuna delle due e'
+  // piu' "specialista" dell'altra: se il motore non guardasse l'ordine, a
+  // decidere resterebbe solo il mescolamento dei candidati.
+  const brigata = (primaDiA, primaDiB) => [
+    { id:'A', name:'A', stations:[primaDiA, primaDiB], weeklyQuota:[{count:7,codes:['P']}] },
+    { id:'B', name:'B', stations:[primaDiB, primaDiA], weeklyQuota:[{count:7,codes:['P']}] },
+  ];
+  const needs = { colazione:[],
+    pranzo:[{stationId:'primi',count:1},{stationId:'pass',count:1}], cena:[] };
+  for(let i=0;i<50;i++){
+    const dritto = computeShifts(brigata('primi','pass'), needs, {config:BASE});
+    GIORNI7.forEach(d=>{
+      assert.equal(dritto.newShifts['A'][d].stationId, 'primi',
+        `il ${d} A e' finito fuori dalla sua partita principale`);
+      assert.equal(dritto.newShifts['B'][d].stationId, 'pass',
+        `il ${d} B e' finito fuori dalla sua partita principale`);
+    });
+    // Rovesciando i due elenchi si rovescia il prospetto: la prova che a
+    // contare e' la posizione nell'array, non il nome della stazione ne'
+    // l'ordine dell'anagrafica.
+    const rovescio = computeShifts(brigata('pass','primi'), needs, {config:BASE});
+    GIORNI7.forEach(d=>{
+      assert.equal(rovescio.newShifts['A'][d].stationId, 'pass',
+        `il ${d} l'ordine di stations e' stato ignorato`);
+      assert.equal(rovescio.newShifts['B'][d].stationId, 'primi',
+        `il ${d} l'ordine di stations e' stato ignorato`);
+    });
+  }
+});
+
+test('la partita principale non passa davanti alla regola del jolly', () => {
+  // I due criteri possono litigare, e quando litigano vince quello vecchio.
+  // Qui il pass e' la partita PRINCIPALE del jolly e la SECONDARIA dello
+  // specialista: la priorita' da sola manderebbe il jolly al pass e lo
+  // brucerebbe, che e' esattamente la regressione gia' pagata in produzione.
+  const staff = [
+    { id:'sp', name:'Specialista', stations:['lavaggio','pass'],
+      weeklyQuota:[{count:7,codes:['P']}] },
+    { id:'jo', name:'Jolly', stations:['pass','primi','secondi'],
+      weeklyQuota:[{count:7,codes:['P']}] },
+  ];
+  const needs = { colazione:[], pranzo:[{stationId:'pass',count:1}], cena:[] };
+  for(let i=0;i<50;i++){
+    const { newShifts } = computeShifts(staff, needs, {config:BASE});
+    GIORNI7.forEach(d=>{
+      assert.equal(newShifts['sp'][d].stationId, 'pass',
+        `il ${d} al pass e' andato il jolly, che serviva libero altrove`);
+      assert.equal(newShifts['jo'][d].stationId, null,
+        `il ${d} il jolly e' stato consumato al pass`);
+    });
+  }
+});
+
+test('la partita principale non fa saltare la copertura: prima si copre, poi si sceglie dove', () => {
+  // La priorita' e' una preferenza, non un vincolo: quando la principale e'
+  // gia' coperta la persona va sulla secondaria invece di restare a casa.
+  const staff = [
+    { id:'A', name:'A', stations:['primi','pass'], weeklyQuota:[{count:7,codes:['P']}] },
+    { id:'B', name:'B', stations:['primi','pass'], weeklyQuota:[{count:7,codes:['P']}] },
+  ];
+  const needs = { colazione:[],
+    pranzo:[{stationId:'primi',count:1},{stationId:'pass',count:1}], cena:[] };
+  for(let i=0;i<50;i++){
+    const { shortfalls, extras, newShifts } = computeShifts(staff, needs, {config:BASE});
+    assert.equal(shortfalls.length, 0, 'la priorita di partita ha aperto un buco');
+    assert.equal(extras.length, 0);
+    GIORNI7.forEach(d=>{
+      const occupate = [newShifts['A'][d].stationId, newShifts['B'][d].stationId].sort();
+      assert.deepEqual(occupate, ['pass','primi'],
+        `il ${d} le due postazioni non sono state coperte entrambe`);
+    });
+  }
+});
+
+test('anche la ripartizione della settimana segue la partita principale', () => {
+  // «Mi divido prima le persone a partita»: il motore lo fa PRIMA di guardare
+  // il primo giorno, distribuendo la capienza di ciascuno fra le stazioni. Se
+  // li' l'ordine di `stations` non viene guardato, la capienza di una persona
+  // finisce sulla partita sbagliata e a fine settimana manca dove serviva.
+  //
+  // Brigata di misura: otto persone, due partite a testa, cinque turni di
+  // quota — cioe' esattamente il caso dello chef, dove il criterio "chi sa fare
+  // meno stazioni" pareggia sempre e a decidere resta questo.
+  // Misurato su 20 lotti da 120 generazioni: con il criterio 30-59 scoperture
+  // per lotto, senza 114-155. La soglia sta in mezzo, non a occhio.
+  const quota = [{count:5,codes:['P','S','SP']},{count:2,codes:['R']}];
+  const staff = [
+    { id:'P1', name:'P1', stations:['primi','secondi'],      weeklyQuota:quota },
+    { id:'P2', name:'P2', stations:['primi','pass'],         weeklyQuota:quota },
+    { id:'S1', name:'S1', stations:['secondi','primi'],      weeklyQuota:quota },
+    { id:'S2', name:'S2', stations:['secondi','pass'],       weeklyQuota:quota },
+    { id:'A1', name:'A1', stations:['antipasti','insalate'], weeklyQuota:quota },
+    { id:'A2', name:'A2', stations:['antipasti','primi'],    weeklyQuota:quota },
+    { id:'I1', name:'I1', stations:['insalate','antipasti'], weeklyQuota:quota },
+    { id:'I2', name:'I2', stations:['pass','secondi'],       weeklyQuota:quota },
+  ];
+  const uno = n => ({stationId:n, count:1});
+  const partite = ['primi','secondi','antipasti','insalate','pass'];
+  const needs = { colazione:[], pranzo:partite.map(uno), cena:partite.map(uno) };
+  let scoperte = 0;
+  for(let i=0;i<120;i++){
+    scoperte += computeShifts(staff, needs, {config:BASE}).shortfalls.length;
+  }
+  assert.ok(scoperte <= 85,
+    `${scoperte} scoperture su 120 generazioni: la capienza settimanale non sta seguendo la partita principale`);
+});
