@@ -195,6 +195,23 @@
             <button id="period-today" data-t>Oggi</button>
           </div>
         </div>
+        <!-- Le ore di contratto che il fabbisogno non chiede. Lo chef le paga
+             comunque: sceglie lui se lasciarle in tasca, farle collocare
+             all'app, o concentrarle sulle sere che tirano. -->
+        <div class="panel" id="eccedenza-panel">
+          <h3 data-t>Le ore che avanzano</h3>
+          <p class="small-note mt-0" data-t>Quando il fabbisogno non chiede tutti i turni di una persona, quelle ore le paghi lo stesso. Qui decidi dove finiscono.</p>
+          <div class="chip-toggle" id="ecc-modo">
+            <button type="button" data-modo="auto" data-t>Le colloca l'app</button>
+            <button type="button" data-modo="giorni" data-t>Le scelgo io</button>
+            <button type="button" data-modo="lascia" data-t>Lasciale in tasca</button>
+          </div>
+          <div id="ecc-giorni-wrap" class="hidden">
+            <label data-t>In quest'ordine, finché ci stanno</label>
+            <div class="chip-toggle" id="ecc-giorni"></div>
+            <p class="small-note mt-1" data-t>Non è un divieto: un giorno non scelto resta l'ultima spiaggia, se i tuoi non bastano.</p>
+          </div>
+        </div>
         <button class="btn full mb-4" id="btn-generate-shifts" data-t>🎲 Genera turni del periodo</button>
         <div id="generate-log" class="mb-4"></div>
         <!-- Finché non si pubblica, la brigata non vede niente di questo

@@ -1,7 +1,7 @@
 import { t } from '../core/lingua.ts';
 import { SERVICE_LABEL, conferma, esc, periodDates, refreshShiftConfig, save, setPeriodAnchor, setPeriodMode, shiftPeriod, state, toast } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
-import { REST_CODE, codeAllowed, computeShiftsForDates, constraintFor, parseISO, puoFareExtra } from '../lib/logic.js';
+import { DAYS, REST_CODE, codeAllowed, computeShiftsForDates, constraintFor, parseISO, puoFareExtra } from '../lib/logic.js';
 import { renderDashboard } from '../viste/dashboard.js';
 import { renderOreExtra, renderTurni } from './griglia.js';
 import { caricaRichieste, constraintsFromRequests } from './richieste.js';
@@ -70,8 +70,15 @@ async function generateRandomShifts(){
   // l'unica strada per cui la mano che una partita da' a un'altra (`copreAnche`)
   // arriva al motore. Senza, il riquadro «copre anche» nella scheda della
   // stazione si accende, si salva, e non cambia un turno.
-  const { newShifts, shortfalls, extras, nonPianificabili, quotaNonSpesa } = computeShiftsForDates(state.staff, state.staffingNeeds,
-    {config: refreshShiftConfig(), dates, constraints, stazioni: state.stations});
+  // Le ore di contratto che il fabbisogno non chiede non restano in tasca: si
+  // collocano. Il motore ha come predefinito 'lascia' per non cambiare da solo
+  // il risultato di chi lo chiama nei test; qui invece il predefinito e' 'auto',
+  // che e' quello che ha chiesto lo chef — le ore le paga comunque, tanto vale
+  // averle in cucina la sera che tira.
+  const eccedenza = state.eccedenzaOre || { modo:'auto', giorni:[] };
+  const { newShifts, shortfalls, extras, nonPianificabili, quotaNonSpesa,
+          eccedenzeCollocate } = computeShiftsForDates(state.staff, state.staffingNeeds,
+    {config: refreshShiftConfig(), dates, constraints, stazioni: state.stations, eccedenza});
   // Si sovrascrivono SOLO le date del periodo: i turni delle altre settimane
   // gia' pianificate non devono sparire perche' se ne rigenera una.
   state.staff.forEach(s=>{
@@ -118,6 +125,20 @@ async function generateRandomShifts(){
     premessa += `<div class="alert-box">Il generatore non ha dato turni a ${nomi}: ${nonPianificabili.length>1?'non hanno':'non ha'} nessuna stazione assegnata, e un turno senza stazione non copre nessun servizio — conterebbe nelle ore ma non coprirebbe niente. ` +
       `Nella griglia ${nonPianificabili.length>1?'restano visibili, marcati':'resta visibile, marcato'} con un pallino vuoto: i turni si assegnano a mano, oppure si assegnano le stazioni nella scheda della persona.</div>`;
   }
+  if(eccedenzeCollocate && eccedenzeCollocate.length){
+    // Tenuta SEPARATA dai turni extra, e non e' pignoleria: un extra e' oltre
+    // la quota e costa di piu', un'eccedenza e' dentro la quota ed e' gia'
+    // pagata. Metterle nella stessa riga vorrebbe dire far credere allo chef
+    // di spendere soldi che ha gia' speso.
+    const perTesta = {};
+    eccedenzeCollocate.forEach(e=>{ perTesta[e.staffName] = (perTesta[e.staffName]||0)+1; });
+    const dove = (eccedenza.modo === 'giorni' && eccedenza.giorni && eccedenza.giorni.length)
+      ? `sui giorni che hai scelto (${eccedenza.giorni.join(', ')})`
+      : "sui giorni dove il servizio preme di più";
+    premessa += `<div class="ok-box">${eccedenzeCollocate.length} or${eccedenzeCollocate.length>1?'e':'a'} di contratto collocat${eccedenzeCollocate.length>1?'e':'a'} ${dove} — ` +
+      Object.entries(perTesta).map(([nome,n2])=>`${esc(nome)} (+${n2})`).join(', ') +
+      `. Non sono turni extra: stanno dentro la quota di queste persone, le stavi gia' pagando.</div>`;
+  }
   if(quotaNonSpesa && quotaNonSpesa.length){
     // Da quando il generatore non rabbocca piu' i turni che non servono,
     // qualcuno puo' chiudere la settimana sotto le ore contrattuali. E' un
@@ -144,9 +165,17 @@ async function generateRandomShifts(){
   toast(shortfalls.length ? 'Turni generati — alcune postazioni restano scoperte, vedi dettagli' : (extras.length ? 'Turni generati — con alcuni turni extra' : 'Turni generati — fabbisogno coperto'));
 }
 document.getElementById('btn-generate-shifts').addEventListener('click', generateRandomShifts);
+document.querySelectorAll('#ecc-modo button').forEach(b=> b.addEventListener('click', ()=>{
+  const cfg = state.eccedenzaOre || (state.eccedenzaOre = {modo:'auto', giorni:[]});
+  cfg.modo = b.dataset.modo;
+  save('eccedenzaOre'); renderEccedenza();
+}));
 
 /* ---- Navigazione del periodo ---- */
-function aggiornaPeriodo(){ renderTurni(); renderOreExtra(); renderPubblicazione(); }
+function aggiornaPeriodo(){ renderTurni(); renderOreExtra(); renderPubblicazione(); renderEccedenza(); }
+// Anche al primo disegno, non solo cambiando periodo: senza, i pulsanti
+// restano tutti spenti e sembra che nessun modo sia scelto.
+renderEccedenza();
 document.querySelectorAll('.period-modes button').forEach(b=>b.addEventListener('click', ()=>{
   setPeriodMode(b.dataset.period);
   aggiornaPeriodo();
@@ -159,6 +188,29 @@ document.getElementById('period-today').addEventListener('click', ()=>{ setPerio
    Chi ha solo lettura vede un turno solo quando la sua data è stata pubblicata.
    Il filtro vero è nel database (leggi_sezione): qui c'è solo il comando.
    ============================================================================ */
+// I giorni in ORDINE di preferenza, non interruttori: cliccandoli si accodano,
+// e l'app scorre la lista dall'alto finché le ore ci stanno. Il numero accanto
+// al nome dice a che punto della fila sta quel giorno — senza, «Ven e Sab
+// accesi» non direbbe quale dei due viene prima quando ne avanza una sola.
+export function renderEccedenza(){
+  const cfg = state.eccedenzaOre || (state.eccedenzaOre = {modo:'auto', giorni:[]});
+  document.querySelectorAll('#ecc-modo button').forEach(b=>
+    b.classList.toggle('on', b.dataset.modo === cfg.modo));
+  document.getElementById('ecc-giorni-wrap').classList.toggle('hidden', cfg.modo !== 'giorni');
+  const box = document.getElementById('ecc-giorni');
+  box.innerHTML = DAYS.map(g=>{
+    const i = (cfg.giorni||[]).indexOf(g);
+    return `<button type="button" data-g="${esc(g)}" class="${i>=0?'on':''}">${esc(g)}${i>=0?` <b>${i+1}</b>`:''}</button>`;
+  }).join('');
+  box.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{
+    const g = b.dataset.g;
+    cfg.giorni = cfg.giorni || [];
+    const i = cfg.giorni.indexOf(g);
+    if(i>=0) cfg.giorni.splice(i,1); else cfg.giorni.push(g);
+    save('eccedenzaOre'); renderEccedenza();
+  }));
+}
+
 export function renderPubblicazione(){
   const box = document.getElementById('pubblica-box');
   // Chi non può modificare non pubblica niente: per lui il riquadro non esiste.
