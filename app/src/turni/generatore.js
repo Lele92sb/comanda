@@ -66,8 +66,12 @@ async function generateRandomShifts(){
       if(!constraints[staffId][d]) constraints[staffId][d] = {blocked:'R'};
     });
   });
+  // `stazioni` NON e' un doppione di `state.stations` gia' noto altrove: e'
+  // l'unica strada per cui la mano che una partita da' a un'altra (`copreAnche`)
+  // arriva al motore. Senza, il riquadro «copre anche» nella scheda della
+  // stazione si accende, si salva, e non cambia un turno.
   const { newShifts, shortfalls, extras, nonPianificabili, quotaNonSpesa } = computeShiftsForDates(state.staff, state.staffingNeeds,
-    {config: refreshShiftConfig(), dates, constraints});
+    {config: refreshShiftConfig(), dates, constraints, stazioni: state.stations});
   // Si sovrascrivono SOLO le date del periodo: i turni delle altre settimane
   // gia' pianificate non devono sparire perche' se ne rigenera una.
   state.staff.forEach(s=>{
