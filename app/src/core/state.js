@@ -1,5 +1,5 @@
 import { Cloud, storageGet, storageSet } from '../lib/cloud.js';
-import { DAYS, DEFAULT_SERVICES, DEFAULT_SHIFT_TYPES, buildShiftConfig, monthDates, parseISO, weekDates } from '../lib/logic.js';
+import { DAYS, DEFAULT_SERVICES, DEFAULT_SHIFT_TYPES, buildShiftConfig, monthDates, normalizzaCella, parseISO, weekDates } from '../lib/logic.js';
 /* ============================= STATE ============================= */
 export const STORE_KEYS = ['ingredients','subrecipes','recipes','menus','staff','shifts','knowledge','chatHistory','wellbeing','suppliers','stations','staffingNeeds','services','shiftTypes','importedInvoices','invoiceHistory','publishedShifts'];
 export let state = { ingredients:[], subrecipes:[], recipes:[], menus:[], staff:[], shifts:{}, knowledge:[], chatHistory:[], wellbeing:[], suppliers:[], stations:[], staffingNeeds:{}, services:[], shiftTypes:[], importedInvoices:[], invoiceHistory:[], publishedShifts:[] };
@@ -133,7 +133,26 @@ export function migrateData(){
     state.shiftTypes = DEFAULT_SHIFT_TYPES.map(t=>({id:uid(), ...t}));
   }
   state.shiftTypes.forEach(t=>{ if(!t.id) t.id = uid(); });
-  refreshShiftConfig();
+
+  // La stazione era una sola per giornata: chi faceva spezzato copriva pranzo e
+  // cena, ma su una partita sola. Ora e' una per servizio. Il vecchio dato non
+  // si converte a mano — ci pensa `normalizzaCella`, che e' l'unico punto che
+  // sa riempire la mappa e riallineare `stationId`. Normalizzazione IN LETTURA,
+  // come le quattro migrazioni qui sopra: la forma nuova finisce sul database
+  // al primo salvataggio, senza script SQL e senza "aggiorna i tuoi dati".
+  //
+  // VA DOPO refreshShiftConfig(), e non e' un dettaglio d'ordine. Serve
+  // `codeToServices` della cucina VERA: messo prima, la configurazione e'
+  // ancora quella predefinita colazione/pranzo/cena, e una cucina che si e'
+  // scritta i propri tipi di turno (aperitivo "A", brunch "B") si ritroverebbe
+  // ogni turno con la mappa vuota. Non un errore a schermo: le stazioni
+  // sparirebbero in silenzio dalla griglia di chi ha personalizzato i servizi.
+  const cfgTurni = refreshShiftConfig();
+  Object.keys(state.shifts||{}).forEach(staffId=>{
+    Object.keys(state.shifts[staffId]||{}).forEach(day=>{
+      normalizzaCella(state.shifts[staffId][day], cfgTurni);
+    });
+  });
 
   if(!state.staffingNeeds) state.staffingNeeds = {};
   SERVICES().forEach(sv=>{ if(!state.staffingNeeds[sv]) state.staffingNeeds[sv]=[]; });

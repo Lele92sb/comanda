@@ -95,6 +95,108 @@ function buildShiftConfig(services, shiftTypes){
 }
 
 // ----------------------------------------------------------------------------
+// UNA STAZIONE PER SERVIZIO. «Potrebbe essere che la stessa persona stia a
+// pranzo in una partita e a cena in un'altra.»
+//
+// La cella era { code:'SP', stationId:'st1' }: la stazione era una sola per
+// giornata, quindi chi faceva spezzato copriva pranzo e cena ma su una partita
+// sola. Ora la cella porta anche una MAPPA servizio → stazione:
+//
+//     { code:'SP', stations:{pranzo:'st1', cena:'st4'}, stationId:'st1' }
+//
+// La chiave e' il SERVIZIO perche' e' l'unita' in cui parla lo chef ed e' gia'
+// l'unita' di tutto il resto del motore (`staffingNeeds[sv]`, `remain[sv]`, i
+// record di scopertura e di extra). Non c'e' nessun caso particolare
+// "spezzato": un codice che coprisse TRE servizi ci sta senza altre modifiche,
+// come il file dichiara in testa.
+//
+// `stationId` NON SI TOGLIE, ed e' un contratto verso il passato, non una
+// svista. Resta scritto, sempre allineato alla prima stazione della mappa:
+//   - `Cloud.impegniAltrove` legge i turni di UN'ALTRA cucina, che puo' essere
+//     ancora su una versione vecchia dell'app — e viceversa;
+//   - una scheda gia' aperta col pacchetto vecchio continua a mostrare qualcosa
+//     di sensato invece di una cella muta;
+//   - se questa versione va ritirata, i dati salvati restano leggibili.
+// Lo riscrive UN SOLO punto, `normalizzaCella`: scritto a mano dai chiamanti
+// divergerebbe dalla mappa, e allora sarebbe peggio di niente.
+// ----------------------------------------------------------------------------
+
+// I servizi coperti dal codice di una cella. Tre casi, e la differenza conta:
+//   []   il codice non copre servizi — R, M, F, cella vuota;
+//   null NON SI SA: e' un tipo di turno che questa cucina non ha (piu'). Non e'
+//        la stessa cosa di "nessuno", e trattarlo come tale butterebbe via la
+//        stazione di un turno il cui codice e' stato cancellato per sbaglio.
+function serviziDelCodice(code, cfg){
+  if(!code || SPECIAL_CODES[code]) return [];
+  const m = cfg && cfg.codeToServices;
+  return (m && m[code]) ? m[code].slice() : null;
+}
+
+// La stazione di UN servizio in questa cella.
+// Il confronto e' `!== undefined`, non un `||`, e non e' stile: una stazione
+// tolta a mano ("nessuna") su un servizio si scrive `null` nella mappa. Con
+// `||` ricadrebbe sul vecchio `stationId` e la cella tornerebbe da sola al
+// valore appena cancellato.
+function stazioneDi(cella, serviceId){
+  if(!cella || typeof cella !== 'object') return null;
+  if(cella.stations && cella.stations[serviceId] !== undefined){
+    return cella.stations[serviceId] || null;
+  }
+  return cella.stationId || null;
+}
+
+// Le stazioni della giornata, senza ripetizioni, in ordine di servizio. Una
+// sola voce e' il caso normale; due vogliono dire due partite nello stesso
+// giorno.
+function stazioniDi(cella, cfg){
+  if(!cella || typeof cella !== 'object') return [];
+  const servizi = serviziDelCodice(cella.code, cfg);
+  if(servizi === null) return cella.stationId ? [cella.stationId] : [];
+  const out = [];
+  servizi.forEach(sv=>{
+    const st = stazioneDi(cella, sv);
+    if(st && !out.includes(st)) out.push(st);
+  });
+  return out;
+}
+
+// Porta la cella in forma canonica, e riscrive `stationId`. E' l'unico punto
+// che tocca quel campo.
+//   - Cella nella forma VECCHIA: la stazione unica diventa la stazione di TUTTI
+//     i servizi che il codice copre. E' l'unica lettura possibile di un dato
+//     che i servizi non li distingueva, ed e' esattamente cio' che quel turno
+//     voleva dire.
+//   - La mappa finisce con ESATTAMENTE una chiave per servizio coperto: le
+//     chiavi orfane (un servizio tolto dal tipo di turno) spariscono, i servizi
+//     nuovi entrano ereditando la stazione gia' decisa.
+//   - Codice sconosciuto: la mappa resta com'e' e `stationId` NON si tocca.
+//     Meglio un dato che gli accessori sanno ancora leggere che una stazione
+//     buttata via per un codice che non c'e' piu'.
+function normalizzaCella(cella, cfg){
+  if(!cella || typeof cella !== 'object') return cella;
+  if(!cella.stations || typeof cella.stations !== 'object') cella.stations = {};
+  const servizi = serviziDelCodice(cella.code, cfg);
+  if(servizi === null) return cella;
+  const mappa = {};
+  servizi.forEach(sv=>{ mappa[sv] = stazioneDi(cella, sv); });
+  cella.stations = mappa;
+  // Derivato: la prima stazione in ordine di servizio. Si salta un servizio
+  // senza stazione invece di fermarsi li' — un client vecchio che legge
+  // `stationId` merita la partita che la persona fa davvero, non "nessuna".
+  cella.stationId = servizi.map(sv=> mappa[sv]).find(st=> st) || null;
+  return cella;
+}
+
+// Scrive la stazione di un servizio e riallinea il resto. Da qui in poi nessuno
+// tocca `stations` o `stationId` a mano.
+function assegnaStazione(cella, serviceId, stationId, cfg){
+  if(!cella || typeof cella !== 'object') return cella;
+  if(!cella.stations || typeof cella.stations !== 'object') normalizzaCella(cella, cfg);
+  cella.stations[serviceId] = stationId || null;
+  return normalizzaCella(cella, cfg);
+}
+
+// ----------------------------------------------------------------------------
 // Date. I turni sono indicizzati per data reale ("2026-09-14"), non per nome
 // del giorno: senza data esisterebbe una sola settimana, senza storico e senza
 // sapere quale settimana sia. Tutto costruito in ora locale — passando da UTC
@@ -776,13 +878,27 @@ function computeShifts(staffList, staffingNeeds, options){
     // posto che ha fatto scattare l'assegnazione va chiuso comunque, anche se
     // un domani il codice scelto smettesse di coprirlo, altrimenti il `while`
     // che ci gira intorno non finirebbe piu'.
-    const segnaCopertura = (code, st, svBase) => {
-      const servizi = (CODE_TO_SERVICES[code]||[]).slice();
-      if(svBase && !servizi.includes(svBase)) servizi.push(svBase);
-      const stazioniCoperte = coperteDa(st);
-      servizi.forEach(sv2=> stazioniCoperte.forEach(st2=>{
-        if(remain[sv2] && remain[sv2][st2]) remain[sv2][st2] = Math.max(0, remain[sv2][st2]-1);
-      }));
+    const segnaCopertura = (mappa) => {
+      Object.keys(mappa||{}).forEach(sv2=>{
+        const st = mappa[sv2];
+        if(!st) return;
+        coperteDa(st).forEach(st2=>{
+          if(remain[sv2] && remain[sv2][st2]) remain[sv2][st2] = Math.max(0, remain[sv2][st2]-1);
+        });
+      });
+    };
+    // Su quale stazione sta questa persona, SERVIZIO PER SERVIZIO. Il posto che
+    // ha fatto scattare l'assegnazione (`sv`) va sulla stazione richiesta; gli
+    // altri servizi che il codice copre restano sulla stessa — e' il
+    // comportamento di sempre, quando la stazione era una sola per giornata.
+    // `sv` si scrive comunque, anche se il codice non lo coprisse: il posto che
+    // ha fatto scattare l'assegnazione va chiuso, altrimenti il `while` che ci
+    // gira intorno non finirebbe piu'.
+    const mappaStazioni = (s, code, sv, stationId) => {
+      const m = {};
+      (CODE_TO_SERVICES[code]||[]).forEach(sv2=>{ m[sv2] = stationId; });
+      m[sv] = stationId;
+      return m;
     };
 
     SERVICES.forEach(sv=>{
@@ -1040,7 +1156,7 @@ function computeShifts(staffList, staffingNeeds, options){
           }
 
           assigned[chosen.id][day] = code;
-          stationAssign[chosen.id][day] = stationId;
+          stationAssign[chosen.id][day] = mappaStazioni(chosen, code, sv, stationId);
           oreFatte[chosen.id] += oreDi(code);
           // Un turno di quota speso qui è un turno in meno da spalmare sui
           // giorni che restano: senza questo la forma della settimana
@@ -1052,7 +1168,7 @@ function computeShifts(staffList, staffingNeeds, options){
             extraFatti[chosen.id]++;
             extras.push({day, service:sv, stationId, staffId:chosen.id, staffName:chosen.name});
           }
-          segnaCopertura(code, stationId, sv);
+          segnaCopertura(stationAssign[chosen.id][day]);
         }
       });
     });
@@ -1068,10 +1184,20 @@ function computeShifts(staffList, staffingNeeds, options){
     // vietati, "non faccio extra", una richiesta approvata). È una cintura di
     // sicurezza contro un riordino futuro del ciclo, non il motore della
     // correzione: il motore è il ramo che NON spende lo slot.
-    const stazioneScoperta = (s, code) => {
+    // Restituisce la MAPPA servizio → stazione, non una stazione sola: da
+    // quando la cella distingue i servizi, il riempimento finale deve dire
+    // dove sta la persona a pranzo e dove a cena.
+    const stazioniScoperte = (s, code) => {
       const mie = (s.stations && s.stations.length) ? s.stations : [];
-      for(const sv2 of (CODE_TO_SERVICES[code]||[])){
-        for(const st of mie){ if((remain[sv2]||{})[st] > 0) return st; }
+      const servizi = CODE_TO_SERVICES[code]||[];
+      for(const sv2 of servizi){
+        for(const st of mie){
+          if((remain[sv2]||{})[st] > 0){
+            const m = {};
+            servizi.forEach(sv3=>{ m[sv3] = st; });
+            return m;
+          }
+        }
       }
       return null;
     };
@@ -1082,9 +1208,19 @@ function computeShifts(staffList, staffingNeeds, options){
     // se' passa da `segnaCopertura` e vale anche per le stazioni di rimbalzo.
     // `turniResidui` NON si scala anche a quelle: e' il budget dei turni di
     // QUELLA partita, e nessuno di quei turni e' stato speso.
-    const consumaCopertura = (code, st) => {
-      turniResidui[st] = Math.max(0, (turniResidui[st]||0) - 1);
-      segnaCopertura(code, st, null);
+    // UN TURNO E' UNO. `turniResidui` e' il budget della FORMA della settimana e
+    // si conta in TURNI: si scala una volta sola, sulla stazione del primo
+    // servizio. Quello che il turno chiude sugli altri servizi si scala in
+    // `remain`, che e' un conto di POSTI — un'altra unita'. Scalarlo una volta
+    // per servizio farebbe crollare `budgetSpezzati` prima del tempo, il motore
+    // smetterebbe di fare spezzati e ripiegherebbe su turni singoli ed extra:
+    // e' il difetto gia' pagato e gia' misurato piu' su (quattro extra al
+    // lavaggio nel weekend, 46 ore di scarto fra la persona piu' carica e la
+    // meno carica), e non darebbe nessun errore.
+    const consumaCopertura = (code, mappa) => {
+      const principale = (CODE_TO_SERVICES[code]||[]).map(sv2=> mappa[sv2]).find(st=> st);
+      if(principale) turniResidui[principale] = Math.max(0, (turniResidui[principale]||0) - 1);
+      segnaCopertura(mappa);
     };
 
     staffList.forEach(s=>{
@@ -1112,10 +1248,10 @@ function computeShifts(staffList, staffingNeeds, options){
           // scoperta, il turno non copre niente: resta a riposo, e lo slot NON
           // si consuma. Vale qui come venti righe più su per chi non ha
           // stazioni — è la stessa domanda, e la risposta dev'essere la stessa.
-          let code = null, stazione = null;
+          let code = null, mappa = null;
           for(const c of ok){
-            const st = stazioneScoperta(s, c);
-            if(st){ code = c; stazione = st; break; }
+            const m = stazioniScoperte(s, c);
+            if(m){ code = c; mappa = m; break; }
           }
           if(!code){ assigned[s.id][day] = REST_CODE; return; }
           pools[s.id].splice(idx,1);
@@ -1125,8 +1261,8 @@ function computeShifts(staffList, staffingNeeds, options){
           // guarderebbe metà della settimana. Misurato: contandole, lo scarto
           // medio max-min in una settimana scende da 4,25 a 2,60 ore.
           oreFatte[s.id] += oreDi(code);
-          stationAssign[s.id][day] = stazione;
-          consumaCopertura(code, stazione);
+          stationAssign[s.id][day] = mappa;
+          consumaCopertura(code, mappa);
           return;
         }
         if(pools[s.id].length){
@@ -1142,14 +1278,14 @@ function computeShifts(staffList, staffingNeeds, options){
           let bestIdx = 0;
           pools[s.id].forEach((slot,i)=>{ if(valueOf(slot) < valueOf(pools[s.id][bestIdx])) bestIdx = i; });
           const slot = pools[s.id][bestIdx];
-          let code = null, stazione = null;
+          let code = null, mappa = null;
           if(valueOf(slot) === 0){
             code = REST_CODE;                      // slot di solo riposo: si spende, è il suo scopo
           } else {
             // Prima si guarda se una stazione della persona è ancora scoperta.
             for(const c of slot.codes){
-              const st = stazioneScoperta(s, c);
-              if(st){ code = c; stazione = st; break; }
+              const m = stazioniScoperte(s, c);
+              if(m){ code = c; mappa = m; break; }
             }
             // Poi il riposo, se lo slot lo ammette fra i suoi codici.
             if(!code && slot.codes.includes(REST_CODE)) code = REST_CODE;
@@ -1164,9 +1300,9 @@ function computeShifts(staffList, staffingNeeds, options){
           pools[s.id].splice(bestIdx,1);
           assigned[s.id][day] = code;
           oreFatte[s.id] += oreDi(code);   // vedi sopra: sono ore vere
-          if(stazione){
-            stationAssign[s.id][day] = stazione;
-            consumaCopertura(code, stazione);
+          if(mappa){
+            stationAssign[s.id][day] = mappa;
+            consumaCopertura(code, mappa);
           }
         } else {
           assigned[s.id][day] = REST_CODE;
@@ -1300,12 +1436,18 @@ function computeShifts(staffList, staffingNeeds, options){
   // guarda il prospetto e non il `remain` del momento in cui si assegnava:
   // quello e' un numero vecchio, il riempimento finale puo' averlo gia' chiuso,
   // e fidarsene rimetterebbe dentro proprio la sovracopertura appena tolta.
+  // La stazione si guarda SUL SERVIZIO: chi a pranzo sta ai primi e a cena al
+  // pass e' presente su due partite diverse, e sommarlo su entrambe in tutti e
+  // due i servizi direbbe che le giornate sono piu' coperte di quanto sono.
   const presenzeSu = (day, sv, st) => staffList.filter(s2=>{
-    const st0 = stationAssign[s2.id][day];
+    const st0 = (stationAssign[s2.id][day]||{})[sv];
     if(!st0 || !coperteDa(st0).includes(st)) return false;
     return (CODE_TO_SERVICES[assigned[s2.id][day]]||[]).includes(sv);
   }).length;
-  const testeSu = (day, st) => staffList.filter(s2=> stationAssign[s2.id][day] === st).length;
+  // Le TESTE su una partita in giornata: una persona conta una volta sola anche
+  // se ci sta su due servizi.
+  const testeSu = (day, st) => staffList.filter(s2=>
+    Object.keys(stationAssign[s2.id][day]||{}).some(sv=> stationAssign[s2.id][day][sv] === st)).length;
   // Il MARGINE della giornata, ed e' il criterio automatico vero. Quante altre
   // persone qualificate, non vincolate e non gia' al lavoro restano libere quel
   // giorno su quella partita. Zero riserve = giornata senza rete: se domattina
@@ -1373,7 +1515,12 @@ function computeShifts(staffList, staffingNeeds, options){
   const collocaSu = (s, day, st, code, slotIdx, origine) => {
     pools[s.id].splice(slotIdx, 1);
     assigned[s.id][day] = code;
-    stationAssign[s.id][day] = st;
+    // L'eccedenza si colloca su UNA partita: la stessa per tutti i servizi che
+    // il codice copre. E' una giornata in piu' su una partita che ne aveva
+    // bisogno, non un giro di due partite.
+    const m = {};
+    (CODE_TO_SERVICES[code]||[]).forEach(sv2=>{ m[sv2] = st; });
+    stationAssign[s.id][day] = m;
     origineFlag[s.id][day] = origine;
     oreFatte[s.id] += oreDi(code);
   };
@@ -1446,7 +1593,16 @@ function computeShifts(staffList, staffingNeeds, options){
   const newShifts = {};
   staffList.forEach(s=>{
     newShifts[s.id] = {};
-    days.forEach(day=> newShifts[s.id][day] = { code: assigned[s.id][day]||'', stationId: stationAssign[s.id][day]||null, extra: !!extraFlag[s.id][day], origine: origineFlag[s.id][day] || 'copertura' });
+    // La cella si compone passando da `normalizzaCella`, mai a mano: e' l'unico
+    // punto che riempie la mappa servizio → stazione e che riscrive `stationId`
+    // come campo derivato. Composta a mano, i due divergerebbero al primo
+    // ritocco e allora il campo vecchio sarebbe peggio di niente.
+    days.forEach(day=> newShifts[s.id][day] = normalizzaCella({
+      code: assigned[s.id][day]||'',
+      stations: {...(stationAssign[s.id][day]||{})},
+      extra: !!extraFlag[s.id][day],
+      origine: origineFlag[s.id][day] || 'copertura',
+    }, cfg));
   });
   // Chi il generatore non ha potuto pianificare, e perché. Va detto nel
   // riepilogo: senza, resta da intuire da una fila di R nella griglia.
@@ -1558,6 +1714,11 @@ export {
   DEFAULT_SERVICES,
   DEFAULT_SHIFT_TYPES,
   buildShiftConfig,
+  serviziDelCodice,
+  stazioneDi,
+  stazioniDi,
+  normalizzaCella,
+  assegnaStazione,
   shuffleArray,
   buildStaffPools,
   computeShifts,

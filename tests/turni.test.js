@@ -5,18 +5,46 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DAYS, computeShifts, buildShiftConfig, computeShiftsForDates,
          weekDates, monthDates, groupByWeek, isoDate, startOfWeek, dayName,
-         codeAllowed, contoCapienza } from '../app/src/lib/logic.js';
+         codeAllowed, contoCapienza,
+         stazioneDi, stazioniDi, normalizzaCella, assegnaStazione,
+         serviziDelCodice } from '../app/src/lib/logic.js';
 
 // Configurazione classica (colazione/pranzo/cena con spezzato): è quella che
 // l'app crea da sola per chi non ne ha una propria.
 const BASE = buildShiftConfig(null, null);
 
-function noQualificationViolations(staff, newShifts){
+// NESSUNO SU UNA PARTITA CHE NON SA FARE. E' la cosa piu' importante che questi
+// test provano, e va letta dalla MAPPA servizio → stazione: da quando la cella
+// ne ha una, guardare il solo `cell.stationId` proverebbe una stazione su due e
+// resterebbe verde su un motore che sbaglia la seconda. Verde e cieco e' il modo
+// piu' facile di rompersi da soli in questa modifica.
+function noQualificationViolations(staff, newShifts, cfg){
+  cfg = cfg || BASE;
   for(const s of staff){
     for(const day of Object.keys(newShifts[s.id])){
       const cell = newShifts[s.id][day];
-      if(cell.stationId && !(s.stations||[]).includes(cell.stationId)){
-        return `${s.name} assegnato a stazione non qualificata (${cell.stationId}) il ${day}`;
+      for(const st of stazioniDi(cell, cfg)){
+        if(!(s.stations||[]).includes(st)){
+          return `${s.name} assegnato a stazione non qualificata (${st}) il ${day}`;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// La mappa deve avere ESATTAMENTE una chiave per servizio coperto dal codice:
+// zero per R/M/F e per la cella vuota. Prende sia le chiavi orfane (un servizio
+// tolto dal tipo di turno) sia i servizi dimenticati.
+function noStationKeyViolations(staff, newShifts, cfg){
+  cfg = cfg || BASE;
+  for(const s of staff){
+    for(const day of Object.keys(newShifts[s.id])){
+      const cell = newShifts[s.id][day];
+      const attesi = (serviziDelCodice(cell.code, cfg) || []).slice().sort();
+      const trovati = Object.keys(cell.stations || {}).sort();
+      if(attesi.join('|') !== trovati.join('|')){
+        return `${s.name} il ${day}: codice ${cell.code||'—'} copre [${attesi}] ma la mappa dice [${trovati}]`;
       }
     }
   }
@@ -1879,4 +1907,144 @@ test('su un mese le eccedenze si sommano fra le settimane, non si ricalcolano', 
   const giorniCollocati = new Set(mese.eccedenzeCollocate.map(e=> e.day));
   assert.equal(giorniCollocati.size, mese.eccedenzeCollocate.length,
     'due collocazioni sullo stesso giorno vorrebbero dire che una settimana ha riscritto l altra');
+});
+
+/* ===================== UNA STAZIONE PER SERVIZIO =====================
+   «Potrebbe essere che la stessa persona stia a pranzo in una partita e a cena
+   in un'altra.» La cella passa da una stazione per GIORNATA a una per SERVIZIO,
+   e `stationId` resta scritto come campo derivato.
+
+   Il primo blocco e' quello che conta piu' di tutti: lo chef ha turni veri gia'
+   salvati e PUBBLICATI nella forma vecchia, e perderli sarebbe il danno
+   peggiore che questo lavoro possa fare. */
+
+// Una cucina come la trovava la versione precedente: la cella e'
+// { code, stationId, extra } e basta. Scritta a mano apposta: una fixture
+// generata dal codice nuovo proverebbe il codice nuovo con se stesso.
+const TURNI_VECCHI = () => ({
+  'p1': {
+    '2026-09-14': {code:'SP', stationId:'primi',  extra:false},
+    '2026-09-15': {code:'P',  stationId:'primi',  extra:false},
+    '2026-09-16': {code:'R',  stationId:null,     extra:false},
+    '2026-09-17': {code:'S',  stationId:'pass',   extra:true},
+  },
+  'p2': {
+    '2026-09-14': {code:'C',  stationId:'colaz',  extra:false},
+    '2026-09-15': {code:'F',  stationId:null,     extra:false},
+    '2026-09-16': {code:'SP', stationId:'pass',   extra:false},
+  },
+});
+// Il blocco che gira dentro migrateData(): normalizzazione IN LETTURA, la
+// stessa strada che il progetto ha gia' percorso quattro volte in quel file.
+function migraTurni(shifts, cfg){
+  Object.keys(shifts).forEach(staffId=>
+    Object.keys(shifts[staffId]).forEach(day=>
+      normalizzaCella(shifts[staffId][day], cfg)));
+  return shifts;
+}
+
+test('turni gia salvati e PUBBLICATI nella forma vecchia continuano a dire quello che dicevano', () => {
+  const prima = TURNI_VECCHI();
+  const dopo = migraTurni(TURNI_VECCHI(), BASE);
+  Object.keys(prima).forEach(id=> Object.keys(prima[id]).forEach(day=>{
+    const v = prima[id][day], n = dopo[id][day];
+    assert.equal(n.code, v.code, 'il codice non si tocca');
+    assert.equal(n.extra, v.extra, 'e nemmeno il campo extra');
+    // Ogni servizio che quel turno copriva sta ancora sulla stessa stazione.
+    (BASE.codeToServices[v.code] || []).forEach(sv=>
+      assert.equal(stazioneDi(n, sv), v.stationId,
+        id + ' ' + day + ': il servizio ' + sv + ' ha perso la stazione'));
+    // E `stationId` resta scritto: e' un contratto verso il passato — le
+    // cucine su una versione diversa e le schede gia' aperte lo leggono ancora.
+    assert.equal(n.stationId, v.stationId);
+  }));
+});
+
+test('una cella riscritta da un client VECCHIO resta leggibile: si ricade su stationId', () => {
+  // E' l'unica perdita possibile, e va detta invece che nascosta: una versione
+  // vecchia dell'app che salva DOPO la migrazione riscrive la cella intera e la
+  // mappa sparisce. La giornata torna a una stazione sola — non diventa muta.
+  const cella = {code:'SP', stations:{pranzo:'primi', cena:'pass'}, stationId:'primi', extra:false};
+  assert.deepEqual(stazioniDi(cella, BASE), ['primi','pass']);
+  delete cella.stations;                       // il client vecchio ha riscritto
+  assert.equal(stazioneDi(cella, 'pranzo'), 'primi');
+  assert.equal(stazioneDi(cella, 'cena'), 'primi', 'ricade sulla stazione sola, non su "nessuna"');
+  assert.deepEqual(stazioniDi(cella, BASE), ['primi']);
+});
+
+test('la migrazione rispetta i SERVIZI PERSONALIZZATI, non i tre classici', () => {
+  // E' il caso che si rompe se il blocco di migrazione finisce prima che la
+  // configurazione della cucina sia pronta, e non si vedrebbe mai sulla
+  // configurazione predefinita: le stazioni sparirebbero in silenzio dalla
+  // griglia di chi si e' scritto i propri servizi.
+  const vecchi = { 'b1': { '2026-09-14': {code:'AC', stationId:'bar', extra:false} } };
+  migraTurni(vecchi, LOCALE);
+  assert.deepEqual(vecchi['b1']['2026-09-14'].stations, {aperitivo:'bar', cena:'bar'});
+  // Con la configurazione sbagliata (quella predefinita) 'AC' non esiste, e il
+  // dato NON si butta via: la mappa resta vuota e stationId non si tocca.
+  const sbagliata = { 'b1': { '2026-09-14': {code:'AC', stationId:'bar', extra:false} } };
+  migraTurni(sbagliata, BASE);
+  assert.deepEqual(sbagliata['b1']['2026-09-14'].stations, {});
+  assert.equal(sbagliata['b1']['2026-09-14'].stationId, 'bar',
+    'un codice sconosciuto non e una buona ragione per buttare via la stazione');
+});
+
+test('«nessuna» su un servizio non torna da sola al valore appena cancellato', () => {
+  // Il dettaglio che sembra stile e non lo e': con un `||` al posto di
+  // `!== undefined`, una stazione tolta a mano ricadrebbe sul vecchio stationId
+  // e la cella tornerebbe da sola al valore appena cancellato.
+  const cella = normalizzaCella({code:'SP', stationId:'primi'}, BASE);
+  assegnaStazione(cella, 'cena', null, BASE);
+  assert.equal(stazioneDi(cella, 'pranzo'), 'primi');
+  assert.equal(stazioneDi(cella, 'cena'), null, 'tolta vuol dire tolta');
+  assert.equal(cella.stationId, 'primi');
+});
+
+test('stationId e DERIVATO: lo riscrive un solo punto, e non diverge mai dalla mappa', () => {
+  const cella = normalizzaCella({code:'SP', stationId:'primi'}, BASE);
+  assegnaStazione(cella, 'cena', 'pass', BASE);
+  assert.deepEqual(cella.stations, {pranzo:'primi', cena:'pass'});
+  assert.equal(cella.stationId, 'primi', 'la stazione del primo servizio coperto');
+  // Tolta la prima, il derivato scende alla seconda invece di dire "nessuna":
+  // un client vecchio merita la partita che la persona fa davvero.
+  assegnaStazione(cella, 'pranzo', null, BASE);
+  assert.equal(cella.stationId, 'pass');
+});
+
+test('la mappa ha una chiave per servizio coperto: le orfane spariscono, i nuovi entrano', () => {
+  // Cambiando il turno cambia cosa copre. Passando da P a SP il pranzo gia'
+  // deciso non si ridecide, e la cena eredita.
+  const cella = normalizzaCella({code:'P', stationId:'primi'}, BASE);
+  assert.deepEqual(cella.stations, {pranzo:'primi'});
+  cella.code = 'SP';
+  normalizzaCella(cella, BASE);
+  assert.deepEqual(cella.stations, {pranzo:'primi', cena:'primi'});
+  // E tornando indietro la chiave orfana se ne va.
+  cella.code = 'P';
+  normalizzaCella(cella, BASE);
+  assert.deepEqual(cella.stations, {pranzo:'primi'});
+  // Un codice che non copre servizi non puo' portarsi dietro una stazione.
+  cella.code = 'R';
+  normalizzaCella(cella, BASE);
+  assert.deepEqual(cella.stations, {});
+  assert.equal(cella.stationId, null);
+});
+
+test('il prospetto generato rispetta i due invarianti sulla mappa, su ogni scenario', () => {
+  const casi = [
+    {staff: BRIGATA_ORE, needs: NEEDS_ORE, cfg: BASE, opz:{}},
+    {staff: BRIGATA_ORE, needs: NEEDS_ORE, cfg: BASE, opz:{eccedenza:{modo:'auto'}}},
+    {staff: BRIGATA_RAKIB, needs: FABBISOGNO_RAKIB, cfg: BASE, opz:{stazioni: STAZ_RAKIB}},
+    {staff: [{id:'s1', name:'Barman', stations:['bar'], weeklyQuota:[{count:7,codes:['AC']}]}],
+     needs: {brunch:[], aperitivo:[{stationId:'bar',count:1}], cena:[{stationId:'bar',count:1}]},
+     cfg: LOCALE, opz:{}},
+  ];
+  casi.forEach((c,i)=>{
+    for(const seme of ['q1','q2','q3']){
+      const {newShifts} = computeShifts(c.staff, c.needs,
+        Object.assign({config:c.cfg, seed:seme}, c.opz));
+      assert.equal(noQualificationViolations(c.staff, newShifts, c.cfg), null, 'caso '+i);
+      assert.equal(noStationKeyViolations(c.staff, newShifts, c.cfg), null, 'caso '+i);
+    }
+  });
 });
