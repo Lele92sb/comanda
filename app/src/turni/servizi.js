@@ -54,6 +54,14 @@ export function renderServices(){
       + 'I turni già assegnati nella griglia restano come sono.',
       {conferma:'Elimina', pericolo:true});
     if(!ok) return;
+    // Le celle dei turni restano come sono, e la stazione che avevano su questo
+    // servizio resta scritta nella loro mappa. È una decisione, non una
+    // dimenticanza: quella chiave diventa invisibile — chi legge una cella
+    // chiede sempre i servizi che il CODICE copre, e questo non c'è più — e
+    // sparisce da sola alla prossima lettura, quando `normalizzaCella` rifà la
+    // mappa. Riscrivere qui tutti i turni della cucina vorrebbe dire un
+    // salvataggio dell'intero blob per un cambiamento che non si vede; e se il
+    // servizio viene ricreato, la stazione è ancora lì invece che persa.
     state.services = state.services.filter(x=>x.id!==sv.id);
     state.shiftTypes.forEach(t=>{ t.services = (t.services||[]).filter(x=>x!==sv.id); });
     delete state.staffingNeeds[sv.id];
@@ -136,6 +144,9 @@ export function renderShiftTypes(){
     if(state.shiftTypes.some(x=>x.id!==t.id && x.code===nuovo)){ toast(`La sigla "${nuovo}" è già usata`); renderShiftTypes(); return; }
     // La sigla è salvata dentro i turni già assegnati e dentro le quote: va
     // propagata, altrimenti quei dati puntano a un turno che non esiste più.
+    // La mappa servizio → stazione delle celle NON si tocca: cambiando la sigla
+    // non cambiano i servizi che quel turno copre, quindi le chiavi restano
+    // quelle giuste.
     const vecchio = t.code;
     t.code = nuovo;
     Object.values(state.shifts).forEach(giorni=>{
