@@ -644,10 +644,17 @@ test('gli extra non cadono più a metà settimana: la quota arriva fino in fondo
   }
 });
 
-test('gli extra si concentrano su una persona sola, non su tutta la brigata', () => {
-  // PRIMA: 7 extra sparsi su 3,46 teste diverse in media (fino a 4 su 4).
-  // DOPO: 1 sola. Sette telefonate a sette persone diventano una telefonata a
-  // una persona, che è il modo in cui il prospetto si fa a mano.
+test('gli extra si spargono sulla brigata, non si accumulano su una testa sola', () => {
+  // Questo test diceva l'ESATTO CONTRARIO, ed è stato girato apposta.
+  //
+  // Il criterio della concentrazione era stato dedotto guardando un prospetto
+  // di turni, non chiedendolo a chi lo aveva compilato. Lo chef, messo davanti
+  // al risultato: "i turni non li assegno a chi lavora di più, ma semplicemente
+  // nella partita dove serve", e "sono riuscito a coprire tutti i turni con
+  // soli 6 extra dati a 6 persone diverse".
+  //
+  // Sette extra su una testa sola sono una settimana rovinata a una persona.
+  // Sparsi su quattro, sono meno di due turni in più a testa.
   const staff = Array.from({length:4}, (_,i)=>({
     id:'q'+i, name:'Q'+i, stations:['a'], weeklyQuota:[{count:7,codes:['R']}],
   }));
@@ -656,9 +663,15 @@ test('gli extra si concentrano su una persona sola, non su tutta la brigata', ()
     const { extras } = computeShifts(staff, needs, {config:BASE});
     assert.equal(extras.length, 7);
     // Va misurato DENTRO la singola settimana: sommando più generazioni il
-    // conteggio torna uniforme comunque e non proverebbe niente.
-    assert.equal(new Set(extras.map(e=>e.staffId)).size, 1,
-      'gli extra si sono sparsi su più persone invece di concentrarsi');
+    // conteggio tornerebbe uniforme comunque e non proverebbe niente.
+    assert.equal(new Set(extras.map(e=>e.staffId)).size, 4,
+      'gli extra si sono accumulati invece di spargersi su tutta la brigata');
+    // E spartiti in parti quasi uguali: 7 su 4 fa 2,2,2,1.
+    const perTesta = {};
+    extras.forEach(e=>{ perTesta[e.staffId] = (perTesta[e.staffId]||0)+1; });
+    const conti = Object.values(perTesta);
+    assert.ok(Math.max(...conti) - Math.min(...conti) <= 1,
+      `spartizione sbilanciata: ${conti.join('/')}`);
   }
 });
 

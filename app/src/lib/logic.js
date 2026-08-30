@@ -433,13 +433,17 @@ function computeShifts(staffList, staffingNeeds, options){
           const perStazioni = (a,b)=>
             (a.stations?a.stations.length:999) - (b.stations?b.stations.length:999);
           if(isExtra){
-            // Fra chi si può chiamare oltre quota, si richiama chi è già stato
-            // chiamato: è il modo in cui il prospetto si fa a mano. Sette extra su
-            // una testa sola sono una riga nel riepilogo e una persona da avvisare;
-            // sette extra su sette teste sono sette telefonate e tutta la brigata
-            // con la settimana saltata.
+            // Fra chi si può chiamare oltre quota va per primo chi ne ha fatti
+            // MENO. Qui prima c'era il contrario, e la spiegazione suonava bene:
+            // sette extra su una testa sola sono una telefonata invece di sette.
+            // Ma era stata dedotta da un foglio di turni, non chiesta a chi lo
+            // aveva compilato. Parole sue: "i turni non li assegno a chi lavora
+            // di più, ma semplicemente nella partita dove serve", e "sono
+            // riuscito a coprire tutti i turni con soli 6 extra dati a 6 persone
+            // diverse". Sei extra su una testa sola sono una settimana rovinata
+            // a una persona; sparsi, sono un turno in più a testa.
             candidates.sort((a,b)=> perStazioni(a,b)
-              || (extraFatti[b.id] - extraFatti[a.id])
+              || (extraFatti[a.id] - extraFatti[b.id])
               || (oreFatte[a.id] - oreFatte[b.id]));
           } else {
             // A parità di qualifica lavora prima chi ha più quota da smaltire: la
