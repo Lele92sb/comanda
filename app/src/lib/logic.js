@@ -887,17 +887,39 @@ function computeShifts(staffList, staffingNeeds, options){
         });
       });
     };
-    // Su quale stazione sta questa persona, SERVIZIO PER SERVIZIO. Il posto che
-    // ha fatto scattare l'assegnazione (`sv`) va sulla stazione richiesta; gli
-    // altri servizi che il codice copre restano sulla stessa — e' il
-    // comportamento di sempre, quando la stazione era una sola per giornata.
+    // Su quale stazione sta questa persona, SERVIZIO PER SERVIZIO.
+    // «Potrebbe essere che la stessa persona stia a pranzo in una partita e a
+    // cena in un'altra.»
+    //
+    // Il posto che ha fatto scattare l'assegnazione (`sv`) va sulla stazione
+    // richiesta, e non si discute. Per gli ALTRI servizi che il codice copre la
+    // domanda e' una sola: quella stazione, li', serve ancora?
+    //   - Si' → non ci si sposta. E' il caso normale, ed e' anche il motivo per
+    //     cui il codice accorpato e' stato scelto (`codeCoversMore`): una
+    //     persona sola chiude due posti sulla stessa partita.
+    //   - No  → quella meta' di turno oggi non copre niente. Si guarda fra le
+    //     ALTRE stazioni della persona, nell'ordine di `s.stations`, che e' la
+    //     priorita' impostata dal titolare: la prima ancora scoperta se la
+    //     prende. Se non ce n'e' nessuna si resta dov'era, come sempre.
+    // Il turno resta UNO — `turniResidui` si scala una volta sola, piu' sotto —
+    // e quello che si sposta e' solo dove la persona sta fisicamente nella
+    // seconda meta' della giornata.
+    //
     // `sv` si scrive comunque, anche se il codice non lo coprisse: il posto che
     // ha fatto scattare l'assegnazione va chiuso, altrimenti il `while` che ci
     // gira intorno non finirebbe piu'.
+    const serveAncora = (sv2, st) =>
+      coperteDa(st).some(st2=> (remain[sv2]||{})[st2] > 0);
     const mappaStazioni = (s, code, sv, stationId) => {
       const m = {};
       (CODE_TO_SERVICES[code]||[]).forEach(sv2=>{ m[sv2] = stationId; });
       m[sv] = stationId;
+      Object.keys(m).forEach(sv2=>{
+        if(sv2 === sv || serveAncora(sv2, stationId)) return;
+        const altra = (s.stations||[]).find(st2=>
+          st2 !== stationId && serveAncora(sv2, st2));
+        if(altra) m[sv2] = altra;
+      });
       return m;
     };
 
@@ -1190,16 +1212,21 @@ function computeShifts(staffList, staffingNeeds, options){
     const stazioniScoperte = (s, code) => {
       const mie = (s.stations && s.stations.length) ? s.stations : [];
       const servizi = CODE_TO_SERVICES[code]||[];
-      for(const sv2 of servizi){
-        for(const st of mie){
-          if((remain[sv2]||{})[st] > 0){
-            const m = {};
-            servizi.forEach(sv3=>{ m[sv3] = st; });
-            return m;
-          }
-        }
-      }
-      return null;
+      const m = {};
+      let prima = null;
+      servizi.forEach(sv2=>{
+        // La prima delle sue partite ancora scoperta su QUESTO servizio, in
+        // ordine di priorita': anche qui pranzo e cena possono cadere su due
+        // partite diverse.
+        const st = mie.find(st0=> (remain[sv2]||{})[st0] > 0) || null;
+        m[sv2] = st;
+        if(st && !prima) prima = st;
+      });
+      if(!prima) return null;
+      // Un servizio che non ha trovato niente resta sulla partita degli altri:
+      // e' il comportamento di sempre, e lascia la cella senza buchi.
+      servizi.forEach(sv2=>{ if(!m[sv2]) m[sv2] = prima; });
+      return m;
     };
     // Segna la copertura appena decisa nel riempimento finale, altrimenti due
     // persone di fila si accamperebbero sulla stessa stazione scoperta.
@@ -1217,6 +1244,16 @@ function computeShifts(staffList, staffingNeeds, options){
     // e' il difetto gia' pagato e gia' misurato piu' su (quattro extra al
     // lavaggio nel weekend, 46 ore di scarto fra la persona piu' carica e la
     // meno carica), e non darebbe nessun errore.
+    //
+    // ONESTA' SU QUESTA RIGA, perche' vale la stessa regola scritta piu' su per
+    // `pianificabili`: nel punto di scrittura principale del motore il conto
+    // singolo e' difeso da un test (quattro diventano rossi se si scala per
+    // servizio), QUI no. Scalando per servizio anche in questo ramo, 4.000
+    // brigate a caso danno prospetti identici bit per bit: il riempimento
+    // finale scatta di rado e non capita mai che assegni un accorpato su due
+    // partite diverse con budget ancora in cassa. La regola resta scritta
+    // com'e' perche' e' quella giusta, non perche' un test la difenda — e non
+    // gli e' stato messo accanto un test che finge di farlo.
     const consumaCopertura = (code, mappa) => {
       const principale = (CODE_TO_SERVICES[code]||[]).map(sv2=> mappa[sv2]).find(st=> st);
       if(principale) turniResidui[principale] = Math.max(0, (turniResidui[principale]||0) - 1);

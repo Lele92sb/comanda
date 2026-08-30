@@ -2048,3 +2048,92 @@ test('il prospetto generato rispetta i due invarianti sulla mappa, su ogni scena
     }
   });
 });
+
+/* --- «A pranzo in una partita, a cena in un'altra» ----------------------- */
+
+test('a pranzo ai primi, a cena al pass: la seconda meta del turno va dove serve', () => {
+  // Due ai primi a pranzo; a cena serve un primi e un pass. Chi sa fare anche
+  // il pass, la sera, ai primi non serve piu': serve al pass. Prima la stazione
+  // era una sola per giornata e quella meta' di turno non copriva niente.
+  // MISURATO su cinque semi: 35 posti scoperti prima, 0 adesso.
+  const staff = [
+    {id:'A', name:'A', stations:['primi'],        weeklyQuota:[{count:7,codes:['SP']}]},
+    {id:'B', name:'B', stations:['primi','pass'], weeklyQuota:[{count:7,codes:['SP']}]},
+  ];
+  const needs = { colazione:[],
+    pranzo:[{stationId:'primi',count:2}],
+    cena:  [{stationId:'primi',count:1},{stationId:'pass',count:1}] };
+  for(const seme of ['a','b','c','d','e']){
+    const {newShifts, shortfalls, extras} = computeShifts(staff, needs, {config:BASE, seed:seme});
+    assert.equal(shortfalls.reduce((n,s)=>n+s.missing,0), 0, 'seme '+seme);
+    assert.equal(extras.length, 0, 'e senza chiamare nessuno oltre quota');
+    DAYS.forEach(d=>{
+      const c = newShifts['B'][d];
+      assert.equal(stazioneDi(c, 'pranzo'), 'primi');
+      assert.equal(stazioneDi(c, 'cena'), 'pass',
+        'la sera ai primi ci sta gia A: B serve al pass');
+    });
+  }
+});
+
+test('a decidere la seconda partita e l ORDINE di stations, non il codice', () => {
+  // «La priorita' la deve impostare sempre il titolare.» Nessuna coppia di
+  // partite e cablata: stesso identico caso, ordine ribaltato, esito ribaltato.
+  const needs = { colazione:[],
+    pranzo:[{stationId:'primi',count:2}],
+    cena:  [{stationId:'primi',count:1},{stationId:'pass',count:1},{stationId:'lavaggio',count:1}] };
+  const brigata = ordine => ([
+    {id:'A', name:'A', stations:['primi'],  weeklyQuota:[{count:7,codes:['SP']}]},
+    {id:'B', name:'B', stations:ordine,     weeklyQuota:[{count:7,codes:['SP']}]},
+    {id:'C', name:'C', stations:['lavaggio','pass'], weeklyQuota:[{count:7,codes:['S']}]},
+  ]);
+  const conPass = computeShifts(brigata(['primi','pass','lavaggio']), needs, {config:BASE, seed:'o1'});
+  const conLav  = computeShifts(brigata(['primi','lavaggio','pass']), needs, {config:BASE, seed:'o1'});
+  DAYS.forEach(d=>{
+    assert.equal(stazioneDi(conPass.newShifts['B'][d], 'cena'), 'pass',
+      'col pass davanti nell elenco, la sera si va al pass');
+    assert.equal(stazioneDi(conLav.newShifts['B'][d], 'cena'), 'lavaggio',
+      'col lavaggio davanti, la sera si va al lavaggio');
+  });
+});
+
+test('non ci si sposta quando la partita di partenza la sera serve ancora', () => {
+  // E' il motivo per cui il turno accorpato era stato scelto: una persona sola
+  // chiude due posti sulla STESSA partita. Spostarsi per inerzia aprirebbe il
+  // buco che si era appena chiuso.
+  const staff = [
+    {id:'A', name:'A', stations:['primi','pass'], weeklyQuota:[{count:7,codes:['SP']}]},
+  ];
+  const needs = { colazione:[],
+    pranzo:[{stationId:'primi',count:1}],
+    cena:  [{stationId:'primi',count:1},{stationId:'pass',count:1}] };
+  const {newShifts, shortfalls} = computeShifts(staff, needs, {config:BASE, seed:'p1'});
+  DAYS.forEach(d=>{
+    assert.equal(stazioneDi(newShifts['A'][d], 'pranzo'), 'primi');
+    assert.equal(stazioneDi(newShifts['A'][d], 'cena'), 'primi',
+      'ai primi la sera serve ancora: non ci si sposta');
+  });
+  // Il pass resta scoperto, ed e vero: in brigata c e una persona sola.
+  assert.equal(shortfalls.every(s=> s.stationId === 'pass'), true);
+});
+
+test('il budget della settimana e un budget di TURNI, non di posti-servizio', () => {
+  // IL RISCHIO SILENZIOSO di questa modifica. Un turno accorpato adesso tocca
+  // due partite: se `turniResidui` si scalasse una volta per servizio invece
+  // che una per turno, l aritmetica su cui poggia il metodo dello chef
+  // (x = F - T spezzati, y = 2T - F singoli) si sbilancerebbe, il budget degli
+  // spezzati scenderebbe a zero prima del tempo e il motore ripiegherebbe su
+  // turni singoli e su turni oltre quota. Non da errore e non perde dati: si
+  // vede solo qui, nella DISTRIBUZIONE.
+  const staff = [1,2,3,4,5,6].map(i=>
+    ({id:'w'+i, name:'W'+i, stations:['lavaggio','insalate'],
+      weeklyQuota:[{count:5,codes:['P','S','SP']},{count:2,codes:['R']}]}));
+  const needs = { colazione:[],
+    pranzo:[{stationId:'lavaggio',count:2},{stationId:'insalate',count:1}],
+    cena:  [{stationId:'lavaggio',count:2},{stationId:'insalate',count:1}] };
+  for(const seme of ['t1','t2','t3','t4','t5']){
+    const r = computeShifts(staff, needs, {config:BASE, seed:seme});
+    assert.equal(r.extras.length, 0,
+      'seme '+seme+': un extra qui vuol dire che il budget dei turni si e sbilanciato');
+  }
+});
