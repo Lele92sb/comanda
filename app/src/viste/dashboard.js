@@ -1,6 +1,6 @@
 import { lingua, t } from '../core/lingua.ts';
-import { CODE_LABEL, esc, state } from '../core/state.js';
-import { isoDate, parseISO } from '../lib/logic.js';
+import { CODE_LABEL, SERVICE_LABEL, SHIFT_CONFIG, esc, state } from '../core/state.js';
+import { isoDate, parseISO, serviziDelCodice, stazioneDi, stazioniDi } from '../lib/logic.js';
 import { dishTotalCost } from '../ricettario/costi.js';
 import { weeklyExtraFromTurni } from '../turni/griglia.js';
 /* ============================= DASHBOARD ============================= */
@@ -31,15 +31,26 @@ export function renderDashboard(){
   `;
 
   const todayKey = isoDate(new Date());
+  // La partita si legge per SERVIZIO: chi a pranzo sta ai primi e a cena al pass
+  // fa due partite in una giornata, e "Turni di oggi" deve dirlo. Quando sono la
+  // stessa - cioe' quasi sempre - la riga resta identica a prima.
+  const nomeStazione = id => (state.stations.find(x=> x.id === id)||{}).name || '';
+  const dettaglio = cell => {
+    const partite = stazioniDi(cell, SHIFT_CONFIG());
+    if(partite.length <= 1) return partite.length ? ' · ' + nomeStazione(partite[0]) : '';
+    return ' · ' + (serviziDelCodice(cell.code, SHIFT_CONFIG())||[]).map(sv=>{
+      const n = nomeStazione(stazioneDi(cell, sv));
+      return n ? n + ' (' + SERVICE_LABEL(sv).toLowerCase() + ')' : null;
+    }).filter(Boolean).join(' / ');
+  };
   const todayShifts = state.staff.map(s=>{
     const cell = (state.shifts[s.id]||{})[todayKey];
-    return {name:s.name, code: cell? cell.code : '', stationId: cell? cell.stationId : null};
+    return {name:s.name, code: cell? cell.code : '', dettaglio: cell? dettaglio(cell) : ''};
   }).filter(x=>x.code);
   shiftsEl.innerHTML = todayShifts.length
-    ? todayShifts.map(t=>{
-        const st = state.stations.find(s=>s.id===t.stationId);
-        return `<div class="list-row"><span>${esc(t.name)}</span><span class="mono text-accent">${esc(CODE_LABEL(t.code))}${st?' · '+esc(st.name):''}</span></div>`;
-      }).join('')
+    ? todayShifts.map(t=>
+        `<div class="list-row"><span>${esc(t.name)}</span><span class="mono text-accent">${esc(CODE_LABEL(t.code))}${esc(t.dettaglio)}</span></div>`
+      ).join('')
     : `<div class="empty">${esc(t('Nessun turno assegnato per oggi ({giorno})',
         {giorno: parseISO(todayKey).toLocaleDateString(lingua(), {weekday:'long', day:'numeric', month:'long'})}))}</div>`;
 }

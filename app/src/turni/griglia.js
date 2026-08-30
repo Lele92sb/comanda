@@ -1,5 +1,5 @@
-import { CODE_HOURS, CODE_LABEL, TURNO_DEF, WORKING_CODES, esc, periodDates, periodLabel, periodMode, save, state } from '../core/state.js';
-import { dayName, isoDate, parseISO } from '../lib/logic.js';
+import { CODE_HOURS, CODE_LABEL, SERVICE_LABEL, SHIFT_CONFIG, TURNO_DEF, WORKING_CODES, esc, periodDates, periodLabel, periodMode, save, state } from '../core/state.js';
+import { assegnaStazione, dayName, isoDate, normalizzaCella, parseISO, serviziDelCodice, stazioneDi, stazioniDi } from '../lib/logic.js';
 import { renderDashboard } from '../viste/dashboard.js';
 /* ============================= TURNI: griglia =============================
 
@@ -184,12 +184,35 @@ function apriSceltaTurno(staffId, day){
   document.addEventListener('keydown', tasti, true);
   back.addEventListener('click', e=>{ if(e.target === back) chiudi(); });
 
+  /* Una partita per tutti i servizi o una per ciascuno. È una scelta che si
+     ricorda finché il foglio resta aperto, e parte da quello che la cella dice
+     già: chi non fa partite miste — cioè quasi tutti, e tutti quelli che hanno
+     dati salvati da prima — non se ne accorge nemmeno. Chiedere due volte la
+     stessa stazione sarebbe una tassa su chi non fa spezzati misti. */
+  let collegate = null;
+
   disegnaFoglio();
 
   function disegnaFoglio(){
-    const cella = (state.shifts[staffId]||{})[day] || {code:'', stationId:null};
+    const cella = (state.shifts[staffId]||{})[day] || {code:'', stations:{}};
     const lavora = WORKING_CODES().includes(cella.code);
     const stazioni = stazioniPer(s);
+    const servizi = lavora ? (serviziDelCodice(cella.code, SHIFT_CONFIG()) || []) : [];
+    if(collegate === null){
+      collegate = servizi.every(sv=> stazioneDi(cella, sv) === stazioneDi(cella, servizi[0]));
+    }
+    // Un gruppo di scelte per servizio, o uno solo per tutta la giornata. Con un
+    // turno che copre un servizio solo l'aspetto è identico a prima.
+    const gruppi = (servizi.length > 1 && !collegate)
+      ? servizi.map(sv=> ({sv, etichetta: SERVICE_LABEL(sv), scelta: stazioneDi(cella, sv)}))
+      : [{sv:'*', etichetta:'Stazione', scelta: stazioneDi(cella, servizi[0])}];
+    const gruppoHtml = g => `
+      <label>${esc(g.etichetta)}</label>
+      <div class="chip-toggle" data-gruppo="stazione" data-servizio="${esc(g.sv)}">
+        <button type="button" data-station="" class="${!g.scelta?'on':''}">nessuna</button>
+        ${stazioni.map(st=>`<button type="button" data-station="${esc(st.id)}" class="${g.scelta===st.id?'on':''}">
+          <i class="ct-pallino" style="--pallino:${coloreStazione(st.id)}"></i>${esc(st.name)}</button>`).join('')}
+      </div>`;
     back.innerHTML = `
       <div class="dialog foglio-turno" role="dialog" aria-modal="true" aria-label="${esc(s.name+' — '+dataLunga(day))}">
         <h3>${esc(s.name)}</h3>
@@ -201,39 +224,44 @@ function apriSceltaTurno(staffId, day){
           ${Object.keys(TURNO_DEF()).map(code=>`
             <button type="button" data-code="${esc(code)}" class="${cella.code===code?'on':''}">${esc(code ? CODE_LABEL(code) : SIGLA_VUOTA)}</button>`).join('')}
         </div>
-        ${lavora ? `
-          <label>Stazione</label>
-          ${stazioni.length ? `<div class="chip-toggle" data-gruppo="stazione">
-            <button type="button" data-station="" class="${!cella.stationId?'on':''}">nessuna</button>
-            ${stazioni.map(st=>`<button type="button" data-station="${esc(st.id)}" class="${cella.stationId===st.id?'on':''}">
-              <i class="ct-pallino" style="--pallino:${coloreStazione(st.id)}"></i>${esc(st.name)}</button>`).join('')}
-          </div>` : `<p class="nota-foglio">Nessuna stazione definita: si aggiungono nella scheda Stazioni.</p>`}
-        ` : ''}
+        ${lavora ? (stazioni.length ? `
+          ${servizi.length > 1 ? `<div class="chip-toggle" data-gruppo="collega">
+            <button type="button" data-collega="1" class="${collegate?'on':''}">stessa partita tutto il giorno</button>
+            <button type="button" data-collega="0" class="${collegate?'':'on'}">una per servizio</button>
+          </div>` : ''}
+          ${gruppi.map(gruppoHtml).join('')}
+        ` : `<p class="nota-foglio">Nessuna stazione definita: si aggiungono nella scheda Stazioni.</p>`) : ''}
         <div class="dialog-actions"><button class="btn ghost" data-chiudi>Chiudi</button></div>
       </div>`;
 
     back.querySelector('[data-chiudi]').addEventListener('click', chiudi);
     back.querySelectorAll('[data-gruppo="turno"] button').forEach(b=>
       b.addEventListener('click', ()=> scegliTurno(b.dataset.code)));
-    back.querySelectorAll('[data-gruppo="stazione"] button').forEach(b=>
-      b.addEventListener('click', ()=> scegliStazione(b.dataset.station)));
+    back.querySelectorAll('[data-gruppo="collega"] button').forEach(b=>
+      b.addEventListener('click', ()=>{ collegate = b.dataset.collega === '1'; disegnaFoglio(); }));
+    back.querySelectorAll('[data-gruppo="stazione"]').forEach(g=>
+      g.querySelectorAll('button').forEach(b=>
+        b.addEventListener('click', ()=> scegliStazione(g.dataset.servizio, b.dataset.station))));
   }
 
   function scegliTurno(code){
     state.shifts[staffId] = state.shifts[staffId] || {};
-    const prima = state.shifts[staffId][day] || {code:'', stationId:null};
-    // Un codice che non copre servizi (riposo, ferie, malattia) non può
-    // portarsi dietro una stazione: sarebbe un dato che non vuol dire niente.
-    state.shifts[staffId][day] = {
-      code, stationId: WORKING_CODES().includes(code) ? prima.stationId : null, extra: !!prima.extra,
-    };
+    const cella = state.shifts[staffId][day] || {code:'', stations:{}, extra:false};
+    cella.code = code;
+    // Cambiando il turno cambia cosa copre, e la normalizzazione fa il resto: i
+    // servizi che il nuovo codice non copre perdono la chiave, quelli nuovi
+    // ereditano la stazione già decisa — passando da P a SP il pranzo non si
+    // ridecide. Un codice che non copre servizi (riposo, ferie, malattia) resta
+    // senza stazione: sarebbe un dato che non vuol dire niente.
+    state.shifts[staffId][day] = normalizzaCella(cella, SHIFT_CONFIG());
     save('shifts');
     disegnaFoglio(); aggiornaTutto();
   }
-  function scegliStazione(stationId){
+  function scegliStazione(sv, stationId){
     const giorni = state.shifts[staffId] = state.shifts[staffId] || {};
-    giorni[day] = giorni[day] || {code:'', stationId:null};
-    giorni[day].stationId = stationId || null;
+    const cella = giorni[day] = giorni[day] || {code:'', stations:{}};
+    const quali = (sv === '*') ? (serviziDelCodice(cella.code, SHIFT_CONFIG()) || []) : [sv];
+    quali.forEach(x=> assegnaStazione(cella, x, stationId, SHIFT_CONFIG()));
     save('shifts');
     disegnaFoglio(); aggiornaTutto();
   }
@@ -393,19 +421,46 @@ function collegaScorrimento(el, tab, dates, oggi, posPrec){
   aggiorna();
 }
 
+/* Le partite di una giornata, in ordine di servizio e senza ripetizioni. Una
+   sola è il caso normale; due vogliono dire due partite nello stesso giorno —
+   a pranzo ai primi, a cena al pass. */
+function partiteDi(cella){
+  return stazioniDi(cella, SHIFT_CONFIG())
+    .map(id=> state.stations.find(x=> x.id === id))
+    .filter(Boolean);
+}
+/* Il dettaglio servizio per servizio, per il `title`: "Pranzo: Primi",
+   "Cena: Pass". Nella cella non ci starebbe mai, qui sì. */
+function dettaglioPartite(cella){
+  return (serviziDelCodice(cella.code, SHIFT_CONFIG()) || []).map(sv=>{
+    const st = state.stations.find(x=> x.id === stazioneDi(cella, sv));
+    return st ? SERVICE_LABEL(sv) + ': ' + st.name : null;
+  }).filter(Boolean);
+}
+
 function cellaHtml(s, d, oggi){
-  const cella = (state.shifts[s.id]||{})[d] || {code:'', stationId:null};
+  const cella = (state.shifts[s.id]||{})[d] || {code:'', stations:{}};
   const lavora = WORKING_CODES().includes(cella.code);
-  const st = lavora ? state.stations.find(x=> x.id === cella.stationId) : null;
+  const partite = lavora ? partiteDi(cella) : [];
   const orario = lavora ? orarioDi(cella.code) : '';
+  // Il nome della stazione si scrive solo quando la partita della giornata è
+  // UNA. Con due, il nome di una sola direbbe una cosa falsa e i due nomi non
+  // ci starebbero: restano i pallini, e il dettaglio sta nel `title`, nella
+  // legenda e nel foglio di scelta. Questo è anche il motivo per cui le celle a
+  // due partite non falsano `adattaTesti`: non hanno proprio l'etichetta da
+  // misurare, quindi non spengono `con-stazione` per tutte le altre.
+  const nome = partite.length === 1 ? partite[0] : null;
   const titolo = s.name + ' · ' + dataLunga(d) + ' · ' + CODE_LABEL(cella.code)
-    + (st ? ' · ' + st.name : '') + (cella.extra ? ' · turno extra' : '');
+    + (partite.length === 1 ? ' · ' + partite[0].name
+       : partite.length > 1 ? ' · ' + dettaglioPartite(cella).join(' / ') : '')
+    + (cella.extra ? ' · turno extra' : '');
   return `<td class="${d===oggi?'today-col':''}">
     <button type="button" class="cella-turno${cella.extra?' extra':''}" data-staff="${esc(s.id)}" data-day="${esc(d)}" title="${esc(titolo)}">
       <span class="ct-sigla ${esc(cella.code)}">${esc(cella.code || SIGLA_VUOTA)}</span>
       <span class="ct-orario">${esc(orario)}</span>
-      <span class="ct-stazione">${st
-        ? `<i class="ct-pallino" style="--pallino:${coloreStazione(st.id)}"></i><span class="ct-nome-stazione" data-stazione="${esc(st.id)}" data-nome="${esc(st.name)}">${esc(st.name)}</span>`
+      <span class="ct-stazione">${partite.map(st=>
+        `<i class="ct-pallino" style="--pallino:${coloreStazione(st.id)}"></i>`).join('')}${nome
+        ? `<span class="ct-nome-stazione" data-stazione="${esc(nome.id)}" data-nome="${esc(nome.name)}">${esc(nome.name)}</span>`
         : ''}</span>
     </button>
   </td>`;
@@ -464,7 +519,16 @@ function renderLegenda(){
   const orfani = state.staff.some(senzaStazioni)
     ? `<span class="voce-legenda"><i class="ct-pallino vuoto"></i>senza stazioni: il generatore non li assegna, si assegnano a mano</span>`
     : '';
-  el.innerHTML = turni + (stazioni||orfani ? `<span class="riga-legenda">${stazioni}${orfani}</span>` : '');
+  // Due pallini in una cella sono l'unica cosa che si vede quando il nome della
+  // stazione non ci sta, e da soli non si spiegano. La voce compare solo se nel
+  // periodo c'è davvero una giornata su due partite: una legenda che spiega
+  // qualcosa che non c'è è rumore.
+  const dueDavvero = state.staff.some(s=> periodDates().some(d=>
+    partiteDi((state.shifts[s.id]||{})[d] || {}).length > 1));
+  const doppie = dueDavvero
+    ? `<span class="voce-legenda"><i class="ct-pallino" style="--pallino:var(--brass)"></i><i class="ct-pallino" style="--pallino:var(--brass)"></i>due partite nella stessa giornata: a pranzo una, a cena l'altra</span>`
+    : '';
+  el.innerHTML = turni + (stazioni||orfani||doppie ? `<span class="riga-legenda">${stazioni}${orfani}${doppie}</span>` : '');
 }
 
 export function weeklyExtraFromTurni(){

@@ -43,6 +43,10 @@ export function refreshShiftConfig(){
 }
 // Scorciatoie leggibili nel resto dell'app. Sono funzioni, non costanti, perché
 // il loro contenuto cambia quando lo chef modifica la configurazione.
+// La configurazione intera, per chi deve passarla agli accessori della cella
+// (`stazioneDi`, `stazioniDi`, `normalizzaCella`): sono funzioni pure e i
+// servizi coperti da un codice li possono sapere solo da qui.
+export const SHIFT_CONFIG   = () => SHIFT_CFG;
 export const SERVICES       = () => SHIFT_CFG.serviceIds;
 export const SERVICE_LABEL  = id => SHIFT_CFG.serviceLabels[id] || id;
 export const TURNO_DEF      = () => SHIFT_CFG.turnoDef;
