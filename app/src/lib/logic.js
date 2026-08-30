@@ -14,6 +14,14 @@
 // Un tipo di turno che elenca DUE servizi è ciò che prima era lo "spezzato":
 // una persona sola che copre pranzo e cena. Non è più un caso speciale nel
 // codice, è una configurazione come le altre.
+//
+// Nemmeno le stazioni sono cablate. Chi genera può passarne l'elenco:
+//
+//   options.stazioni = [{id, name, copreAnche:[altroId, ...]}]
+//
+// `copreAnche` dice che chi lavora QUI copre anche quelle altre — le insalate
+// che danno una mano al lavaggio. È facoltativo: senza, tutto si comporta come
+// prima, ed è il caso di ogni cucina che non l'ha ancora impostato.
 // ============================================================================
 
 const DAYS = ["Lun","Mar","Mer","Gio","Ven","Sab","Dom"];
@@ -232,6 +240,48 @@ function prioritaDi(s, stationId){
   return i < 0 ? 999 : i;
 }
 
+// ----------------------------------------------------------------------------
+// DOPPIA PARTITA: «quando Rakib sta alle insalate lo conto comunque nei due del
+// lavaggio, perche' mentre fa le insalate aiuta l'altro al lavaggio».
+//
+// L'impostazione sta sulla STAZIONE (`{id, name, copreAnche:[altroId,...]}`) e
+// non sulla persona, e la scelta non e' indifferente:
+//   - E' un fatto della cucina, non di chi ci lavora. Le insalate stanno
+//     accanto al lavaggio: chiunque ci stia dara' una mano, anche l'ultimo
+//     arrivato. Sulla persona, la stessa verita' andrebbe ripetuta su ogni
+//     scheda e ricopiata a ogni assunzione — e dimenticarsela non da' nessun
+//     errore, toglie copertura in silenzio.
+//   - Sono poche impostazioni: una per stazione (otto), non una per persona
+//     (quindici, e crescono).
+//   - Si generalizza: «al pass si copre anche il passaggio piatti», «al bar si
+//     copre anche la caffetteria». Questa app deve servire molte cucine, non
+//     solo questa.
+//
+// Chiusura transitiva, cosi' una catena A→B→C non si ferma al primo salto; il
+// set dei visti regge anche un anello A→B→A senza girare all'infinito.
+// Senza `stazioni` fra le opzioni non c'e' nessuna copertura di rimbalzo e il
+// motore si comporta esattamente come prima: e' il default per chi ha gia' i
+// dati salvati.
+function costruisciCoperture(stazioni){
+  const diretti = {};
+  (stazioni||[]).forEach(st=>{
+    if(!st || !st.id) return;
+    diretti[st.id] = (st.copreAnche||[]).filter(x=> x && x !== st.id);
+  });
+  const chiusura = {};
+  Object.keys(diretti).forEach(id=>{
+    const visti = new Set([id]), out = [], coda = diretti[id].slice();
+    while(coda.length){
+      const x = coda.shift();
+      if(visti.has(x)) continue;
+      visti.add(x); out.push(x);
+      (diretti[x]||[]).forEach(y=>{ if(!visti.has(y)) coda.push(y); });
+    }
+    chiusura[id] = out;
+  });
+  return chiusura;
+}
+
 function computeShifts(staffList, staffingNeeds, options){
   options = options || {};
   const cfg = options.config || buildShiftConfig(null, null);
@@ -255,6 +305,19 @@ function computeShifts(staffList, staffingNeeds, options){
   const tetto = options.maxExtraPerPersona;
   const extraVietati = (tetto != null) && !(tetto > 0);
   const maxExtra = (tetto != null && tetto > 0) ? tetto : Infinity;
+
+  // Chi lavora su una stazione ne copre anche altre (vedi costruisciCoperture).
+  // `coperteDa` restituisce sempre almeno la stazione stessa: senza
+  // configurazione e' una lista di uno, e ogni conto resta quello di prima.
+  const copreOltre = costruisciCoperture(options.stazioni);
+  const coperteDa = st => [st].concat(copreOltre[st] || []);
+  // Chi riceve copertura di rimbalzo da qualcun altro. Serve per l'ORDINE in
+  // cui le stazioni vengono coperte dentro un servizio: se il lavaggio venisse
+  // servito per primo si prenderebbe le sue due persone dedicate, e la mano di
+  // Rakib dalle insalate arriverebbe a giochi fatti — cioe' non varrebbe
+  // niente. Chi da' una mano va piazzato PRIMA di chi la riceve.
+  const riceveDaAltri = {};
+  Object.keys(copreOltre).forEach(d=> copreOltre[d].forEach(r=>{ riceveDaAltri[r] = true; }));
 
   const pools = buildStaffPools(staffList, rand);
   const assigned = {}, stationAssign = {}, extraFlag = {};
@@ -405,12 +468,44 @@ function computeShifts(staffList, staffingNeeds, options){
       budgetSpezzati[st] = Math.max(0, postiOggi[st] - turniOggi);
     });
 
+    // Un turno assegnato chiude dei posti: su tutti i servizi che il codice
+    // copre, e su tutte le stazioni che quella stazione copre — la sua, sempre,
+    // piu' quelle di rimbalzo. E' l'unico punto in cui «Rakib conta anche nei
+    // due del lavaggio» diventa un numero. `svBase` c'e' per sicurezza: il
+    // posto che ha fatto scattare l'assegnazione va chiuso comunque, anche se
+    // un domani il codice scelto smettesse di coprirlo, altrimenti il `while`
+    // che ci gira intorno non finirebbe piu'.
+    const segnaCopertura = (code, st, svBase) => {
+      const servizi = (CODE_TO_SERVICES[code]||[]).slice();
+      if(svBase && !servizi.includes(svBase)) servizi.push(svBase);
+      const stazioniCoperte = coperteDa(st);
+      servizi.forEach(sv2=> stazioniCoperte.forEach(st2=>{
+        if(remain[sv2] && remain[sv2][st2]) remain[sv2][st2] = Math.max(0, remain[sv2][st2]-1);
+      }));
+    };
+
     SERVICES.forEach(sv=>{
       // stazioni più "rare" (poche persone qualificate in tutta la brigata) vengono coperte per prime,
       // altrimenti rischiano di restare senza candidati perché consumati da stazioni più comuni.
+      // Davanti alla rarita' viene pero' chi DA' una mano a un'altra stazione:
+      // la copertura di rimbalzo esiste solo se arriva prima che la stazione
+      // aiutata abbia gia' chiamato tutte le sue persone dedicate (vedi
+      // `riceveDaAltri`). Chi non riceve niente da nessuno resta nel gruppo di
+      // testa, quindi per le cucine senza `copreAnche` l'ordine e' identico a
+      // prima: la chiave vale 0 per tutti e decide la rarita', come sempre.
+      // E in coda a tutti, una stazione che NESSUNO in brigata sa fare: da sola
+      // non si chiude in nessun caso, quindi non ha senso che la rarita' la
+      // mandi davanti a chi invece un candidato ce l'ha. E' anche l'unico modo
+      // di cavarsela quando due stazioni si coprono a vicenda ("chi sta alle
+      // insalate copre il lavaggio" e viceversa): li' nessuna delle due e' il
+      // donatore, e a decidere resta questa.
+      const quantiSanno = st => staffList.filter(s=> s.stations && s.stations.includes(st)).length;
       const stationIds = Object.keys(remain[sv]).sort((a,b)=>{
-        const qa = staffList.filter(s=> s.stations && s.stations.includes(a)).length;
-        const qb = staffList.filter(s=> s.stations && s.stations.includes(b)).length;
+        const qa = quantiSanno(a), qb = quantiSanno(b);
+        const na = qa ? 0 : 1, nb = qb ? 0 : 1;
+        if(na !== nb) return na - nb;
+        const ra = riceveDaAltri[a] ? 1 : 0, rb = riceveDaAltri[b] ? 1 : 0;
+        if(ra !== rb) return ra - rb;
         return qa - qb;
       });
       stationIds.forEach(stationId=>{
@@ -600,10 +695,7 @@ function computeShifts(staffList, staffingNeeds, options){
             extraFatti[chosen.id]++;
             extras.push({day, service:sv, stationId, staffId:chosen.id, staffName:chosen.name});
           }
-          remain[sv][stationId]--;
-          (CODE_TO_SERVICES[code]||[]).forEach(sv2=>{
-            if(sv2!==sv && remain[sv2] && remain[sv2][stationId]) remain[sv2][stationId] = Math.max(0, remain[sv2][stationId]-1);
-          });
+          segnaCopertura(code, stationId, sv);
         }
       });
     });
@@ -628,11 +720,14 @@ function computeShifts(staffList, staffingNeeds, options){
     };
     // Segna la copertura appena decisa nel riempimento finale, altrimenti due
     // persone di fila si accamperebbero sulla stessa stazione scoperta.
+    // Il turno speso qui e' un turno in meno da spalmare sui giorni che restano
+    // per la stazione dove la persona sta davvero; la copertura che porta con
+    // se' passa da `segnaCopertura` e vale anche per le stazioni di rimbalzo.
+    // `turniResidui` NON si scala anche a quelle: e' il budget dei turni di
+    // QUELLA partita, e nessuno di quei turni e' stato speso.
     const consumaCopertura = (code, st) => {
       turniResidui[st] = Math.max(0, (turniResidui[st]||0) - 1);
-      (CODE_TO_SERVICES[code]||[]).forEach(sv2=>{
-        if(remain[sv2] && remain[sv2][st]) remain[sv2][st] = Math.max(0, remain[sv2][st]-1);
-      });
+      segnaCopertura(code, st, null);
     };
 
     staffList.forEach(s=>{
@@ -766,6 +861,7 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
     const res = computeShifts(staffList, staffingNeeds, {
       config: options.config, days: settimana, constraints: options.constraints,
       maxExtraPerPersona: options.maxExtraPerPersona,
+      stazioni: options.stazioni,
       // Il seme avanza di settimana in settimana: con lo stesso seme per tutte,
       // le quattro settimane di un mese uscirebbero identiche fra loro.
       seed: (options.seed != null) ? (semeNumerico(options.seed) + i) : undefined,

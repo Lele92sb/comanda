@@ -1022,3 +1022,149 @@ test('anche la ripartizione della settimana segue la partita principale', () => 
   assert.ok(scoperte <= 85,
     `${scoperte} scoperture su 120 generazioni: la capienza settimanale non sta seguendo la partita principale`);
 });
+
+/* ===================== DOPPIA PARTITA: CHI COPRE ANCHE ALTRO =====================
+   «Quando Rakib sta alle insalate lo conto comunque nei due del lavaggio,
+   perche' mentre fa le insalate aiuta l'altro al lavaggio.»
+   L'impostazione sta sulla STAZIONE (`copreAnche`), non sulla persona: e' un
+   fatto della cucina — le insalate stanno accanto al lavaggio — e vale per
+   chiunque ci stia, anche per l'ultimo arrivato. Senza `stazioni` fra le
+   opzioni non cambia niente, ed e' il caso di tutti i dati gia' salvati. */
+
+const STAZ_RAKIB = [
+  {id:'insalate', name:'Insalate', copreAnche:['lavaggio']},
+  {id:'lavaggio', name:'Lavaggio'},
+];
+const BRIGATA_RAKIB = [
+  { id:'rakib', name:'Rakib', stations:['insalate'], weeklyQuota:[{count:7,codes:['SP']}] },
+  { id:'l1',    name:'L1',    stations:['lavaggio'], weeklyQuota:[{count:7,codes:['SP']}] },
+];
+const FABBISOGNO_RAKIB = { colazione:[],
+  pranzo:[{stationId:'insalate',count:1},{stationId:'lavaggio',count:2}],
+  cena:  [{stationId:'insalate',count:1},{stationId:'lavaggio',count:2}] };
+
+test('chi sta alle insalate conta anche nei due del lavaggio', () => {
+  // Il lavaggio ne chiede due e in brigata c'e' un solo lavapiatti: senza la
+  // mano di Rakib un posto al giorno resta scoperto, a pranzo e a cena.
+  const senza = computeShifts(BRIGATA_RAKIB, FABBISOGNO_RAKIB, {config:BASE});
+  assert.equal(senza.shortfalls.reduce((n,s)=>n+s.missing, 0), 14,
+    'senza la doppia partita devono restare scoperti 14 posti: e il metro del test');
+
+  for(let i=0;i<50;i++){
+    const con = computeShifts(BRIGATA_RAKIB, FABBISOGNO_RAKIB, {config:BASE, stazioni:STAZ_RAKIB});
+    assert.equal(con.shortfalls.length, 0,
+      'Rakib alle insalate doveva contare anche nei due del lavaggio');
+    assert.equal(con.extras.length, 0, 'nessuno andava chiamato oltre quota');
+  }
+});
+
+test('chi da una mano resta segnato sulla SUA stazione, non su quella che aiuta', () => {
+  // Nella griglia Rakib sta alle insalate: e' li' che lo si cerca. Segnarlo al
+  // lavaggio sarebbe anche un turno su una stazione per cui non e' qualificato.
+  const { newShifts } = computeShifts(BRIGATA_RAKIB, FABBISOGNO_RAKIB,
+    {config:BASE, stazioni:STAZ_RAKIB});
+  assert.equal(noQualificationViolations(BRIGATA_RAKIB, newShifts), null);
+  GIORNI7.forEach(d=> assert.equal(newShifts['rakib'][d].stationId, 'insalate',
+    `il ${d} Rakib e' stato spostato al lavaggio invece di restare alle insalate`));
+});
+
+test('chi da una mano viene coperto PRIMA di chi la riceve', () => {
+  // L'ordine e' tutto: se il lavaggio venisse servito per primo si prenderebbe
+  // le sue persone dedicate, e la mano dalle insalate arriverebbe a giochi
+  // fatti. Qui il lavaggio e' anche la stazione piu' RARA (due qualificati
+  // contro tre), quindi la sola rarita' lo manderebbe davanti.
+  const staff = [
+    { id:'l1', name:'L1', stations:['lavaggio'], weeklyQuota:[{count:7,codes:['P']}] },
+    { id:'l2', name:'L2', stations:['lavaggio'], weeklyQuota:[{count:7,codes:['R']}], puoFareExtra:false },
+    { id:'r1', name:'R1', stations:['insalate'], weeklyQuota:[{count:7,codes:['P']}] },
+    { id:'r2', name:'R2', stations:['insalate'], weeklyQuota:[{count:7,codes:['R']}], puoFareExtra:false },
+    { id:'r3', name:'R3', stations:['insalate'], weeklyQuota:[{count:7,codes:['R']}], puoFareExtra:false },
+  ];
+  const needs = { colazione:[],
+    pranzo:[{stationId:'lavaggio',count:2},{stationId:'insalate',count:1}], cena:[] };
+  const stazioni = [
+    {id:'lavaggio', name:'Lavaggio'},
+    {id:'insalate', name:'Insalate', copreAnche:['lavaggio']},
+  ];
+  const senza = computeShifts(staff, needs, {config:BASE});
+  assert.equal(senza.shortfalls.reduce((n,s)=>n+s.missing,0), 7,
+    'senza la doppia partita restano scoperti 7 posti: e il metro del test');
+  for(let i=0;i<50;i++){
+    const { shortfalls } = computeShifts(staff, needs, {config:BASE, stazioni});
+    assert.equal(shortfalls.length, 0,
+      'il lavaggio si e preso i suoi candidati prima che le insalate potessero aiutarlo');
+  }
+});
+
+test('la mano si passa lungo tutta la catena, non solo al primo anello', () => {
+  // a copre b, b copre c: chi sta su a chiude anche c. Fermarsi al primo salto
+  // lascerebbe c scoperta tutti i giorni.
+  const staff = [{ id:'r', name:'R', stations:['a'], weeklyQuota:[{count:7,codes:['P']}] }];
+  const needs = { colazione:[],
+    pranzo:[{stationId:'a',count:1},{stationId:'b',count:1},{stationId:'c',count:1}], cena:[] };
+  const stazioni = [
+    {id:'a', name:'A', copreAnche:['b']},
+    {id:'b', name:'B', copreAnche:['c']},
+    {id:'c', name:'C'},
+  ];
+  assert.equal(computeShifts(staff, needs, {config:BASE}).shortfalls.reduce((n,s)=>n+s.missing,0), 14,
+    'senza la doppia partita restano scoperti 14 posti: e il metro del test');
+  const { shortfalls } = computeShifts(staff, needs, {config:BASE, stazioni});
+  assert.equal(shortfalls.length, 0, 'la catena si e fermata al primo anello');
+});
+
+test('due stazioni che si coprono a vicenda non mandano il motore in circolo', () => {
+  // Un anello e' un errore di configurazione plausibile ("le insalate coprono
+  // il lavaggio" piu' "il lavaggio copre le insalate"): la chiusura transitiva
+  // deve fermarsi, non girare all'infinito. Se questo test si pianta invece di
+  // fallire, e' comunque rosso.
+  const staff = [{ id:'r', name:'R', stations:['a'], weeklyQuota:[{count:7,codes:['P']}] }];
+  const needs = { colazione:[],
+    pranzo:[{stationId:'a',count:1},{stationId:'b',count:1}], cena:[] };
+  const stazioni = [
+    {id:'a', name:'A', copreAnche:['b']},
+    {id:'b', name:'B', copreAnche:['a']},
+  ];
+  const { newShifts, shortfalls } = computeShifts(staff, needs, {config:BASE, stazioni});
+  assert.equal(Object.keys(newShifts['r']).length, 7);
+  assert.equal(shortfalls.length, 0, 'una persona su a chiude anche b, anche con l anello');
+});
+
+test('un copreAnche verso una stazione che non e nel fabbisogno non rompe niente', () => {
+  const staff = [{ id:'r', name:'R', stations:['a'], weeklyQuota:[{count:7,codes:['P']}] }];
+  const needs = { colazione:[], pranzo:[{stationId:'a',count:1}], cena:[] };
+  const stazioni = [{id:'a', name:'A', copreAnche:['fantasma','a']}];  // e anche verso se stessa
+  const { newShifts, shortfalls } = computeShifts(staff, needs, {config:BASE, stazioni});
+  assert.equal(shortfalls.length, 0);
+  GIORNI7.forEach(d=> assert.equal(newShifts['r'][d].code, 'P'));
+});
+
+test('senza stazioni fra le opzioni il motore si comporta esattamente come prima', () => {
+  // La retrocompatibilita' e' il punto: nessuna cucina ha `copreAnche` finche'
+  // non lo imposta. Con lo stesso seme i tre casi devono dare lo STESSO
+  // prospetto — opzione assente, elenco vuoto, elenco senza nessun copreAnche.
+  const dates = monthDates(new Date(2026, 8, 1));
+  const stazioniNude = [{id:'a', name:'A'}, {id:'b', name:'B'}];
+  const gen = opt => computeShiftsForDates(BRIGATA_SEME, FABBISOGNO_SEME,
+    Object.assign({config:BASE, dates, seed:'2026-09-01'}, opt));
+  const riferimento = gen({});
+  [{}, {stazioni:[]}, {stazioni:stazioniNude}].forEach((opt,i)=>{
+    const r = gen(opt);
+    assert.deepEqual(r.newShifts, riferimento.newShifts, `variante ${i}: prospetto diverso`);
+    assert.deepEqual(r.shortfalls, riferimento.shortfalls, `variante ${i}: scoperture diverse`);
+    assert.deepEqual(r.extras, riferimento.extras, `variante ${i}: extra diversi`);
+  });
+});
+
+test('la doppia partita vale anche generando un mese intero', () => {
+  // computeShiftsForDates spezza il periodo in settimane e ricostruisce le
+  // opzioni a ogni giro: `stazioni` non deve perdersi per strada.
+  const dates = monthDates(new Date(2026, 8, 1));
+  const senza = computeShiftsForDates(BRIGATA_RAKIB, FABBISOGNO_RAKIB, {config:BASE, dates});
+  assert.equal(senza.shortfalls.reduce((n,s)=>n+s.missing,0), 60,
+    'senza la doppia partita restano scoperti 60 posti nel mese: e il metro del test');
+  const con = computeShiftsForDates(BRIGATA_RAKIB, FABBISOGNO_RAKIB,
+    {config:BASE, dates, stazioni:STAZ_RAKIB});
+  assert.equal(con.shortfalls.length, 0,
+    'stazioni non e arrivata fino al motore settimana per settimana');
+});
