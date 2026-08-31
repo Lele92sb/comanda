@@ -2275,6 +2275,7 @@ function computeShifts(staffList, staffingNeeds, options){
       // altrimenti un extra travestito e nessuno se ne accorge.
       oreNonVerificate: senzaOre(s),
     }))
+    .filter(x=> !nonPianificabili.some(np=> np.staffId === x.staffId))
     .filter(x=> x.turni > 0);
   // REGOLA DA NON DIMENTICARE FRA SEI MESI: `extras` ed `eccedenzeCollocate`
   // non stanno MAI nello stesso conteggio, e chi scrive il riepilogo deve
@@ -2340,6 +2341,11 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
     .map(s=> ({staffId:s.id, staffName:s.name, turni: nonSpesaPerPersona[s.id]||0,
       motivo: motivoPerPersona[s.id] || 'collocazione non attiva',
       oreNonVerificate: !(parseFloat(s.hours) > 0)}))
+    // Chi non ha stazioni e' gia' dichiarato in `nonPianificabili`, con il suo
+    // motivo vero. Ricomparire qui gli attribuirebbe un motivo diverso e falso
+    // — «il fabbisogno non li chiedeva» — e il riepilogo direbbe due cose
+    // sulle stesse due persone, una delle quali sbagliata.
+    .filter(x=> !nonPianificabili.some(np=> np.staffId === x.staffId))
     .filter(x=> x.turni > 0);
 
   return { newShifts, shortfalls, extras, nonPianificabili, quotaNonSpesa,
