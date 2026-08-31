@@ -536,8 +536,18 @@ function contoCapienza(staffList, staffingNeeds, options){
       // La mano che arriva da un'altra partita: gratis, non si spende due volte.
       const rimbalzo = Math.min(domanda,
         donatoriDi(st).reduce((n,y)=> n + (dalleTasche[y] || 0), 0));
-      // Dentro la partita: prima chi ce l'ha come principale.
-      const inOrdine = suoi[st].slice().sort((a,b)=> prioritaDi(a, st) - prioritaDi(b, st));
+      // Dentro la partita: PRIMA CHI SA FARE MENO PARTITE, poi chi ce l'ha come
+      // principale. L'ordine non e' un abbellimento, e' meta' del conto: la
+      // capienza di chi sa fare solo questa non serve a nessun altro, quindi va
+      // esaurita per prima, mentre quella di chi ne sa fare due va protetta
+      // perche' e' l'unica che puo' arrivare altrove. Su DEROMA, prendendo
+      // prima Nisan (antipasti+pass) invece di Biplop (solo antipasti),
+      // restavano 2 posti in tasca a Biplop — dove nessuno puo' spenderli — e
+      // il pass risultava scoperto di 2. Con i dedicati per primi il pass si
+      // chiude, e gli extra strutturali scendono da 4 a 2 (i due del lavaggio,
+      // quelli veri).
+      const inOrdine = suoi[st].slice().sort((a,b)=> ((a.stations||[]).length - (b.stations||[]).length)
+        || (prioritaDi(a, st) - prioritaDi(b, st)));
       let daCoprire = domanda - rimbalzo;
       let presi = 0;
       for(const p of inOrdine){

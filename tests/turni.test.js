@@ -1596,6 +1596,27 @@ test('nel conto, chi da una mano si alloca prima di chi la riceve', () => {
     'il generatore su questa brigata copre tutto: il conto deve dire la stessa cosa');
 });
 
+test('nel conto, dentro la partita i DEDICATI per primi: e la capienza che arriva al pass', () => {
+  // La capienza di chi sa fare una partita sola non serve a nessun altro: se
+  // non la spende quella partita resta in tasca e non la vede piu' nessuno.
+  // Quella di chi ne sa fare due e' l'unica che puo' viaggiare, e va protetta.
+  // Su DEROMA e' esattamente il caso che lo chef aveva indicato: Nisan sta ad
+  // antipasti E al pass, Biplop solo agli antipasti. Prendendo prima Nisan
+  // restavano 2 posti in tasca a Biplop, dove nessuno puo' spenderli, e il
+  // pass risultava scoperto di 2 — un extra strutturale annunciato che non era
+  // strutturale per niente.
+  const cfg = buildShiftConfig(DEROMA.services, DEROMA.shiftTypes);
+  const conto = contoCapienza(DEROMA.staff, DEROMA.staffingNeeds,
+    {config:cfg, stazioni:DEROMA.stations});
+  assert.equal(partitaDi(conto, 'pass').mancanti, 0,
+    'il pass si chiude con la capienza che avanza a Lorenc, Mohammed e Nisan');
+  // Il lavaggio invece manca davvero: 28 richiesti, 26 di capienza, e i quattro
+  // che lo sanno fare hanno tutti dichiarato di non fare turni oltre quota.
+  assert.equal(partitaDi(conto, 'lavaggio').mancanti, 2);
+  assert.equal(conto.extraStrutturali, 2,
+    'gli extra strutturali su DEROMA sono 2 (il lavaggio), non 4');
+});
+
 // ============================================================================
 // LE ORE DI CONTRATTO CHE AVANZANO.
 // «Se avanzano ore di contratto a qualcuno, le deve assegnare in automatico
