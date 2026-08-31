@@ -135,7 +135,17 @@ function formeStazione(nome){
   // Le iniziali servono anche a un nome di una parola sola: in vista mese la
   // colonna è larga 56px e "Antipasti" non ci sta, ma "A" sì. Un'iniziale è
   // un'abbreviazione, non un troncamento — "Anti…" invece non dice niente.
-  return [testo, parti[0], parti.map(p=>p[0].toUpperCase()).join('')];
+  // Quattro livelli, non tre. Quello in mezzo — due lettere per parola — e'
+  // nato dalle partite vere di una cucina: Pass e Primi hanno la stessa
+  // iniziale, quindi il livello delle iniziali viene saltato perche' non e'
+  // univoco, e si resta col nome intero. In una cella che deve dire DUE
+  // partite ("Pass/Primi", dieci caratteri in una colonna da 97px) questo
+  // vuol dire non dirne nessuna. Con due lettere diventa "Pa/Pr" e ci sta.
+  // Resta un'abbreviazione e non un troncamento: e' la stessa regola delle
+  // iniziali, con una lettera in piu' quando una sola non basta a distinguere.
+  const due = parti.map(p=> p.slice(0,2)).join('');
+  return [testo, parti[0], due.charAt(0).toUpperCase() + due.slice(1),
+          parti.map(p=>p[0].toUpperCase()).join('')];
 }
 
 /* Orario e nome della stazione compaiono solo se ci stanno PER INTERO.
@@ -157,7 +167,7 @@ function adattaTesti(tab){
   const etichette = [...tab.querySelectorAll('.ct-nome-stazione')];
   if(!etichette.length) return;
   const livelli = Math.max(1, ...state.stations.map(st=> formeStazione(st.name).length));
-  for(let i=0; i<livelli; i++){
+  const formeAl = i => {
     const forme = new Map(state.stations.map(st=>{
       const f = formeStazione(st.name);
       return [st.id, f[Math.min(i, f.length-1)]];
@@ -165,11 +175,35 @@ function adattaTesti(tab){
     const valori = [...forme.values()];
     // Il livello 0 sono i nomi veri: si mostrano anche se due stazioni si
     // chiamano uguale, perché l'ambiguità è nei dati, non nell'abbreviazione.
-    if(i > 0 && new Set(valori).size !== valori.length) continue;
-    etichette.forEach(e=>{ e.textContent = forme.get(e.dataset.stazione) || e.dataset.nome || ''; });
-    if(!sfora('.ct-nome-stazione')) return;
-  }
-  tab.classList.remove('con-stazione');
+    return (i > 0 && new Set(valori).size !== valori.length) ? null : forme;
+  };
+  // I due gruppi si accorciano SEPARATAMENTE, e non è pignoleria: una cella a
+  // due partite ha bisogno del doppio dello spazio, e se decidesse per tutti
+  // basterebbero tre celle doppie a far scrivere «Pa» al posto di «Pass» nelle
+  // altre sessanta. Ogni gruppo scende al primo livello che gli sta.
+  const gruppi = [
+    { sel: '.ct-nome-stazione:not([data-stazione2])',
+      quali: etichette.filter(e=> !e.dataset.stazione2),
+      testo: (e,f) => f.get(e.dataset.stazione) || e.dataset.nome || '' },
+    { sel: '.ct-nome-stazione[data-stazione2]',
+      quali: etichette.filter(e=> e.dataset.stazione2),
+      // Le due metà si accorciano allo STESSO livello: «Pass/Pr» farebbe
+      // sembrare che una delle due valga più dell'altra.
+      testo: (e,f) => (f.get(e.dataset.stazione) || e.dataset.nome || '')
+                    + '/' + (f.get(e.dataset.stazione2) || e.dataset.nome2 || '') },
+  ];
+  gruppi.forEach(g=>{
+    if(!g.quali.length) return;
+    for(let i=0; i<livelli; i++){
+      const forme = formeAl(i);
+      if(!forme) continue;
+      g.quali.forEach(e=>{ e.textContent = g.testo(e, forme); });
+      if(!sfora(g.sel)) return;
+    }
+    // Nessuna forma entra: per QUESTO gruppo restano i pallini. Le celle a una
+    // partita sola non pagano per quelle a due.
+    g.quali.forEach(e=>{ e.textContent = ''; });
+  });
 }
 
 /* ---- Il foglio di scelta -------------------------------------------------
@@ -457,13 +491,16 @@ function cellaHtml(s, d, oggi){
   const lavora = WORKING_CODES().includes(cella.code);
   const partite = lavora ? partiteDi(cella) : [];
   const orario = lavora ? orarioDi(cella.code) : '';
-  // Il nome della stazione si scrive solo quando la partita della giornata è
-  // UNA. Con due, il nome di una sola direbbe una cosa falsa e i due nomi non
-  // ci starebbero: restano i pallini, e il dettaglio sta nel `title`, nella
-  // legenda e nel foglio di scelta. Questo è anche il motivo per cui le celle a
-  // due partite non falsano `adattaTesti`: non hanno proprio l'etichetta da
-  // misurare, quindi non spengono `con-stazione` per tutte le altre.
+  // Con due partite si scrivono ENTRAMBE, abbreviate: «Pa/Pr». Qui prima
+  // restavano i soli pallini, e il dettaglio stava nel `title` — che su un
+  // telefono non esiste. Ma «a pranzo ai primi, a cena al pass» è proprio la
+  // cosa che lo chef aveva chiesto: lasciarla leggibile solo col mouse voleva
+  // dire non averla fatta. Sei pallini colorati non si tengono a mente.
+  // Le abbreviazioni sono le stesse di una partita sola (`formeStazione`), e se
+  // la coppia non ci sta nemmeno al livello più corto vale la regola di sempre:
+  // si spengono i nomi e restano i pallini.
   const nome = partite.length === 1 ? partite[0] : null;
+  const coppia = partite.length === 2 ? partite : null;
   const titolo = s.name + ' · ' + dataLunga(d) + ' · ' + CODE_LABEL(cella.code)
     + (partite.length === 1 ? ' · ' + partite[0].name
        : partite.length > 1 ? ' · ' + dettaglioPartite(cella).join(' / ') : '')
@@ -475,6 +512,8 @@ function cellaHtml(s, d, oggi){
       <span class="ct-stazione">${partite.map(st=>
         `<i class="ct-pallino" style="--pallino:${coloreStazione(st.id)}"></i>`).join('')}${nome
         ? `<span class="ct-nome-stazione" data-stazione="${esc(nome.id)}" data-nome="${esc(nome.name)}">${esc(nome.name)}</span>`
+        : coppia
+        ? `<span class="ct-nome-stazione" data-stazione="${esc(coppia[0].id)}" data-nome="${esc(coppia[0].name)}" data-stazione2="${esc(coppia[1].id)}" data-nome2="${esc(coppia[1].name)}">${esc(coppia[0].name)}/${esc(coppia[1].name)}</span>`
         : ''}</span>
     </button>
   </td>`;
