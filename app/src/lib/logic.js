@@ -466,6 +466,78 @@ function capienzaSettimanale(s, cfg){
   return posti;
 }
 
+// ----------------------------------------------------------------------------
+// L'ORDINE DELL'ALLOCAZIONE, IN UN POSTO SOLO.
+//
+// Allocare per CONTARE (`contoCapienza`, il riquadro «il conto, prima di
+// generare») e allocare per ASSEGNARE (`pianificaSettimana`, il piano che il
+// motore poi esegue) devono dare lo stesso risultato: se divergono, il riquadro
+// promette una cosa e il generatore ne fa un'altra, ed e' il modo piu' veloce
+// di far perdere fiducia a chi legge. Per questo l'ordine sta scritto qui una
+// volta sola e lo chiamano tutti e due, invece di essere copiato.
+// ----------------------------------------------------------------------------
+
+// Le partite, dalla prima da allocare all'ultima:
+//   - una partita che NESSUNO in brigata sa fare va in fondo: da sola non si
+//     chiude in nessun caso, e mandarla avanti per rarita' non serve;
+//   - chi DA' una mano a un'altra (`copreAnche`) prima di chi la riceve,
+//     altrimenti la mano arriva a giochi fatti e non vale niente;
+//   - poi rarita' crescente: quante persone in brigata la sanno fare.
+// Il sort di JS e' stabile: a pari chiave resta l'ordine in cui le partite
+// compaiono nel fabbisogno, che e' un ordine che il titolare vede.
+function ordinePartite(staffList, partite, copreOltre){
+  const riceve = {};
+  Object.keys(copreOltre||{}).forEach(d=> (copreOltre[d]||[]).forEach(r=>{ riceve[r] = true; }));
+  const quanti = {};
+  partite.forEach(st=>{ quanti[st] = staffList.filter(s=> (s.stations||[]).includes(st)).length; });
+  return partite.slice().sort((a,b)=>{
+    const qa = quanti[a], qb = quanti[b];
+    if((qa?0:1) !== (qb?0:1)) return (qa?0:1) - (qb?0:1);
+    const ra = riceve[a] ? 1 : 0, rb = riceve[b] ? 1 : 0;
+    if(ra !== rb) return ra - rb;
+    return qa - qb;
+  });
+}
+
+// Quante ALTERNATIVE ha in mano una persona: gli slot di quota che elencano
+// piu' di un codice di lavoro (['S','P'], ['R','SP']) contano una alternativa
+// per codice in piu'. E' la misura di quanto quella capienza sia SPENDIBILE
+// altrove, e serve a decidere chi va esaurito per primo.
+// Carlos ha quattro turni di solo pranzo: zero alternative, e la sua capienza
+// o si spende a pranzo o non si spende. Alessio ha quattro slot ['P1','S1']:
+// quattro alternative, e la sua capienza puo' andare dove serve. Se Alessio
+// va per primo si prende i pranzi, e Carlos resta con quattro turni che non
+// puo' spendere da nessuna parte — misurato su DEROMA, e' il pass che perde
+// tre posti a settimana.
+function alternativeDi(s, cfg){
+  let n = 0;
+  (s.weeklyQuota || []).forEach(g=>{
+    const c = parseInt(g.count) || 0;
+    const wc = (g.codes || []).filter(x=> cfg.workingCodes.includes(x)).length;
+    if(wc > 1) n += c * (wc - 1);
+  });
+  return n;
+}
+
+// Le persone di una partita, dalla prima da esaurire all'ultima:
+//   - PRIMA CHI SA FARE MENO PARTITE. La capienza di chi sa fare solo questa
+//     non serve a nessun altro, quindi va esaurita per prima, mentre quella di
+//     chi ne sa fare due va protetta perche' e' l'unica che puo' arrivare
+//     altrove. Su DEROMA, prendendo prima Nisan (antipasti+pass) invece di
+//     Biplop (solo antipasti), restavano 2 posti in tasca a Biplop — dove
+//     nessuno puo' spenderli — e il pass risultava scoperto di 2.
+//   - poi di chi e' questa partita (`prioritaDi`, l'ordine che imposta il
+//     titolare);
+//   - poi chi ha MENO alternative, per lo stesso motivo del primo criterio ma
+//     un gradino piu' in basso: la capienza rigida va spesa finche' c'e' il
+//     posto che la accetta.
+function ordineQualificati(staffList, st, cfg){
+  return staffList.filter(s=> (s.stations||[]).includes(st))
+    .sort((a,b)=> ((a.stations||[]).length - (b.stations||[]).length)
+      || (prioritaDi(a, st) - prioritaDi(b, st))
+      || (alternativeDi(a, cfg) - alternativeDi(b, cfg)));
+}
+
 function contoCapienza(staffList, staffingNeeds, options){
   options = options || {};
   const cfg = options.config || buildShiftConfig(null, null);
@@ -496,22 +568,9 @@ function contoCapienza(staffList, staffingNeeds, options){
   const partite = Object.keys(postiAlGiorno);
   const suoi = {};
   partite.forEach(st=>{ suoi[st] = staffList.filter(s=> (s.stations||[]).includes(st)); });
-  // L'ordine di allocazione, identico a quello con cui il motore copre le
-  // stazioni dentro un servizio, e per gli stessi motivi:
-  //   - una partita che nessuno in brigata sa fare va in fondo: da sola non si
-  //     chiude in nessun caso, e mandarla avanti per rarita' non serve;
-  //   - chi DA' una mano prima di chi la riceve, altrimenti la mano arriva a
-  //     giochi fatti e non vale niente;
-  //   - poi rarita' crescente.
-  // Il sort di JS e' stabile: a pari chiave resta l'ordine in cui le partite
-  // compaiono nel fabbisogno, che e' un ordine che il titolare vede.
-  const ordine = partite.slice().sort((a,b)=>{
-    const qa = suoi[a].length, qb = suoi[b].length;
-    if((qa?0:1) !== (qb?0:1)) return (qa?0:1) - (qb?0:1);
-    const ra = riceveDaAltri[a] ? 1 : 0, rb = riceveDaAltri[b] ? 1 : 0;
-    if(ra !== rb) return ra - rb;
-    return qa - qb;
-  });
+  // L'ordine di allocazione: sta scritto in `ordinePartite`, che lo condivide
+  // con il piano della settimana. Contare e assegnare devono allocare uguale.
+  const ordine = ordinePartite(staffList, partite, copreOltre);
 
   const conto = {};
   partite.forEach(st=>{ conto[st] = {
@@ -536,18 +595,11 @@ function contoCapienza(staffList, staffingNeeds, options){
       // La mano che arriva da un'altra partita: gratis, non si spende due volte.
       const rimbalzo = Math.min(domanda,
         donatoriDi(st).reduce((n,y)=> n + (dalleTasche[y] || 0), 0));
-      // Dentro la partita: PRIMA CHI SA FARE MENO PARTITE, poi chi ce l'ha come
-      // principale. L'ordine non e' un abbellimento, e' meta' del conto: la
-      // capienza di chi sa fare solo questa non serve a nessun altro, quindi va
-      // esaurita per prima, mentre quella di chi ne sa fare due va protetta
-      // perche' e' l'unica che puo' arrivare altrove. Su DEROMA, prendendo
-      // prima Nisan (antipasti+pass) invece di Biplop (solo antipasti),
-      // restavano 2 posti in tasca a Biplop — dove nessuno puo' spenderli — e
-      // il pass risultava scoperto di 2. Con i dedicati per primi il pass si
-      // chiude, e gli extra strutturali scendono da 4 a 2 (i due del lavaggio,
-      // quelli veri).
-      const inOrdine = suoi[st].slice().sort((a,b)=> ((a.stations||[]).length - (b.stations||[]).length)
-        || (prioritaDi(a, st) - prioritaDi(b, st)));
+      // Dentro la partita l'ordine e' quello di `ordineQualificati`, lo stesso
+      // che usa il piano della settimana. E' meta' del conto: con i dedicati
+      // per primi il pass si chiude, e gli extra strutturali su DEROMA scendono
+      // da 4 a 2 (i due del lavaggio, quelli veri).
+      const inOrdine = ordineQualificati(staffList, st, cfg);
       let daCoprire = domanda - rimbalzo;
       let presi = 0;
       for(const p of inOrdine){
