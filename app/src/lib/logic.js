@@ -342,6 +342,15 @@ function prioritaDi(s, stationId){
   return i < 0 ? 999 : i;
 }
 
+// Confronto fra due chiavi di ordinamento scritte come liste di numeri: il
+// primo criterio che differisce decide. Scriverle come liste invece che come
+// catene di `||` serve a poterle leggere in fila, una riga per criterio, con
+// accanto il motivo — e a poterne aggiungere uno senza rileggere tutto.
+function chiaveMinore(a, b){
+  for(let i=0; i<a.length; i++){ if(a[i] !== b[i]) return a[i] < b[i]; }
+  return false;
+}
+
 // ----------------------------------------------------------------------------
 // DOPPIA PARTITA: «quando Rakib sta alle insalate lo conto comunque nei due del
 // lavaggio, perche' mentre fa le insalate aiuta l'altro al lavaggio».
@@ -499,26 +508,6 @@ function ordinePartite(staffList, partite, copreOltre){
   });
 }
 
-// Quante ALTERNATIVE ha in mano una persona: gli slot di quota che elencano
-// piu' di un codice di lavoro (['S','P'], ['R','SP']) contano una alternativa
-// per codice in piu'. E' la misura di quanto quella capienza sia SPENDIBILE
-// altrove, e serve a decidere chi va esaurito per primo.
-// Carlos ha quattro turni di solo pranzo: zero alternative, e la sua capienza
-// o si spende a pranzo o non si spende. Alessio ha quattro slot ['P1','S1']:
-// quattro alternative, e la sua capienza puo' andare dove serve. Se Alessio
-// va per primo si prende i pranzi, e Carlos resta con quattro turni che non
-// puo' spendere da nessuna parte — misurato su DEROMA, e' il pass che perde
-// tre posti a settimana.
-function alternativeDi(s, cfg){
-  let n = 0;
-  (s.weeklyQuota || []).forEach(g=>{
-    const c = parseInt(g.count) || 0;
-    const wc = (g.codes || []).filter(x=> cfg.workingCodes.includes(x)).length;
-    if(wc > 1) n += c * (wc - 1);
-  });
-  return n;
-}
-
 // Le persone di una partita, dalla prima da esaurire all'ultima:
 //   - PRIMA CHI SA FARE MENO PARTITE. La capienza di chi sa fare solo questa
 //     non serve a nessun altro, quindi va esaurita per prima, mentre quella di
@@ -527,15 +516,37 @@ function alternativeDi(s, cfg){
 //     Biplop (solo antipasti), restavano 2 posti in tasca a Biplop — dove
 //     nessuno puo' spenderli — e il pass risultava scoperto di 2.
 //   - poi di chi e' questa partita (`prioritaDi`, l'ordine che imposta il
-//     titolare);
-//   - poi chi ha MENO alternative, per lo stesso motivo del primo criterio ma
-//     un gradino piu' in basso: la capienza rigida va spesa finche' c'e' il
-//     posto che la accetta.
-function ordineQualificati(staffList, st, cfg){
+//     titolare).
+//
+// QUI C'ERA UN TERZO CRITERIO, «prima chi ha meno alternative», e non c'e' piu'.
+// L'idea era che chi ha in tasca solo turni di pranzo va speso finche' un
+// pranzo lo accetta, mentre chi puo' fare pranzo o cena va tenuto per dove
+// servira'. E' un ragionamento giusto, ma da quando il piano sceglie i GIORNI
+// guardando le riserve (`riservePer`) non muove piu' niente: rimesso e tolto,
+// su DEROMA i cinque scenari danno numeri identici a virgola, e su 300 brigate
+// a caso la differenza e' 5,70 posti scoperti contro 5,76 — cioe' rumore, e
+// nella direzione sbagliata. Una regola che nessun test puo' far diventare
+// rossa non e' una regola, e restava li' solo perche' l'avevo scritta io.
+function chiaveQualificato(s, st){
+  return [(s.stations||[]).length, prioritaDi(s, st)];
+}
+function ordineQualificati(staffList, st){
   return staffList.filter(s=> (s.stations||[]).includes(st))
-    .sort((a,b)=> ((a.stations||[]).length - (b.stations||[]).length)
-      || (prioritaDi(a, st) - prioritaDi(b, st))
-      || (alternativeDi(a, cfg) - alternativeDi(b, cfg)));
+    .sort((a,b)=> chiaveMinore(chiaveQualificato(a, st), chiaveQualificato(b, st)) ? -1
+      : chiaveMinore(chiaveQualificato(b, st), chiaveQualificato(a, st)) ? 1 : 0);
+}
+// Le stesse persone, raggruppate per PARI GRADO: chi ha la stessa chiave sta
+// nello stesso gruppo. Fra gruppi si esaurisce, dentro un gruppo si fa a giro,
+// e la differenza vale dei posti veri (vedi `pianificaSettimana`).
+function gruppiQualificati(staffList, st){
+  const gruppi = [];
+  ordineQualificati(staffList, st).forEach(s=>{
+    const k = chiaveQualificato(s, st).join('|');
+    const ultimo = gruppi[gruppi.length-1];
+    if(ultimo && ultimo.chiave === k) ultimo.gente.push(s);
+    else gruppi.push({chiave:k, gente:[s]});
+  });
+  return gruppi;
 }
 
 function contoCapienza(staffList, staffingNeeds, options){
@@ -599,7 +610,7 @@ function contoCapienza(staffList, staffingNeeds, options){
       // che usa il piano della settimana. E' meta' del conto: con i dedicati
       // per primi il pass si chiude, e gli extra strutturali su DEROMA scendono
       // da 4 a 2 (i due del lavaggio, quelli veri).
-      const inOrdine = ordineQualificati(staffList, st, cfg);
+      const inOrdine = ordineQualificati(staffList, st);
       let daCoprire = domanda - rimbalzo;
       let presi = 0;
       for(const p of inOrdine){
@@ -629,6 +640,281 @@ function contoCapienza(staffList, staffingNeeds, options){
     // fabbisogno» — non come un difetto del generatore.
     extraStrutturali: elenco.reduce((n,p)=> n + p.mancanti, 0),
   };
+}
+
+// ============================================================================
+// IL PIANO DELLA SETTIMANA — «prima mi faccio un'idea in testa, poi inizio».
+//
+// COSA C'ERA PRIMA, E PERCHE' NON BASTAVA. Il motore decideva un giorno alla
+// volta, con una scelta avida fra i candidati liberi. Prima del giro sui giorni
+// c'era gia' una ripartizione, ma produceva un TOTALE PER PARTITA
+// (`turniResidui`: «ai primi spettano otto turni in settimana») e il giro sui
+// giorni non lo usava come vincolo — lo usava solo per derivare il budget degli
+// spezzati. Misurato: tre varianti di quel totale, stesse 100 generazioni su
+// DEROMA, tutte e tre inutili. Con il tetto in POSTI invece che in turni,
+// scoperture 10,12 (peggio). Con un piano per PERSONA (`piano[chi][partita]` =
+// quanti turni) 10,77 (uguale). Preferendo, fra i candidati, chi ha in tasca il
+// codice che chiude esattamente i posti aperti: identico bit per bit, perche'
+// quando tocca alla cena i candidati rimasti hanno in tasca solo accorpati e
+// non c'e' nessuna alternativa da preferire.
+//
+// LA PRE-ALLOCAZIONE CHE SERVE E' PIU' FINE, ED E' UN PIANO DI GIORNI E DI
+// FORME, non di totali:
+//
+//     piano[indiceGiorno] = [ {staffId, slot, code, stationId, sv}, ... ]
+//
+// cioe', per ogni giorno, CHI lavora, con QUALE codice e su QUALE partita.
+// L'invariante e' che i posti chiusi dai codici di un giorno siano esattamente
+// i posti che il fabbisogno chiede quel giorno — mai uno di piu'.
+//
+// IL PASSAGGIO CHE VALEVA GLI OTTO POSTI SCOPERTI e' l'APPAIAMENTO DEI SINGOLI
+// SULLO STESSO GIORNO. L'equazione che il file gia' scriveva — x accorpati +
+// y singoli, x = F−T, y = 2T−F — e' giusta come totale di settimana, ma un
+// totale non dice niente su come si mettono in fila i giorni, e quello e' il
+// punto. Su una partita da una persona per servizio, un giorno puo' prendere
+// due forme sole: UN accorpato, oppure DUE singoli DI DUE PERSONE DIVERSE.
+// Nessuno lo diceva al motore, e la seconda forma non si formava mai.
+//   Il caso vero, sui primi di DEROMA: Valerio sa fare solo i primi, Lorenc
+//   fa primi e pass. Prendendo da Lorenc tre spezzati (sei posti, il massimo
+//   per turno) i primi si chiudono con otto turni — ma allora il settimo
+//   giorno vorrebbe due singoli, e gli unici due singoli rimasti sono
+//   entrambi di Valerio, che quel giorno puo' lavorare una volta sola. La
+//   forma non sta in piedi. Prendendo invece da Lorenc DUE spezzati e DUE
+//   singoli i primi si chiudono lo stesso, e a Lorenc resta uno spezzato che
+//   e' esattamente quello che mancava al pass.
+//
+// COME LO TROVA, senza cablare nessuna forma. Si va per partita (le piu' rare
+// per prime) e dentro la partita per persona (`ordineQualificati`: prima chi sa
+// fare meno partite, poi di chi e' la partita, poi chi ha meno alternative).
+// Per ogni persona si cerca il posto migliore fra tutti i suoi slot, tutti i
+// suoi codici e tutti i giorni, e si scarta SEMPRE qualunque collocazione che
+// lasci per strada meta' di un turno: uno spezzato su una giornata gia' mezza
+// coperta e' sovracopertura, e non si prende. E' quel filtro che, da solo, fa
+// uscire la forma giusta — Lorenc non piazza il terzo spezzato perche' non c'e'
+// piu' un giorno con entrambi i servizi aperti, e piazza due singoli.
+//
+// E IL PRIMO CRITERIO E' «QUANTO CHIUDE QUI», non «quanto chiude in tutto».
+// Senza, agli antipasti Nisan piazzava tre spezzati regalando ogni volta il
+// pranzo al pass — il conto totale tornava uguale, ma agli antipasti restava un
+// mezzo giorno che nessun altro poteva chiudere e la domenica Biplop finiva
+// chiamato oltre quota. Misurato su DEROMA togliendo quel criterio: 1,00 posto
+// di sovracopertura e 2,00 turni extra a settimana, contro 0,00 e 0,00. Con
+// «quanto chiude qui» davanti, la meta' avanzata va altrove solo quando qui non
+// serviva davvero piu' a nessuno.
+//
+// FRA GRUPPI SI ESAURISCE, DENTRO UN GRUPPO SI FA A GIRO. Non e' un
+// compromesso fra due idee: sono due domande diverse, e la risposta e' scritta
+// per esteso sopra il ciclo che le applica.
+//
+// UNA PERSONA COMPARE AL MASSIMO UNA VOLTA AL GIORNO — ed e' qui, e non
+// altrove, che si decide se la sua giornata e' pranzo su una partita e cena su
+// un'altra: quando meta' del codice non serve piu' su questa partita, prima di
+// buttarla si guarda se un'ALTRA partita della persona la chiede quel giorno.
+//
+// COSA RESTA AL GIRO SUI GIORNI. Un ruolo diverso e piu' piccolo: applicare le
+// richieste approvate — che il piano conosce ma che possono anche arrivare a
+// piano gia' fatto — e RIPARARE dove il piano non e' eseguibile, riassegnando
+// a un'altra persona qualificata o, in ultima istanza, dichiarando l'extra o la
+// scopertura. Il `while(remain > 0)` con la scelta avida non e' piu' il motore:
+// e' la rete di sicurezza, e se il piano e' buono non scatta.
+// ============================================================================
+function pianificaSettimana(staffList, staffingNeeds, ctx){
+  const cfg = ctx.config;
+  const SERVICES = cfg.serviceIds;
+  const C2S = cfg.codeToServices;
+  const WORK = cfg.workingCodes;
+  const days = ctx.days;
+  const pools = ctx.pools;
+  const constraints = ctx.constraints || {};
+  const coperteDa = ctx.coperteDa;
+  // Il caso, ma ripetibile. Fra due collocazioni che pareggiano su TUTTI i
+  // criteri non c'e' niente da preferire, e a decidere resterebbe l'ordine dei
+  // giorni: il piano sarebbe sempre lo stesso, e «rigenera» non cambierebbe
+  // piu' niente. Il seme arriva dal motore, quindi due generazioni con lo
+  // stesso seme restano identiche e due semi diversi danno due prospetti
+  // diversi — che e' esattamente quello che i test chiedono.
+  const rand = ctx.rand || Math.random;
+
+  // Posti richiesti in UNA giornata, partita per partita e servizio per
+  // servizio. Nei dati il fabbisogno non ha una dimensione giorno: e' lo stesso
+  // ogni giorno, e il piano lo replica sui giorni del periodo.
+  const perServizio = {};
+  SERVICES.forEach(sv=> (staffingNeeds[sv]||[]).forEach(n=>{
+    const c = parseInt(n.count) || 0;
+    if(c <= 0) return;
+    perServizio[n.stationId] = perServizio[n.stationId] || {};
+    perServizio[n.stationId][sv] = (perServizio[n.stationId][sv]||0) + c;
+  }));
+  const partite = Object.keys(perServizio);
+  if(!partite.length) return days.map(()=> []);
+
+  // bisogno[partita][giorno][servizio]: quello che resta da coprire mentre il
+  // piano si costruisce. E' lo stesso conto che nel giro sui giorni si chiama
+  // `remain`, esteso alla settimana.
+  const bisogno = {};
+  partite.forEach(st=>{ bisogno[st] = days.map(()=> Object.assign({}, perServizio[st])); });
+  // Un posto chiuso si chiude anche sulle partite che questa copre di rimbalzo
+  // («chi sta alle insalate copre il lavaggio»): e' `segnaCopertura`, qui.
+  const chiudi = (st, i, sv) => coperteDa(st).forEach(st2=>{
+    if(bisogno[st2] && bisogno[st2][i][sv] > 0) bisogno[st2][i][sv]--;
+  });
+  const serve = (st, i, sv) => coperteDa(st).some(st2=>
+    bisogno[st2] && bisogno[st2][i][sv] > 0);
+  const rimastiIl = (st, i) => SERVICES.reduce((n,sv)=> n + (bisogno[st][i][sv]||0), 0);
+  const piano = days.map(()=> []);
+  const occupato = {};
+  staffList.forEach(s=>{ occupato[s.id] = days.map(()=> false); });
+  // Gli slot di quota ancora liberi nel piano. Copia dei riferimenti, non degli
+  // oggetti: il motore ritrova lo slot in `pools[s.id]` per identita' e lo
+  // spende. Il piano non consuma il pool — chi esegue, consuma.
+  const disponibili = {};
+  staffList.forEach(s=>{ disponibili[s.id] = (pools[s.id]||[])
+    .filter(slot=> slot.codes.some(c=> WORK.includes(c))); });
+
+  // QUANTE RISERVE HA QUELLA PARTITA QUEL GIORNO: le persone che la sanno fare,
+  // quel giorno ancora libere, non bloccate da una richiesta approvata e con
+  // ancora un turno in tasca. E' il criterio che decide DOVE mettere i giorni
+  // quando tutto il resto pareggia, e su DEROMA vale CINQUE posti a settimana:
+  // togliendolo, le scoperture salgono da 2,00 a 7,00 (e da 6 a 23 su un mese).
+  //   Alessio e Carlos sanno fare solo il pass, e ce l'hanno quattro giorni a
+  //   testa. Lorenc, Mohammed e Nisan lo sanno fare, ma quando tocca al pass
+  //   sono gia' impegnati sulla loro partita in quattro giorni su sette: al
+  //   pass restano buoni solo per gli altri tre. Se Carlos si prende i giorni
+  //   dove i tre sono liberi, il loro spezzato avanzato non ha piu' un giorno
+  //   dove andare e il pass resta scoperto tre volte. Andando prima dove le
+  //   riserve sono POCHE, Carlos e Alessio si prendono i quattro giorni magri
+  //   e i tre spezzati trovano i tre giorni grassi.
+  const riservePer = (st, i, day) => staffList.filter(s=>
+    (s.stations||[]).includes(st)
+    && !occupato[s.id][i]
+    && !(constraintFor(constraints, s.id, day)||{}).blocked
+    && disponibili[s.id].length).length;
+
+  // La collocazione migliore di UNA persona su UNA partita, cercata su tutti i
+  // suoi slot, tutti i codici ammessi e tutti i giorni del periodo.
+  const miglioreCollocazione = (p, st) => {
+    let best = null;
+    days.forEach((day, i)=>{
+      if(occupato[p.id][i]) return;
+      // Una richiesta approvata e' un vincolo assoluto: il piano non ci prova
+      // nemmeno, cosi' il giorno resta libero per chi lo puo' davvero fare.
+      if((constraintFor(constraints, p.id, day)||{}).blocked) return;
+      const riserve = riservePer(st, i, day);
+      disponibili[p.id].forEach(slot=>{
+        slot.codes.forEach(code=>{
+          if(!WORK.includes(code)) return;
+          if(!codeAllowed(constraints, p.id, day, code, C2S)) return;
+          const servizi = C2S[code] || [];
+          const mappa = {};
+          let chiude = 0, spreco = 0, suSt = 0;
+          servizi.forEach(sv=>{
+            // Il posto che si sta chiudendo e' quello che QUESTA partita chiede,
+            // non quello che chiede una partita che questa copre di rimbalzo.
+            // La differenza sembra un cavillo e non lo e': col rimbalzo acceso
+            // («chi sta alle insalate copre il lavaggio») guardare l'unione
+            // metterebbe DUE persone alle insalate perche' al lavaggio ne
+            // mancava una — e alle insalate sul fabbisogno c'e' scritto uno.
+            // Misurato su DEROMA con il rimbalzo acceso: 6,00 posti di
+            // sovracopertura a settimana, contro 0,00.
+            if(bisogno[st][i][sv] > 0){ mappa[sv] = st; chiude++; suSt++; return; }
+            // QUI si spezza la giornata fra due partite. La meta' di turno che
+            // su questa partita non serve piu' non si butta: se un'ALTRA
+            // partita della persona quel servizio lo chiede, ci va. E' «pranzo
+            // al pass e cena ai primi», e nasce da un avanzo, non da una regola.
+            const altra = (p.stations||[]).find(st2=>
+              st2 !== st && bisogno[st2] && bisogno[st2][i][sv] > 0);
+            if(altra){ mappa[sv] = altra; chiude++; return; }
+            // E se non serve a nessuna delle sue partite, puo' ancora servire
+            // DI RIMBALZO restando dov'e': quella meta' non e' buttata, chiude
+            // un posto su una partita che questa copre. Non conta come «chiude
+            // qui» — la persona resta segnata sulla SUA stazione, e i posti di
+            // rimbalzo li scala `chiudi`.
+            mappa[sv] = st;
+            if(serve(st, i, sv)) chiude++; else spreco++;
+          });
+          // MAI UNA META' DI TURNO BUTTATA. E' il filtro che fa uscire la forma
+          // giusta della settimana: uno spezzato su una giornata gia' mezza
+          // coperta resta in tasca, e allora la persona piazza due singoli —
+          // oppure quello spezzato avanza per la partita che ne aveva bisogno.
+          if(spreco > 0 || !suSt) return;
+          const chiave = [
+            -suSt,                   // prima quello che chiude QUI
+            -chiude,                 // chiudere di piu' con un turno solo
+            rimastiIl(st, i),        // e completare la giornata piu' avanti
+            riserve,                 // prima i giorni dove questa partita ha meno riserve
+            -servizi.reduce((n,sv)=> n + (bisogno[st][i][sv]||0), 0),
+            slot.codes.filter(c=> WORK.includes(c)).length,  // lo slot piu' rigido
+            i,                       // e a pari merito il giorno piu' vicino
+          ];
+          if(!best || chiaveMinore(chiave, best.chiave)){
+            best = {i, slot, code, mappa, servizi, chiave};
+          }
+        });
+      });
+    });
+    return best;
+  };
+
+  const collocaNelPiano = (p, st, m) => {
+    const k = disponibili[p.id].indexOf(m.slot);
+    if(k >= 0) disponibili[p.id].splice(k, 1);
+    occupato[p.id][m.i] = true;
+    m.servizi.forEach(sv=> chiudi(m.mappa[sv], m.i, sv));
+    // Il servizio che ha fatto scattare la collocazione: il primo che sta
+    // sulla partita di casa. E' quello che il motore passa a `mappaStazioni`.
+    const sv = m.servizi.find(x=> m.mappa[x] === st) || m.servizi[0];
+    piano[m.i].push({staffId:p.id, slot:m.slot, code:m.code, stationId:st, sv, stations:m.mappa});
+  };
+  ordinePartite(staffList, partite, ctx.copreOltre).forEach(st=>{
+    // FRA GRUPPI SI ESAURISCE, DENTRO UN GRUPPO SI FA A GIRO. Sono due regole
+    // diverse perche' rispondono a due domande diverse, e provate a scambiarle
+    // peggiorano tutte e due.
+    //
+    // Fra gruppi (chi sa fare meno partite, poi di chi e' la partita, poi chi
+    // ha meno alternative) si ESAURISCE: l'avanzo del dedicato non serve a
+    // nessuno, quello del flessibile e' l'unico che puo' arrivare altrove. Ai
+    // primi, prendendo a giro da Valerio e da Lorenc, tutti e due finiscono la
+    // settimana con un turno singolo in tasca: quello di Valerio non lo puo'
+    // spendere nessuno, e a Lorenc serviva uno SPEZZATO per il pass. Esaurendo
+    // Valerio, a Lorenc resta lo spezzato giusto.
+    //
+    // Dentro un gruppo si fa A GIRO: fra pari non c'e' nessun motivo per
+    // esaurirne uno prima dell'altro, e spartire i giorni fa stare in piedi
+    // piu' turni. Al lavaggio Hossein, Akmol e Rabby sono identici; esaurendo
+    // Hossein e poi Akmol, i due si prendono per intero gli stessi tre giorni,
+    // e a Rabby restano quattro giorni buoni per cinque turni: uno gli muore in
+    // tasca. A giro i sei spezzati si spartiscono cinque giornate a due a due,
+    // e i sei turni singoli trovano posto tutti. Misurato su DEROMA esaurendo
+    // anche dentro il gruppo: 4,08 posti scoperti a settimana invece di 2,00 e
+    // 0,54 di sovracopertura invece di 0,00 — il turno che muore in tasca fa
+    // partire una reazione a catena, perche' il motore va a prendersi Rakib per
+    // tappare il buco e il giovedi' alle insalate Rakib non c'e' piu'.
+    gruppiQualificati(staffList, st).forEach(g=>{
+      // IL CASO STA QUI, ED E' L'UNICO POSTO DOVE PUO' STARE SENZA COSTARE.
+      // Dentro il gruppo le persone sono pari per definizione: mescolarle non
+      // toglie niente a nessun criterio, e senza, «rigenera» darebbe sempre lo
+      // stesso identico prospetto — il piano e' un conto, e un conto non
+      // cambia da solo. Sui GIORNI invece il caso costa: a pari merito il piano
+      // prende il giorno piu' vicino, e cosi' i turni riempiono la settimana
+      // dall'inizio e il vuoto — quando le quote non bastano — cade in fondo,
+      // dove la squadra lo vede arrivare. Misurato mettendo il caso sui giorni:
+      // su una brigata da 24 turni per 28 posti i turni oltre quota cadevano
+      // di giovedi' invece che di domenica.
+      const gente = shuffleArray(g.gente.slice(), rand);
+      let mosso = true;
+      while(mosso){
+        mosso = false;
+        for(const p of gente){
+          const m = miglioreCollocazione(p, st);
+          if(!m) continue;
+          collocaNelPiano(p, st, m);
+          mosso = true;
+        }
+      }
+    });
+  });
+
+  return piano;
 }
 
 function computeShifts(staffList, staffingNeeds, options){
@@ -833,6 +1119,34 @@ function computeShifts(staffList, staffingNeeds, options){
   const riposiDelGiorno = days.map((_,i)=>
     Math.floor(riposiTotali*(i+1)/days.length) - Math.floor(riposiTotali*i/days.length));
 
+  // IL PIANO DELLA SETTIMANA, deciso qui: prima del primo giorno, e una volta
+  // sola. Da qui in avanti il giro sui giorni lo esegue e ne ripara i pezzi
+  // che non stanno in piedi (vedi la testata di `pianificaSettimana`).
+  const perId = {};
+  staffList.forEach(s=>{ perId[s.id] = s; });
+  const piano = pianificaSettimana(staffList, staffingNeeds, {
+    config: cfg, pools, days, constraints, coperteDa, copreOltre, rand,
+  });
+  // Quanti turni il piano ha gia' prenotato a questa persona nei giorni che
+  // vengono dopo quello in corso. Serve al giro dei giorni per non spendere
+  // oggi un turno che serve venerdi'.
+  const impegniFuturi = (s, indiceGiorno) => {
+    let n = 0;
+    for(let i=indiceGiorno+1; i<piano.length; i++){
+      if(piano[i].some(v=> v.staffId === s.id)) n++;
+    }
+    return n;
+  };
+  // E quanti gliene restano in tasca da spendere. NON e' `quotaLavoroResidua`,
+  // e la differenza conta: quella non conta gli slot che hanno anche il riposo
+  // fra i codici (['R','SP']), perche' li' serve a dire «questi diventeranno
+  // sicuramente lavoro». Qui la domanda e' un'altra — «quanti turni puo' ancora
+  // scrivere» — e uno slot ['R','SP'] il piano lo prenota eccome. Con il conto
+  // sbagliato, Samad e Rabby, che di slot cosi' ne hanno tre a testa,
+  // risultavano sempre gia' impegnati oltre il possibile.
+  const slotSpendibili = s => (pools[s.id]||[])
+    .filter(slot=> slot.codes.some(c=> WORKING_CODES.includes(c))).length;
+
   days.forEach((day, indiceGiorno)=>{
     // Le richieste approvate si applicano prima di ogni altra cosa: la persona
     // è già "occupata" per quel giorno e nessuna logica successiva la tocca.
@@ -843,6 +1157,151 @@ function computeShifts(staffList, staffingNeeds, options){
 
     const remain = {};
     SERVICES.forEach(sv=>{ remain[sv]={}; (staffingNeeds[sv]||[]).forEach(n=>{ remain[sv][n.stationId]=(remain[sv][n.stationId]||0)+(parseInt(n.count)||0); }); });
+
+    // Un turno assegnato chiude dei posti: su tutti i servizi che il codice
+    // copre, e su tutte le stazioni che quella stazione copre — la sua, sempre,
+    // piu' quelle di rimbalzo. E' l'unico punto in cui «Rakib conta anche nei
+    // due del lavaggio» diventa un numero. `svBase` c'e' per sicurezza: il
+    // posto che ha fatto scattare l'assegnazione va chiuso comunque, anche se
+    // un domani il codice scelto smettesse di coprirlo, altrimenti il `while`
+    // che ci gira intorno non finirebbe piu'.
+    const segnaCopertura = (mappa) => {
+      Object.keys(mappa||{}).forEach(sv2=>{
+        const st = mappa[sv2];
+        if(!st) return;
+        coperteDa(st).forEach(st2=>{
+          if(remain[sv2] && remain[sv2][st2]) remain[sv2][st2] = Math.max(0, remain[sv2][st2]-1);
+        });
+      });
+    };
+    // Su quale stazione sta questa persona, SERVIZIO PER SERVIZIO.
+    // «Potrebbe essere che la stessa persona stia a pranzo in una partita e a
+    // cena in un'altra.»
+    //
+    // Il posto che ha fatto scattare l'assegnazione (`sv`) va sulla stazione
+    // richiesta, e non si discute. Per gli ALTRI servizi che il codice copre la
+    // domanda e' una sola: quella stazione, li', serve ancora?
+    //   - Si' → non ci si sposta. E' il caso normale, ed e' anche il motivo per
+    //     cui il codice accorpato e' stato scelto (`codeCoversMore`): una
+    //     persona sola chiude due posti sulla stessa partita.
+    //   - No  → quella meta' di turno oggi non copre niente. Si guarda fra le
+    //     ALTRE stazioni della persona, nell'ordine di `s.stations`, che e' la
+    //     priorita' impostata dal titolare: la prima ancora scoperta se la
+    //     prende. Se non ce n'e' nessuna si resta dov'era, come sempre.
+    // Il turno resta UNO — `turniResidui` si scala una volta sola, piu' sotto —
+    // e quello che si sposta e' solo dove la persona sta fisicamente nella
+    // seconda meta' della giornata.
+    //
+    // `sv` si scrive comunque, anche se il codice non lo coprisse: il posto che
+    // ha fatto scattare l'assegnazione va chiuso, altrimenti il `while` che ci
+    // gira intorno non finirebbe piu'.
+    // La stessa domanda su un `remain` QUALSIASI, non solo su quello di adesso.
+    // Serve perche' una delle domande che il motore si fa e' «e dopo che avro'
+    // assegnato questo turno, chi resta puo' ancora coprire senza sprecare?»:
+    // e' una domanda sul mondo che si sta per creare, e farla sul mondo di
+    // adesso da' sempre la risposta ottimista.
+    const serveIn = (r, sv2, st) =>
+      coperteDa(st).some(st2=> (r[sv2]||{})[st2] > 0);
+    const serveAncora = (sv2, st) => serveIn(remain, sv2, st);
+    // `remain` come sara' dopo che una mappa servizio → stazione avra' chiuso
+    // i suoi posti. Copia, non tocca l'originale: e' una simulazione.
+    const remainDopo = (mappa) => {
+      const r = {};
+      SERVICES.forEach(sv2=>{ r[sv2] = Object.assign({}, remain[sv2]||{}); });
+      Object.keys(mappa||{}).forEach(sv2=>{
+        const st = mappa[sv2];
+        if(!st) return;
+        coperteDa(st).forEach(st2=>{ if(r[sv2][st2]) r[sv2][st2] = Math.max(0, r[sv2][st2]-1); });
+      });
+      return r;
+    };
+    // QUANTE META' DI UN TURNO SI BUTTANO VIA. Un codice che copre piu' servizi
+    // porta con se' delle meta' di giornata: quelle che cadono su un servizio
+    // dove questa partita non chiede piu' nessuno — e dove nessun'altra partita
+    // della persona chiede nessuno, perche' allora `mappaStazioni` la
+    // sposterebbe li' — sono persone in piu' del fabbisogno, cioe' la
+    // sovracopertura. Il servizio che ha fatto scattare l'assegnazione
+    // (`svBase`) non si conta mai: quello e' il motivo per cui si assegna.
+    const sprecoIn = (r, s, code, svBase, st) => (CODE_TO_SERVICES[code]||[]).filter(sv2=>
+      sv2 !== svBase
+      && !serveIn(r, sv2, st)
+      && !(s.stations||[]).some(st2=> st2 !== st && serveIn(r, sv2, st2))).length;
+    // Lo stesso conto SENZA contare lo spostamento su un'altra partita, e la
+    // differenza non e' un dettaglio. Quando si guarda il turno che si sta
+    // assegnando ADESSO, `mappaStazioni` lo spostamento lo fa subito e quindi
+    // va contato. Quando invece si PREVEDE che un altro coprira' un servizio
+    // piu' tardi, quello spostamento e' una promessa su un posto che nel
+    // frattempo qualcun altro chiudera': su DEROMA l'altra partita di Lorenc e'
+    // il pass, che a pranzo viene coperto DOPO i primi, e la promessa e' gia'
+    // scaduta quando arriva il momento di mantenerla. Previsione ottimista
+    // uguale sovracopertura: qui si guarda solo questa partita.
+    const sprecoSecco = (r, code, svBase, st) => (CODE_TO_SERVICES[code]||[]).filter(sv2=>
+      sv2 !== svBase && !serveIn(r, sv2, st)).length;
+    // `base` e' la mappa che il PIANO aveva gia' deciso per questa persona, e
+    // c'e' solo per il ramo che esegue il piano. Senza, ogni servizio parte
+    // dalla stazione che ha fatto scattare l'assegnazione, ed e' il
+    // comportamento di sempre. Con, si parte da dove il piano aveva messo la
+    // persona — e la regola su dove finisce la meta' che qui non serve piu'
+    // resta scritta una volta sola, qui dentro.
+    // Perche' serve: il piano puo' aver deciso «pranzo alle insalate, cena al
+    // lavaggio». Se al momento di scrivere si ripartisse da «tutto alle
+    // insalate», la cena tornerebbe alle insalate — dove c'era gia' qualcuno —
+    // e sarebbe una persona in piu' del fabbisogno. Misurato su DEROMA: 1,00
+    // posto di sovracopertura a settimana, tutto qui.
+    const mappaStazioni = (s, code, sv, stationId, base) => {
+      const m = {};
+      (CODE_TO_SERVICES[code]||[]).forEach(sv2=>{ m[sv2] = (base && base[sv2]) || stationId; });
+      m[sv] = (base && base[sv]) || stationId;
+      Object.keys(m).forEach(sv2=>{
+        if(sv2 === sv || serveAncora(sv2, m[sv2])) return;
+        const altra = (s.stations||[]).find(st2=>
+          st2 !== m[sv2] && serveAncora(sv2, st2));
+        if(altra) m[sv2] = altra;
+      });
+      return m;
+    };
+
+    // ------------------------------------------------------------------------
+    // SI ESEGUE IL PIANO, e solo dopo si guarda cosa e' rimasto scoperto.
+    //
+    // Il piano sa gia' chi lavora oggi, con quale codice e su quale partita:
+    // qui non si sceglie piu' niente, si scrive. Una voce si salta in tre casi
+    // soli, e sono tutti «il piano non e' eseguibile», mai «ho cambiato idea»:
+    //   - la persona ha gia' una cella oggi (una richiesta approvata l'ha
+    //     bloccata, oppure una voce precedente l'ha gia' presa);
+    //   - il codice oggi non le e' ammesso (chi ha chiesto «solo pranzo»);
+    //   - lo slot che il piano le aveva messo da parte non e' piu' nel pool.
+    // E una quarta, che e' la difesa contro la sovracopertura: se quando arriva
+    // il suo turno la voce non chiude piu' nemmeno un posto, non si scrive. Con
+    // il piano intero eseguibile non capita mai — l'invariante del piano e' che
+    // i posti chiusi siano esattamente quelli richiesti — ma con le richieste
+    // approvate di mezzo il conto puo' scivolare, e allora meglio un buco che
+    // una persona in piu' dove il fabbisogno ne chiedeva una.
+    // Quello che il piano non ha potuto fare resta a `remain`, e lo raccoglie
+    // il giro dei candidati piu' sotto: e' la rete di sicurezza.
+    // ------------------------------------------------------------------------
+    (piano[indiceGiorno]||[]).forEach(voce=>{
+      const s = perId[voce.staffId];
+      if(!s || assigned[s.id][day]) return;
+      if(!codeAllowed(constraints, s.id, day, voce.code, CODE_TO_SERVICES)) return;
+      const idx = (pools[s.id]||[]).indexOf(voce.slot);
+      if(idx < 0) return;
+      // La stessa `mappaStazioni` del giro dei candidati, e non e' un
+      // doppione: il piano ha deciso dove sta la persona servizio per servizio,
+      // ma fra il piano e adesso puo' essere cambiato qualcosa, e la regola su
+      // dove finisce la meta' di turno che qui non serve piu' dev'essere una
+      // sola scritta in un posto solo.
+      const m = mappaStazioni(s, voce.code, voce.sv, voce.stationId, voce.stations);
+      if(!Object.keys(m).some(sv2=> serveAncora(sv2, m[sv2]))) return;
+      pools[s.id].splice(idx, 1);
+      assigned[s.id][day] = voce.code;
+      stationAssign[s.id][day] = m;
+      oreFatte[s.id] += oreDi(voce.code);
+      // Un turno e' UNO, e si scala sulla partita che l'ha chiesto: vale qui la
+      // stessa regola scritta piu' sotto per il riempimento finale.
+      turniResidui[voce.stationId] = Math.max(0, (turniResidui[voce.stationId]||0) - 1);
+      segnaCopertura(m);
+    });
 
     // La quota di forma della settimana che tocca a oggi, partita per partita.
     // I turni allocati si spalmano sui giorni che restano; i posti da coprire
@@ -933,97 +1392,6 @@ function computeShifts(staffList, staffingNeeds, options){
       budgetSpezzati[st] = Math.max(0, postiOggi[st] - turniOggi[st]);
     });
 
-    // Un turno assegnato chiude dei posti: su tutti i servizi che il codice
-    // copre, e su tutte le stazioni che quella stazione copre — la sua, sempre,
-    // piu' quelle di rimbalzo. E' l'unico punto in cui «Rakib conta anche nei
-    // due del lavaggio» diventa un numero. `svBase` c'e' per sicurezza: il
-    // posto che ha fatto scattare l'assegnazione va chiuso comunque, anche se
-    // un domani il codice scelto smettesse di coprirlo, altrimenti il `while`
-    // che ci gira intorno non finirebbe piu'.
-    const segnaCopertura = (mappa) => {
-      Object.keys(mappa||{}).forEach(sv2=>{
-        const st = mappa[sv2];
-        if(!st) return;
-        coperteDa(st).forEach(st2=>{
-          if(remain[sv2] && remain[sv2][st2]) remain[sv2][st2] = Math.max(0, remain[sv2][st2]-1);
-        });
-      });
-    };
-    // Su quale stazione sta questa persona, SERVIZIO PER SERVIZIO.
-    // «Potrebbe essere che la stessa persona stia a pranzo in una partita e a
-    // cena in un'altra.»
-    //
-    // Il posto che ha fatto scattare l'assegnazione (`sv`) va sulla stazione
-    // richiesta, e non si discute. Per gli ALTRI servizi che il codice copre la
-    // domanda e' una sola: quella stazione, li', serve ancora?
-    //   - Si' → non ci si sposta. E' il caso normale, ed e' anche il motivo per
-    //     cui il codice accorpato e' stato scelto (`codeCoversMore`): una
-    //     persona sola chiude due posti sulla stessa partita.
-    //   - No  → quella meta' di turno oggi non copre niente. Si guarda fra le
-    //     ALTRE stazioni della persona, nell'ordine di `s.stations`, che e' la
-    //     priorita' impostata dal titolare: la prima ancora scoperta se la
-    //     prende. Se non ce n'e' nessuna si resta dov'era, come sempre.
-    // Il turno resta UNO — `turniResidui` si scala una volta sola, piu' sotto —
-    // e quello che si sposta e' solo dove la persona sta fisicamente nella
-    // seconda meta' della giornata.
-    //
-    // `sv` si scrive comunque, anche se il codice non lo coprisse: il posto che
-    // ha fatto scattare l'assegnazione va chiuso, altrimenti il `while` che ci
-    // gira intorno non finirebbe piu'.
-    // La stessa domanda su un `remain` QUALSIASI, non solo su quello di adesso.
-    // Serve perche' una delle domande che il motore si fa e' «e dopo che avro'
-    // assegnato questo turno, chi resta puo' ancora coprire senza sprecare?»:
-    // e' una domanda sul mondo che si sta per creare, e farla sul mondo di
-    // adesso da' sempre la risposta ottimista.
-    const serveIn = (r, sv2, st) =>
-      coperteDa(st).some(st2=> (r[sv2]||{})[st2] > 0);
-    const serveAncora = (sv2, st) => serveIn(remain, sv2, st);
-    // `remain` come sara' dopo che una mappa servizio → stazione avra' chiuso
-    // i suoi posti. Copia, non tocca l'originale: e' una simulazione.
-    const remainDopo = (mappa) => {
-      const r = {};
-      SERVICES.forEach(sv2=>{ r[sv2] = Object.assign({}, remain[sv2]||{}); });
-      Object.keys(mappa||{}).forEach(sv2=>{
-        const st = mappa[sv2];
-        if(!st) return;
-        coperteDa(st).forEach(st2=>{ if(r[sv2][st2]) r[sv2][st2] = Math.max(0, r[sv2][st2]-1); });
-      });
-      return r;
-    };
-    // QUANTE META' DI UN TURNO SI BUTTANO VIA. Un codice che copre piu' servizi
-    // porta con se' delle meta' di giornata: quelle che cadono su un servizio
-    // dove questa partita non chiede piu' nessuno — e dove nessun'altra partita
-    // della persona chiede nessuno, perche' allora `mappaStazioni` la
-    // sposterebbe li' — sono persone in piu' del fabbisogno, cioe' la
-    // sovracopertura. Il servizio che ha fatto scattare l'assegnazione
-    // (`svBase`) non si conta mai: quello e' il motivo per cui si assegna.
-    const sprecoIn = (r, s, code, svBase, st) => (CODE_TO_SERVICES[code]||[]).filter(sv2=>
-      sv2 !== svBase
-      && !serveIn(r, sv2, st)
-      && !(s.stations||[]).some(st2=> st2 !== st && serveIn(r, sv2, st2))).length;
-    // Lo stesso conto SENZA contare lo spostamento su un'altra partita, e la
-    // differenza non e' un dettaglio. Quando si guarda il turno che si sta
-    // assegnando ADESSO, `mappaStazioni` lo spostamento lo fa subito e quindi
-    // va contato. Quando invece si PREVEDE che un altro coprira' un servizio
-    // piu' tardi, quello spostamento e' una promessa su un posto che nel
-    // frattempo qualcun altro chiudera': su DEROMA l'altra partita di Lorenc e'
-    // il pass, che a pranzo viene coperto DOPO i primi, e la promessa e' gia'
-    // scaduta quando arriva il momento di mantenerla. Previsione ottimista
-    // uguale sovracopertura: qui si guarda solo questa partita.
-    const sprecoSecco = (r, code, svBase, st) => (CODE_TO_SERVICES[code]||[]).filter(sv2=>
-      sv2 !== svBase && !serveIn(r, sv2, st)).length;
-    const mappaStazioni = (s, code, sv, stationId) => {
-      const m = {};
-      (CODE_TO_SERVICES[code]||[]).forEach(sv2=>{ m[sv2] = stationId; });
-      m[sv] = stationId;
-      Object.keys(m).forEach(sv2=>{
-        if(sv2 === sv || serveAncora(sv2, stationId)) return;
-        const altra = (s.stations||[]).find(st2=>
-          st2 !== stationId && serveAncora(sv2, st2));
-        if(altra) m[sv2] = altra;
-      });
-      return m;
-    };
 
     SERVICES.forEach(sv=>{
       // stazioni più "rare" (poche persone qualificate in tutta la brigata) vengono coperte per prime,
@@ -1085,6 +1453,19 @@ function computeShifts(staffList, staffingNeeds, options){
             if(!codiciUtili(s).length) return false;
             return pools[s.id].some(slot=> slot.codes.some(c=>codiciUtili(s).includes(c)));
           });
+          // NON SI SMONTA IL PIANO PER TAPPARE UN BUCO. Chi ha in tasca esattamente
+          // i turni che il piano gli ha gia' prenotato per i giorni che vengono,
+          // oggi si lascia stare: prendergliene uno adesso non aggiunge niente —
+          // il buco si sposta soltanto a venerdi' — e in mezzo rompe la giornata
+          // che il piano aveva costruito. Misurato su DEROMA: senza questo
+          // filtro, il motore andava a prendersi Rakib il martedi' per il
+          // lavaggio, e il giovedi' Rakib arrivava alle insalate con in tasca
+          // solo uno spezzato: mezza giornata sprecata (2,00 posti di
+          // sovracopertura a settimana) e la domenica un turno oltre quota.
+          // E' una PREFERENZA, non un divieto, come il tetto agli extra: se non
+          // resta nessun altro si prende comunque, perche' una scopertura falsa
+          // e' peggio di un piano smontato.
+          candidates = candidates.filter(s=> slotSpendibili(s) > impegniFuturi(s, indiceGiorno));
           let isExtra = false;
           if(!candidates.length){
             // il fabbisogno supera quello che le quote possono coprire: proviamo comunque a tappare
@@ -1745,7 +2126,7 @@ function computeShifts(staffList, staffingNeeds, options){
     });
     return min;
   };
-  const minore = (a,b)=>{ for(let i=0;i<a.length;i++){ if(a[i] !== b[i]) return a[i] < b[i]; } return false; };
+  const minore = chiaveMinore;   // stessa regola del piano, scritta una volta sola
 
   // I DUE TETTI stanno tutti qui dentro, ed e' voluto: sono la ragione per cui
   // questa fase non costa niente. 1) il pool — si colloca solo quota che esiste

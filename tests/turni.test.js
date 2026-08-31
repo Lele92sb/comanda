@@ -2281,9 +2281,10 @@ test('DEROMA: la sovracopertura non si toglie scavando buchi', () => {
   assert.ok(extra <= 4.91,
     'turni extra a settimana: '+extra.toFixed(2)+', peggio del motore di prima (4,91)');
   // E il numero di oggi, perche il prossimo che tocca il motore veda subito se
-  // lo ha peggiorato senza far diventare rosso niente: 8,54 e 0,00.
-  assert.ok(scoperti <= 9.00, 'posti scoperti a settimana: '+scoperti.toFixed(2)+' (oggi 8,54)');
-  assert.ok(extra <= 0.50, 'turni extra a settimana: '+extra.toFixed(2)+' (oggi 0,00)');
+  // lo ha peggiorato senza far diventare rosso niente: 2,00 e 0,00 — che e
+  // esattamente il pavimento verificato a mano.
+  assert.ok(scoperti <= 2.10, 'posti scoperti a settimana: '+scoperti.toFixed(2)+' (oggi 2,00)');
+  assert.ok(extra <= 0.10, 'turni extra a settimana: '+extra.toFixed(2)+' (oggi 0,00)');
 });
 
 test('DEROMA: nessuno su una partita che non sa fare, e la mappa resta sana', () => {
@@ -2307,4 +2308,132 @@ test('DEROMA: nessuno su una partita che non sa fare, e la mappa resta sana', ()
       }
     }
   });
+});
+
+// ============================================================================
+// IL PIANO DELLA SETTIMANA. «Io NON guardo giorno per giorno, prima mi faccio
+// un'idea in testa cosi e poi inizio.»
+//
+// Fino a ieri il motore faceva il contrario: decideva un giorno alla volta con
+// una scelta avida, e la ripartizione che gli stava davanti produceva un
+// TOTALE per partita che il giro sui giorni non usava come vincolo. Da qui in
+// avanti c'e un piano di GIORNI e di FORME — per ogni partita e ogni giorno,
+// chi ci sta e con quale codice — e il giro sui giorni lo esegue.
+//
+// I numeri qui sotto sono tutti MISURATI, prima e dopo, sulle stesse 100
+// generazioni con semi fissi. Il pavimento contro cui si leggono e stato
+// verificato a mano: su DEROMA servono 98 posti-servizio a settimana e la
+// brigata ne regge 96, i due che mancano sono al lavaggio, e i quattro del
+// lavaggio non fanno turni extra. Quindi il meglio possibile e 0 di
+// sovracopertura, 2 di scopertura e 0 turni extra — non zero scoperture.
+// ============================================================================
+
+test('DEROMA: le scoperture scendono al minimo strutturale, e senza chiamare nessuno', () => {
+  // PRIMA 8,54 posti scoperti a settimana. DOPO 2,00, che e il pavimento: 28
+  // posti al lavaggio contro 26 di capienza. E sempre gli stessi due — su 100
+  // generazioni il minimo e il massimo sono tutti e due 2, e cadono tutti e due
+  // al lavaggio.
+  //
+  // Gli extra restano ZERO, e vanno letti insieme: senza, il modo facile di far
+  // scendere le scoperture e chiamare qualcuno oltre quota, che e una spesa
+  // vera. Il conto di capienza dice che di extra ne servirebbero 2 (i due posti
+  // che mancano al lavaggio) ma i quattro del lavaggio hanno dichiarato di non
+  // farne: si dichiara il buco, ed e giusto cosi.
+  const {esiti} = lottoDeroma(100, {eccedenza:{modo:'lascia'}});
+  const scoperti = esiti.map(r=> r.shortfalls.reduce((m,x)=> m + (x.missing||1), 0));
+  const media = scoperti.reduce((a,b)=>a+b,0) / esiti.length;
+  const extra = esiti.reduce((n,r)=> n + r.extras.length, 0) / esiti.length;
+  assert.ok(media <= 2.10,
+    'posti scoperti a settimana: '+media.toFixed(2)+' (era 8,54, il pavimento e 2)');
+  assert.equal(extra, 0, 'turni extra a settimana: '+extra.toFixed(2));
+  assert.ok(Math.max(...scoperti) <= 3,
+    'una generazione con '+Math.max(...scoperti)+' posti scoperti: il piano non regge su tutti i semi');
+  // E stanno dove il conto di capienza dice che devono stare.
+  esiti.forEach((r,i)=> r.shortfalls.forEach(x=> assert.equal(x.stationId, 'lavaggio',
+    'seme g'+i+': scopertura su '+x.stationId+', dove il conto dice che i posti ci sono')));
+});
+
+test('DEROMA: su un mese intero le scoperture restano quelle della settimana', () => {
+  // La quota e settimanale e il piano si rifa ogni settimana: su un mese le
+  // scoperture devono essere quelle della settimana per il numero di settimane,
+  // non di piu. PRIMA: 30,53 su 30 giorni. DOPO: 6,00 — cioe 2 a settimana su
+  // tre settimane piene, piu i due spezzoni in testa e in coda, che di posti ne
+  // chiedono meno.
+  const cfg = buildShiftConfig(DEROMA.services, DEROMA.shiftTypes);
+  const giorni = monthDates(new Date(2026, 8, 1));
+  let scoperti = 0, extra = 0;
+  for(let i=0;i<20;i++){
+    const r = computeShiftsForDates(DEROMA.staff, DEROMA.staffingNeeds, {
+      config: cfg, stazioni: DEROMA.stations, dates: giorni, seed: 'm'+i,
+      eccedenza: {modo:'lascia'},
+    });
+    scoperti += r.shortfalls.reduce((m,x)=> m + (x.missing||1), 0);
+    extra += r.extras.length;
+  }
+  assert.ok(scoperti/20 <= 6.50,
+    'posti scoperti in un mese: '+(scoperti/20).toFixed(2)+' (erano 30,53)');
+  assert.equal(extra, 0, 'turni extra in un mese: '+(extra/20).toFixed(2));
+});
+
+test('DEROMA: la mano dalle insalate al lavaggio non mette due persone alle insalate', () => {
+  // IL RISCHIO SILENZIOSO DEL PIANO, e per questo sta in un test suo. Il piano
+  // chiude i posti anche sulle partite che questa copre di rimbalzo — «quando
+  // Rakib sta alle insalate lo conto comunque nei due del lavaggio» — e la
+  // domanda «questa partita, questo giorno, questo servizio: serve ancora
+  // qualcuno?» ha allora DUE risposte diverse, quella della partita e quella
+  // dell'unione con le partite che copre. Guidando il piano sull'unione, alle
+  // insalate finiscono due persone perche al lavaggio ne mancava una — e alle
+  // insalate sul fabbisogno c'e scritto uno. Misurato prendendo l'unione: 6,00
+  // posti di sovracopertura e 2,00 turni extra a settimana.
+  const cfg = buildShiftConfig(DEROMA.services, DEROMA.shiftTypes);
+  const stazioni = DEROMA.stations.map(s=>
+    s.id === 'insalate' ? Object.assign({}, s, {copreAnche:['lavaggio']}) : s);
+  let troppi = 0, scoperti = 0, extra = 0;
+  const esempi = [];
+  for(let i=0;i<50;i++){
+    const r = computeShifts(DEROMA.staff, DEROMA.staffingNeeds, {
+      config: cfg, stazioni, seed: 'c'+i, eccedenza: {modo:'lascia'},
+    });
+    const s = sovracopertura(DEROMA.staff, r.newShifts, DEROMA.staffingNeeds, cfg);
+    troppi += s.troppi;
+    if(s.troppi && esempi.length < 3) esempi.push('seme c'+i+': '+s.dove.join(', '));
+    scoperti += r.shortfalls.reduce((m,x)=> m + (x.missing||1), 0);
+    extra += r.extras.length;
+  }
+  assert.equal(troppi, 0, 'sovracopertura con la mano accesa: '+esempi.join(' | '));
+  assert.equal(extra, 0, 'turni extra con la mano accesa: '+(extra/50).toFixed(2));
+  // E la mano serve a qualcosa: con Rakib che conta anche al lavaggio i due
+  // posti che mancavano si chiudono, e la settimana e coperta per intero.
+  assert.equal(scoperti, 0, 'posti scoperti con la mano accesa: '+(scoperti/50).toFixed(2)+' (erano 3,88)');
+});
+
+test('DEROMA: la meta di turno che qui non serve piu va su un ALTRA partita', () => {
+  // Il terzo difetto segnalato dallo chef: «non divide ancora le persone, per
+  // esempio pranzo pass e cena primi; li calcola ancora tutti nella stessa
+  // stazione tutto il giorno». La struttura dati c'era da tempo — la cella ha
+  // una stazione per servizio — ma il comportamento no: 0,00 su 700 giornate.
+  // Adesso nasce da sola dal piano, e non da una regola cablata: quando la meta
+  // di uno spezzato su questa partita non serve piu, prima di buttarla si
+  // guarda se un'ALTRA partita della persona la chiede quel giorno. Su DEROMA
+  // succede 3 volte a settimana, su tutti i semi.
+  const {cfg, esiti} = lottoDeroma(100, {eccedenza:{modo:'lascia'}});
+  const doppi = esiti.map(r=>{
+    let n = 0;
+    for(const s of DEROMA.staff){
+      for(const day of DAYS){
+        const cella = r.newShifts[s.id][day];
+        if(!cella || !cella.code) continue;
+        const servizi = serviziDelCodice(cella.code, cfg);
+        if(servizi.length < 2) continue;
+        const partite = new Set(servizi.map(sv=> stazioneDi(cella, sv)).filter(Boolean));
+        if(partite.size > 1) n++;
+      }
+    }
+    return n;
+  });
+  const media = doppi.reduce((a,b)=>a+b,0) / doppi.length;
+  assert.ok(media >= 1,
+    'spezzati su due partite a settimana: '+media.toFixed(2)+' (erano 0,00, oggi 3,00)');
+  assert.ok(Math.min(...doppi) >= 1,
+    'una generazione senza nemmeno uno: allora non e il piano a produrli, e il caso');
 });
