@@ -2228,6 +2228,21 @@ test('DEROMA: mai piu persone del fabbisogno su una giornata, servizio, partita'
     'sovracopertura su 100 generazioni (era 837, cioe 8,37 a settimana): '+esempi.join(' | '));
 });
 
+// ONESTA SU QUANTO VALE QUELLO ZERO, perche chi legge un test verde tende a
+// leggerci piu di quello che c e scritto.
+//   - Vale anche su un mese intero (misurato: 0,00 su 30 generazioni da 31
+//     giorni) e anche con «chi sta alle insalate copre il lavaggio» acceso
+//     (0,00, e le scoperture scendono da 8,54 a 3,88).
+//   - NON vale a scatola chiusa con le richieste approvate: sorteggiando un
+//     giorno bloccato per circa un terzo della brigata restano 0,20 posti di
+//     sovracopertura a settimana. Misurato caso per caso: in 19 su 20 TUTTI i
+//     candidati rimasti avevano in tasca solo turni accorpati, cioe la scelta
+//     era fra una persona in piu a pranzo e un buco a cena — e un buco falso
+//     manda qualcuno a cercare un problema che non esiste. Non e un difetto da
+//     tappare qui, e il ventesimo caso e 0,01 a settimana.
+// Il test non fissa una soglia su quel caso: sarebbe una soglia sul mio
+// generatore di richieste finte, non su una regola della cucina.
+
 test('DEROMA: la sovracopertura non si toglie scavando buchi', () => {
   // IL MODO FACILE DI BARARE, e per questo sta in un test suo. Basta rinunciare
   // a un turno ogni volta che rischia di eccedere e la sovracopertura va a zero
