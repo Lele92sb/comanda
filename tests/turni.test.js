@@ -8,6 +8,9 @@ import { DAYS, computeShifts, buildShiftConfig, computeShiftsForDates,
          codeAllowed, contoCapienza,
          stazioneDi, stazioniDi, normalizzaCella, assegnaStazione,
          serviziDelCodice } from '../app/src/lib/logic.js';
+// La cucina VERA dello chef, esportata dall'app: e' il banco su cui si misura
+// il generatore. Vedi il blocco in fondo al file.
+import { DEROMA } from './dati/cucina-deroma.js';
 
 // Configurazione classica (colazione/pranzo/cena con spezzato): è quella che
 // l'app crea da sola per chi non ne ha una propria.
@@ -2136,4 +2139,136 @@ test('il budget della settimana e un budget di TURNI, non di posti-servizio', ()
     assert.equal(r.extras.length, 0,
       'seme '+seme+': un extra qui vuol dire che il budget dei turni si e sbilanciato');
   }
+});
+
+// ============================================================================
+// IL BANCO DI PROVA VERO: LA CUCINA DELLO CHEF.
+//
+// Tutto quello che sta sopra questa riga e' fatto di brigate costruite apposta
+// per la regola che stanno provando — quindici persone tutte uguali, una
+// partita a testa, capienza abbondante. Passavano tutte mentre sul prospetto
+// vero il generatore sbagliava di brutto: 8,37 posti-servizio di sovracopertura
+// e 10,12 di scopertura nella stessa settimana. Un banco di prova che non
+// somiglia al cliente non prova niente.
+//
+// Questi test MISURANO, non descrivono: eseguono un lotto di generazioni con
+// semi fissi e confrontano tre numeri con delle soglie. Le soglie non sono
+// congetture — sono state ottenute eseguendo, e il pavimento contro cui si
+// leggono e' stato costruito a mano e validato: su DEROMA un prospetto perfetto
+// fa 0 di sovracopertura, 2 di scopertura (28 posti al lavaggio contro 26 di
+// capienza, e i quattro del lavaggio non fanno turni extra) e 0 turni extra.
+// ============================================================================
+
+// Quante persone di troppo, sommate su ogni (giornata, servizio, partita).
+// Si guarda la stazione DEL SERVIZIO — `stazioneDi(cella, sv)` — perche' da
+// quando una persona puo' stare a pranzo su una partita e a cena su un'altra,
+// leggere il solo `cell.stationId` conterebbe una stazione su due.
+// Si contano solo le celle di COPERTURA: un'ora in eccedenza collocata dov'era
+// gia' coperto e' una scelta dichiarata, con la sua lista e il suo freno, e
+// mescolarla qui direbbe che il motore sbaglia mentre sta facendo quello che
+// gli e' stato chiesto.
+function sovracopertura(staff, newShifts, needs, cfg){
+  const richiesti = {};
+  cfg.serviceIds.forEach(sv=>{ richiesti[sv] = {};
+    (needs[sv]||[]).forEach(n=>{
+      richiesti[sv][n.stationId] = (richiesti[sv][n.stationId]||0) + (parseInt(n.count)||0);
+    });
+  });
+  let troppi = 0;
+  const dove = [];
+  for(const day of DAYS){
+    const presenti = {};
+    cfg.serviceIds.forEach(sv=>{ presenti[sv] = {}; });
+    for(const s of staff){
+      const cella = newShifts[s.id][day];
+      if(!cella || !cella.code) continue;
+      const origine = cella.origine || (cella.extra ? 'extra' : 'copertura');
+      if(origine !== 'copertura') continue;
+      for(const sv of serviziDelCodice(cella.code, cfg)){
+        const st = stazioneDi(cella, sv);
+        if(st) presenti[sv][st] = (presenti[sv][st]||0) + 1;
+      }
+    }
+    cfg.serviceIds.forEach(sv=> Object.keys(presenti[sv]).forEach(st=>{
+      const ecc = presenti[sv][st] - (richiesti[sv][st]||0);
+      if(ecc > 0){ troppi += ecc; dove.push(`${day} ${sv}/${st} ${presenti[sv][st]} su ${richiesti[sv][st]||0}`); }
+    }));
+  }
+  return {troppi, dove};
+}
+
+// Il lotto: sempre gli stessi semi, cosi' il numero e' confrontabile fra due
+// versioni del motore e non balla da un'esecuzione all'altra.
+function lottoDeroma(quante, opzioni){
+  const cfg = buildShiftConfig(DEROMA.services, DEROMA.shiftTypes);
+  const esiti = [];
+  for(let i=0; i<quante; i++){
+    esiti.push(computeShifts(DEROMA.staff, DEROMA.staffingNeeds, Object.assign({
+      config: cfg, stazioni: DEROMA.stations, seed: 'g'+i,
+    }, opzioni||{})));
+  }
+  return {cfg, esiti};
+}
+
+test('DEROMA: mai piu persone del fabbisogno su una giornata, servizio, partita', () => {
+  // L INVARIANTE. Parole dello chef: «continua a mettere due persone al pass,
+  // sul fabbisogno c e scritto 1 e cosi deve essere».
+  // Con la collocazione delle ore in eccedenza SPENTA — che e il default del
+  // motore — nessuna cella di copertura puo eccedere il richiesto. Zero, non
+  // "poche": una persona in piu e una persona che quel giorno stava a casa.
+  const {cfg, esiti} = lottoDeroma(100, {eccedenza:{modo:'lascia'}});
+  let totale = 0;
+  const esempi = [];
+  esiti.forEach((r,i)=>{
+    const {troppi, dove} = sovracopertura(DEROMA.staff, r.newShifts, DEROMA.staffingNeeds, cfg);
+    totale += troppi;
+    if(troppi && esempi.length < 3) esempi.push('seme g'+i+': '+dove.join(', '));
+  });
+  assert.equal(totale, 0,
+    'sovracopertura su 100 generazioni (era 837, cioe 8,37 a settimana): '+esempi.join(' | '));
+});
+
+test('DEROMA: la sovracopertura non si toglie scavando buchi', () => {
+  // IL MODO FACILE DI BARARE, e per questo sta in un test suo. Basta rinunciare
+  // a un turno ogni volta che rischia di eccedere e la sovracopertura va a zero
+  // da sola, lasciando la settimana piena di scoperture. Le due misure vanno
+  // lette insieme o non dicono niente.
+  // Le soglie sono i numeri MISURATI sul motore prima di questo lavoro —
+  // 10,12 posti scoperti e 4,91 turni extra a settimana — e sono un tetto, non
+  // un obiettivo: il pavimento verificato a mano e 2 e 0.
+  const {esiti} = lottoDeroma(100, {eccedenza:{modo:'lascia'}});
+  const scoperti = esiti.reduce((n,r)=>
+    n + r.shortfalls.reduce((m,x)=> m + (x.missing||1), 0), 0) / esiti.length;
+  const extra = esiti.reduce((n,r)=> n + r.extras.length, 0) / esiti.length;
+  assert.ok(scoperti <= 10.12,
+    'posti scoperti a settimana: '+scoperti.toFixed(2)+', peggio del motore di prima (10,12)');
+  assert.ok(extra <= 4.91,
+    'turni extra a settimana: '+extra.toFixed(2)+', peggio del motore di prima (4,91)');
+  // E il numero di oggi, perche il prossimo che tocca il motore veda subito se
+  // lo ha peggiorato senza far diventare rosso niente: 8,54 e 0,00.
+  assert.ok(scoperti <= 9.00, 'posti scoperti a settimana: '+scoperti.toFixed(2)+' (oggi 8,54)');
+  assert.ok(extra <= 0.50, 'turni extra a settimana: '+extra.toFixed(2)+' (oggi 0,00)');
+});
+
+test('DEROMA: nessuno su una partita che non sa fare, e la mappa resta sana', () => {
+  // La rete di sicurezza del banco vero: le regole che i test sintetici gia
+  // provano devono valere anche qui, dove le persone hanno due partite con
+  // priorita, part-time da 6 e 7 ore e sei persone che non fanno extra.
+  const {cfg, esiti} = lottoDeroma(20, {eccedenza:{modo:'lascia'}});
+  esiti.forEach((r,i)=>{
+    assert.equal(noQualificationViolations(DEROMA.staff, r.newShifts, cfg), null, 'seme g'+i);
+    for(const s of DEROMA.staff){
+      for(const day of DAYS){
+        const cella = r.newShifts[s.id][day];
+        if(!cella || !cella.code) continue;
+        const servizi = serviziDelCodice(cella.code, cfg);
+        // `stationId` resta il contratto verso il passato: sempre allineato
+        // alla prima stazione della mappa.
+        if(servizi.length){
+          assert.equal(cella.stationId, stazioneDi(cella, servizi[0]),
+            `seme g${i}, ${s.id} ${day}: stationId non allineato alla mappa`);
+        }
+      }
+    }
+  });
 });

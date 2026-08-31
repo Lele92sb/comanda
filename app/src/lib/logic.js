@@ -908,8 +908,48 @@ function computeShifts(staffList, staffingNeeds, options){
     // `sv` si scrive comunque, anche se il codice non lo coprisse: il posto che
     // ha fatto scattare l'assegnazione va chiuso, altrimenti il `while` che ci
     // gira intorno non finirebbe piu'.
-    const serveAncora = (sv2, st) =>
-      coperteDa(st).some(st2=> (remain[sv2]||{})[st2] > 0);
+    // La stessa domanda su un `remain` QUALSIASI, non solo su quello di adesso.
+    // Serve perche' una delle domande che il motore si fa e' «e dopo che avro'
+    // assegnato questo turno, chi resta puo' ancora coprire senza sprecare?»:
+    // e' una domanda sul mondo che si sta per creare, e farla sul mondo di
+    // adesso da' sempre la risposta ottimista.
+    const serveIn = (r, sv2, st) =>
+      coperteDa(st).some(st2=> (r[sv2]||{})[st2] > 0);
+    const serveAncora = (sv2, st) => serveIn(remain, sv2, st);
+    // `remain` come sara' dopo che una mappa servizio → stazione avra' chiuso
+    // i suoi posti. Copia, non tocca l'originale: e' una simulazione.
+    const remainDopo = (mappa) => {
+      const r = {};
+      SERVICES.forEach(sv2=>{ r[sv2] = Object.assign({}, remain[sv2]||{}); });
+      Object.keys(mappa||{}).forEach(sv2=>{
+        const st = mappa[sv2];
+        if(!st) return;
+        coperteDa(st).forEach(st2=>{ if(r[sv2][st2]) r[sv2][st2] = Math.max(0, r[sv2][st2]-1); });
+      });
+      return r;
+    };
+    // QUANTE META' DI UN TURNO SI BUTTANO VIA. Un codice che copre piu' servizi
+    // porta con se' delle meta' di giornata: quelle che cadono su un servizio
+    // dove questa partita non chiede piu' nessuno — e dove nessun'altra partita
+    // della persona chiede nessuno, perche' allora `mappaStazioni` la
+    // sposterebbe li' — sono persone in piu' del fabbisogno, cioe' la
+    // sovracopertura. Il servizio che ha fatto scattare l'assegnazione
+    // (`svBase`) non si conta mai: quello e' il motivo per cui si assegna.
+    const sprecoIn = (r, s, code, svBase, st) => (CODE_TO_SERVICES[code]||[]).filter(sv2=>
+      sv2 !== svBase
+      && !serveIn(r, sv2, st)
+      && !(s.stations||[]).some(st2=> st2 !== st && serveIn(r, sv2, st2))).length;
+    // Lo stesso conto SENZA contare lo spostamento su un'altra partita, e la
+    // differenza non e' un dettaglio. Quando si guarda il turno che si sta
+    // assegnando ADESSO, `mappaStazioni` lo spostamento lo fa subito e quindi
+    // va contato. Quando invece si PREVEDE che un altro coprira' un servizio
+    // piu' tardi, quello spostamento e' una promessa su un posto che nel
+    // frattempo qualcun altro chiudera': su DEROMA l'altra partita di Lorenc e'
+    // il pass, che a pranzo viene coperto DOPO i primi, e la promessa e' gia'
+    // scaduta quando arriva il momento di mantenerla. Previsione ottimista
+    // uguale sovracopertura: qui si guarda solo questa partita.
+    const sprecoSecco = (r, code, svBase, st) => (CODE_TO_SERVICES[code]||[]).filter(sv2=>
+      sv2 !== svBase && !serveIn(r, sv2, st)).length;
     const mappaStazioni = (s, code, sv, stationId) => {
       const m = {};
       (CODE_TO_SERVICES[code]||[]).forEach(sv2=>{ m[sv2] = stationId; });
@@ -953,6 +993,28 @@ function computeShifts(staffList, staffingNeeds, options){
           // oggi, viste le sue richieste approvate.
           const codiciUtili = (s) => (SERVICE_CODES[sv]||[])
             .filter(c=> codeAllowed(constraints, s.id, day, c, CODE_TO_SERVICES));
+
+          // Un turno che copre più servizi conviene se ANCHE gli altri servizi che
+          // copre sono ancora scoperti su questa stazione: una persona sola ne
+          // chiude due. Prima era il caso particolare "pranzo + cena = spezzato".
+          const codeCoversMore = code =>
+            (CODE_TO_SERVICES[code]||[]).filter(sv2=> sv2!==sv && (remain[sv2]||{})[stationId] > 0).length;
+
+          // `remain` come sara' dopo che UN TURNO SINGOLO avra' chiuso questo
+          // posto: e' il mondo in cui si trovera' chi coprira' gli altri servizi
+          // di questa partita, e la domanda «qualcun altro puo' farlo?» va fatta
+          // li'.
+          const remainSingolo = remainDopo({[sv]: stationId});
+
+          // Lo spreco di uno slot e' quello del codice MIGLIORE che ci si puo'
+          // pescare: uno slot ['R','SP'] non spreca niente finche' il riposo e'
+          // fra le sue scelte, e uno ['S','P'] nemmeno.
+          const sprecoSlot = (s, slot, ok) => slot.codes.filter(c=> ok.includes(c))
+            .reduce((n,c)=> Math.min(n, sprecoIn(remain, s, c, sv, stationId)), Infinity);
+          // Quanti ALTRI posti ancora aperti su questa partita lo slot sa
+          // chiudere, nel suo giorno migliore.
+          const chiudeSlot = (slot, ok) => slot.codes.filter(c=> ok.includes(c))
+            .reduce((n,c)=> Math.max(n, codeCoversMore(c)), 0);
 
           let candidates = staffList.filter(s=>{
             if(assigned[s.id][day]) return false;
@@ -1077,6 +1139,42 @@ function computeShifts(staffList, staffingNeeds, options){
           const perOre = turnoLungo
             ? (a,b)=> oreFatte[a.id] - oreFatte[b.id]
             : (a,b)=> oreFatte[b.id] - oreFatte[a.id];
+          // SE LASCIARE IL RESTO AGLI ALTRI COSTA UNO SPRECO, SI ACCORPA ADESSO.
+          // La forma della giornata puo' chiedere due turni singoli su questa
+          // partita — uno a pranzo e uno a cena — ma quella forma esiste solo
+          // se DUE persone un turno singolo ce l'hanno davvero in tasca. Quando
+          // non c'e', il secondo servizio finisce a chi ha in tasca solo
+          // accorpati, e quell'accorpato si porta dietro una meta' di giornata
+          // che nessuno chiedeva piu'. Il motore non se ne accorgeva perche' si
+          // chiedeva «c'e' qualcun altro che copre la cena?» guardando il mondo
+          // di ADESSO, dove il posto di pranzo e' ancora aperto e quindi
+          // l'accorpato di chiunque sembra gratis.
+          // Misurato su DEROMA: e' l'ultimo 0,94 di sovracopertura a settimana,
+          // e cade quasi tutto il venerdi'.
+          const sostituibileSenzaSpreco = (sv2, esclusoId) => staffList.some(s2=>{
+            if(s2.id === esclusoId || assigned[s2.id][day]) return false;
+            if(!(s2.stations && s2.stations.includes(stationId))) return false;
+            const cod = (SERVICE_CODES[sv2]||[]).filter(c=>
+              codeAllowed(constraints, s2.id, day, c, CODE_TO_SERVICES)
+              && sprecoSecco(remainSingolo, c, sv2, stationId) === 0);
+            return cod.length > 0 && pools[s2.id].some(slot=> slot.codes.some(c=> cod.includes(c)));
+          });
+          // Questa persona sa chiudere, con UN turno solo, anche gli altri
+          // servizi ancora scoperti qui?
+          const accorpaQui = (s) => { const ok = codiciUtili(s);
+            return (pools[s.id]||[]).some(slot=>
+              slot.codes.some(c=> ok.includes(c) && codeCoversMore(c) > 0)); };
+          // Il costo che la scelta di questa persona scarica sul resto della
+          // giornata: uno, se non accorpa e cio' che lascia aperto non ha
+          // nessuno che possa prenderlo senza sprecare. Zero in ogni altro caso
+          // — e su una cucina con un servizio solo e' sempre zero, perche'
+          // `altriScoperti` e' vuoto.
+          const costoDelResto = (s) => (!accorpaQui(s)
+            && altriScoperti.some(sv2=> !sostituibileSenzaSpreco(sv2, s.id))) ? 1 : 0;
+          const costoDelCandidato = {};
+          candidates.forEach(s=>{ costoDelCandidato[s.id] = costoDelResto(s); });
+          const perCostoDelResto = (a,b)=> costoDelCandidato[a.id] - costoDelCandidato[b.id];
+
           if(isExtra){
             // Fra chi si può chiamare oltre quota va per primo chi ne ha fatti
             // MENO. Qui prima c'era il contrario, e la spiegazione suonava bene:
@@ -1109,7 +1207,21 @@ function computeShifts(staffList, staffingNeeds, options){
             // inizio settimana. Scavalcandolo, sulla brigata di misura le
             // scoperture salivano da 0,71 a 1,30 a settimana. Dietro, scendono
             // a 0,39 E la quota sulla partita principale sale lo stesso.
-            candidates.sort((a,b)=> perStazioni(a,b)
+            // IL COSTO DEL RESTO STA DAVANTI A TUTTO, ANCHE A «CHI SA FARE MENO
+            // STAZIONI», e va spiegato perche' quel criterio e' una regressione
+            // gia' pagata in produzione e finora non gli passava davanti
+            // nessuno. Non e' un'inversione: `perCostoDelResto` vale zero per
+            // tutti tranne nel caso stretto in cui la persona non puo' chiudere
+            // gli altri servizi ancora aperti QUI e cio' che lascia aperto non
+            // ha nessuno che lo possa prendere senza sprecare. In quel caso il
+            // criterio delle stazioni non sta difendendo niente: il jolly che
+            // «si tiene di riserva» e' proprio quello che fra due passaggi verra'
+            // chiamato lo stesso, e con un turno che butta via mezza giornata.
+            // Misurato su DEROMA, dietro a `perStazioni` non muove niente
+            // (0,92 di sovracopertura, identico a toglierlo del tutto); davanti
+            // porta la sovracopertura a 0,00 e le scoperture da 9,00 a 8,54.
+            candidates.sort((a,b)=> perCostoDelResto(a,b)
+              || perStazioni(a,b)
               || (quotaLavoroResidua(b) - quotaLavoroResidua(a))
               || perPriorita(a,b)
               || perOre(a,b));
@@ -1117,16 +1229,34 @@ function computeShifts(staffList, staffingNeeds, options){
           const chosen = candidates[0];
           const pool = pools[chosen.id];
 
-          // Un turno che copre più servizi conviene se ANCHE gli altri servizi che
-          // copre sono ancora scoperti su questa stazione: una persona sola ne
-          // chiude due. Prima era il caso particolare "pranzo + cena = spezzato".
-          const codeCoversMore = code =>
-            (CODE_TO_SERVICES[code]||[]).filter(sv2=> sv2!==sv && (remain[sv2]||{})[stationId] > 0).length;
+          // SERVE UN ACCORPATO QUI, OGGI? E' la stessa domanda di `turnoLungo`
+          // — che pero' decide CHI lavora e va risposta prima di sapere chi —
+          // rifatta ora che la persona e' scelta, e senza contare lei.
+          // Contarla e' contare due volte la stessa testa: su DEROMA Uddin
+          // prendeva il turno di pranzo sui secondi perche' «tanto la cena la
+          // copre qualcuno da solo», e quel qualcuno era Uddin. La sera restava
+          // Mohammed, che in tasca ha solo accorpati, e il suo pranzo finiva su
+          // una partita gia' chiusa. E' l'ultimo 0,46 di sovracopertura.
+          const copribileDaAltri = sv2 => staffList.some(s2=>{
+            if(s2.id === chosen.id || assigned[s2.id][day]) return false;
+            if(!(s2.stations && s2.stations.includes(stationId))) return false;
+            const cod = (SERVICE_CODES[sv2]||[]).filter(c=>
+              (CODE_TO_SERVICES[c]||[]).length === 1
+              && codeAllowed(constraints, s2.id, day, c, CODE_TO_SERVICES));
+            return cod.length > 0 && pools[s2.id].some(slot=> slot.codes.some(c=> cod.includes(c)));
+          });
+          const serveAccorpare = altriScoperti.length > 0
+            && (budgetSpezzati[stationId] > 0 || altriScoperti.some(sv2=> !copribileDaAltri(sv2)));
 
           // Quante altre persone potrebbero coprire il servizio `sv2` su questa
           // stazione, oggi. Serve prima di rinunciare a uno spezzato: il turno
           // accorpato si lascia solo se il servizio che porta con sé ha
           // qualcun altro che lo può prendere.
+          // Qui NON si filtra sullo spreco, e non è una dimenticanza: provato,
+          // aggiungendo `sprecoSecco(remainSingolo, ...) === 0` i numeri su
+          // DEROMA non si muovono di un centesimo (0,00 / 8,54 / 0,00). Quando
+          // si arriva qui la persona è già stata scelta con il criterio del
+          // costo del resto, che quella domanda l'ha già fatta.
           const altriLiberi = (sv2) => staffList.filter(s2=>{
             if(s2.id === chosen.id || assigned[s2.id][day]) return false;
             if(!(s2.stations && s2.stations.includes(stationId))) return false;
@@ -1170,7 +1300,36 @@ function computeShifts(staffList, staffingNeeds, options){
           } else {
             const matchIdx = [];
             pool.forEach((slot,i)=>{ if(slot.codes.some(c=>ammessi.includes(c))) matchIdx.push(i); });
-            matchIdx.sort((a,b)=> pool[a].codes.length - pool[b].codes.length);
+            // PRIMA GLI SLOT CHE NON SI BUTTANO VIA, poi i meno flessibili.
+            // Il criterio «meno codici per primi» c'era gia' ed e' giusto —
+            // uno slot con una sola scelta va speso finche' quella scelta
+            // serve — ma da solo guarda la persona e non la giornata: uno slot
+            // di solo accorpato ha UN codice, quindi passava davanti a tutto, e
+            // quando il servizio gemello era gia' coperto quella meta' di turno
+            // finiva su una partita che non chiedeva nessuno. E' la
+            // sovracopertura, ed e' l'intera sovracopertura: misurata su
+            // DEROMA, 8,37 posti-servizio a settimana su 8,37, tutti scritti
+            // qui. Ora lo spreco viene prima: fra gli slot compatibili si
+            // spende per primo quello che non regala niente.
+            //
+            // In mezzo, a parita' di spreco, la FORMA della giornata: se qui
+            // oggi ci vuole un accorpato si prende uno slot che sappia farlo,
+            // altrimenti uno che sappia fare il turno corto. Senza questo
+            // criterio due slot pareggiavano — «S/P» e «R/SP» hanno entrambi
+            // due codici — e a decidere restava l'ordine in cui la quota e'
+            // scritta in anagrafica: Rabby faceva il turno di pranzo al
+            // lavaggio con il budget degli accorpati a tre, e la sera il
+            // lavaggio restava a chi accorpati ne aveva solo. Misurato: 0,36 di
+            // sovracopertura e 1,58 posti scoperti a settimana.
+            //
+            // Su una cucina con UN SOLO SERVIZIO nessuno di questi due criteri
+            // esiste: ogni codice copre un servizio solo, quindi lo spreco e'
+            // sempre zero e `chiudeSlot` sempre zero. L'ordinamento torna a
+            // essere «meno codici per primi», identico a prima.
+            matchIdx.sort((a,b)=> (sprecoSlot(chosen, pool[a], ammessi) - sprecoSlot(chosen, pool[b], ammessi))
+              || (serveAccorpare ? chiudeSlot(pool[b], ammessi) - chiudeSlot(pool[a], ammessi)
+                                 : chiudeSlot(pool[a], ammessi) - chiudeSlot(pool[b], ammessi))
+              || (pool[a].codes.length - pool[b].codes.length));
             const slotIdx = matchIdx[0];
             const slot = pool[slotIdx];
             code = scegliCodice(slot.codes.filter(c=>ammessi.includes(c)), true);
