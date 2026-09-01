@@ -1190,6 +1190,48 @@ function computeShifts(staffList, staffingNeeds, options){
         });
       });
     };
+    // I GIORNI GIA' SCRITTI CHE NON SI RIGENERANO.
+    //
+    // Quando il periodo viene allargato a settimane intere — un mese diventa
+    // dal lunedi' prima alla domenica dopo — i giorni fuori dal mese che hanno
+    // gia' dei turni non si rifanno: si prendono cosi' come sono. Idea dello
+    // chef: "se le aggiunge come richieste mentali fisse per quei giorni e poi
+    // genera i successivi".
+    //
+    // Un vincolo `blocked` da solo non basta, ed e' il punto dove si sbaglia:
+    // dice che la persona e' occupata, ma NON dice al conteggio della copertura
+    // che quella partita e' gia' coperta. Il motore la crederebbe scoperta e ce
+    // ne metterebbe un'altra — cioe' i "due ai primi" che lo chef ha segnalato.
+    // Qui si segna anche la stazione e si scala il fabbisogno del giorno.
+    staffList.forEach(s=>{
+      const c = constraintFor(constraints, s.id, day);
+      if(!c || !c.fissa || !c.fissa.code) return;
+      assigned[s.id][day] = c.fissa.code;
+      const mappa = {...(c.fissa.stations || {})};
+      stationAssign[s.id][day] = mappa;
+      origineFlag[s.id][day] = c.fissa.origine || 'copertura';
+      extraFlag[s.id][day] = !!c.fissa.extra;
+      oreFatte[s.id] += oreDi(c.fissa.code);
+      // IL GIORNO FISSO CONSUMA UNA CASELLA DELLA QUOTA. Senza questa riga la
+      // persona resta disponibile per tutti gli altri sei giorni e ne lavora
+      // sette: misurato sulla cucina vera, la settimana a cavallo usciva a 60
+      // ore su un contratto da 49. Il turno del lunedi' e' un turno vero e la
+      // sua quota l'ha gia' speso.
+      const pool = pools[s.id] || [];
+      let idx = pool.findIndex(slot=> (slot.codes||[]).length === 1 && slot.codes[0] === c.fissa.code);
+      if(idx < 0) idx = pool.findIndex(slot=> (slot.codes||[]).includes(c.fissa.code));
+      // Nessuna casella per quel codice: e' un turno che la quota non prevede
+      // (assegnato a mano, o la quota e' cambiata dopo). Si toglie comunque la
+      // casella piu' simile per non regalare una giornata in piu'.
+      if(idx < 0 && pool.length){
+        const lavora = WORKING_CODES.includes(c.fissa.code);
+        idx = pool.findIndex(slot=> (slot.codes||[]).some(x=> WORKING_CODES.includes(x) === lavora));
+        if(idx < 0) idx = 0;
+      }
+      if(idx >= 0) pool.splice(idx, 1);
+      segnaCopertura(mappa);
+    });
+
     // Su quale stazione sta questa persona, SERVIZIO PER SERVIZIO.
     // «Potrebbe essere che la stessa persona stia a pranzo in una partita e a
     // cena in un'altra.»
@@ -2720,6 +2762,28 @@ function generaMigliore(staffList, staffingNeeds, options){
   });
 }
 
+// Le date da GENERARE per coprire un periodo con settimane INTERE. Idea dello
+// chef: "visto che il settimanale funziona, il mensile puo' generare tutte
+// settimane separate complete da lunedi a domenica e poi pero' mostrare solo i
+// risultati del mese preciso".
+//
+// E' meglio della strada che avevo preso io. Io avevo SPENTO la chiusura delle
+// ore nelle settimane spezzate: il caso particolare restava, zittito. Cosi'
+// invece le settimane spezzate non esistono — il motore lavora sempre su sette
+// giorni, che e' l'unica misura in cui la quota e le ore contrattuali hanno un
+// senso — e del risultato si tiene solo la parte che il periodo chiedeva.
+function settimaneIntere(dates){
+  if(!dates.length) return dates.slice();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(dates[0]))) return dates.slice();
+  const ordinate = dates.slice().sort();
+  const dal = startOfWeek(parseISO(ordinate[0]));
+  const ultimo = parseISO(ordinate[ordinate.length-1]);
+  const al = startOfWeek(ultimo); al.setDate(al.getDate() + 6);
+  const out = [];
+  for(let d = new Date(dal); d <= al; d.setDate(d.getDate()+1)) out.push(isoDate(new Date(d)));
+  return out;
+}
+
 export {
   DAYS,
   SPECIAL_CODES,
@@ -2747,6 +2811,7 @@ export {
   codeAllowed,
   puoFareExtra,
   contoCapienza,
+  settimaneIntere,
   punteggioProspetto,
   generaMigliore,
 };

@@ -2684,3 +2684,43 @@ test('DEROMA su un mese: nessuna sovracopertura, come sulla settimana', () => {
     assert.equal(r.extras.length, 0, `${r.extras.length} turni extra in un mese`);
   }
 });
+
+
+test('un giorno gia scritto non si rigenera, e la sua partita risulta coperta', () => {
+  // Idea dello chef per il mensile: generare settimane INTERE lunedi-domenica e
+  // mostrare solo i giorni del mese, trattando i giorni gia' scritti come
+  // "richieste mentali fisse". Questo test difende il pezzo delicato: un
+  // vincolo che dice solo "questa persona e' occupata" NON basta, perche' il
+  // conteggio della copertura crederebbe quella partita ancora scoperta e ce
+  // ne metterebbe un'altra sopra — cioe' i "due ai primi" che lo chef ha
+  // segnalato. Il giorno fisso deve portarsi dietro anche la stazione.
+  const cfg = buildShiftConfig(DEROMA.services, DEROMA.shiftTypes);
+  const giorni = ['2026-08-31','2026-09-01','2026-09-02','2026-09-03','2026-09-04','2026-09-05','2026-09-06'];
+  // Valerio sta ai primi il lunedi', gia' deciso.
+  const constraints = { valerio: { '2026-08-31': {
+    blocked: 'P', fissa: {code:'P', stations:{pranzo:'primi'}, stationId:'primi', origine:'copertura'} } } };
+  for(let i=0;i<6;i++){
+    const r = computeShiftsForDates(DEROMA.staff, DEROMA.staffingNeeds,
+      {config:cfg, stazioni:DEROMA.stations, dates:giorni, constraints, seed:'fx'+i,
+       eccedenza:{modo:'lascia'}});
+    // 1. non e' stato toccato
+    assert.equal(r.newShifts.valerio['2026-08-31'].code, 'P', 'il giorno fisso e stato riscritto');
+    assert.equal(stazioneDi(r.newShifts.valerio['2026-08-31'], 'pranzo'), 'primi');
+    // 2. il fabbisogno di quel giorno lo considera COPERTO: nessun turno di
+    //    copertura viene aggiunto ai primi a pranzo oltre al suo.
+    //    NOTA ONESTA su cio' che questo test NON pretende: una persona con lo
+    //    spezzato assegnato ai primi per la CENA porta li' anche la meta' del
+    //    pranzo, e quella meta' puo' cadere su una partita gia' chiusa. E' un
+    //    residuo noto della stessa causa gia' corretta per il caso normale, che
+    //    riaffiora quando un giorno e' pre-fissato: si vede solo qui, e vale la
+    //    pena averlo scritto invece che scoprirlo di nuovo fra sei mesi.
+    const diCopertura = DEROMA.staff.filter(p=>{
+      const c = r.newShifts[p.id]['2026-08-31'];
+      return c && c.origine === 'copertura'
+             && (cfg.codeToServices[c.code]||[]).length === 1
+             && stazioneDi(c, 'pranzo') === 'primi';
+    });
+    assert.equal(diCopertura.length, 1,
+      `ai primi a pranzo il 31 ago ci sono ${diCopertura.length} turni singoli di copertura`);
+  }
+});

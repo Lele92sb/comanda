@@ -1,7 +1,7 @@
 import { t } from '../core/lingua.ts';
 import { SERVICE_LABEL, conferma, esc, periodDates, refreshShiftConfig, save, setPeriodAnchor, setPeriodMode, shiftPeriod, state, toast } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
-import { DAYS, REST_CODE, codeAllowed, constraintFor, generaMigliore, parseISO, puoFareExtra } from '../lib/logic.js';
+import { DAYS, REST_CODE, codeAllowed, constraintFor, generaMigliore, parseISO, puoFareExtra, settimaneIntere } from '../lib/logic.js';
 import { renderDashboard } from '../viste/dashboard.js';
 import { renderOreExtra, renderTurni } from './griglia.js';
 import { caricaRichieste, constraintsFromRequests } from './richieste.js';
@@ -47,8 +47,35 @@ async function generateRandomShifts(){
   // Chi non ha stazioni non viene pianificato: lo dice il motore nel riepilogo
   // qui sotto (nonPianificabili), non un avviso che sparisce dopo due secondi.
 
-  const dates = periodDates();
+  const daSalvare = periodDates();
+  // IL MOTORE LAVORA SEMPRE SU SETTIMANE INTERE, anche quando tu guardi un mese.
+  // Idea dello chef: "visto che il settimanale funziona, il mensile puo'
+  // generare tutte settimane separate complete da lunedi a domenica e poi pero'
+  // mostrare solo i risultati del mese preciso".
+  // La quota e le ore di contratto hanno senso solo su sette giorni: su una
+  // settimana tagliata a meta' dal bordo del mese il conto non si puo' fare, e
+  // prima infatti usciva sbagliato in tutti i modi possibili.
+  const dates = settimaneIntere(daSalvare);
   const constraints = constraintsFromRequests();
+  // I giorni fuori dal periodo che hai chiesto, ma dentro le settimane che il
+  // motore deve completare: se hanno gia' dei turni NON si rifanno, si prendono
+  // com'erano. Diventano vincoli fissi esattamente come una richiesta
+  // approvata — con in piu' la partita, altrimenti il motore crederebbe quelle
+  // postazioni scoperte e ce ne metterebbe altre sopra.
+  const bordi = new Set(daSalvare.map(String));
+  let giorniFissati = 0;
+  dates.forEach(d=>{
+    if(bordi.has(d)) return;
+    state.staff.forEach(p=>{
+      const cella = (state.shifts[p.id]||{})[d];
+      if(!cella || !cella.code) return;
+      constraints[p.id] = constraints[p.id] || {};
+      // Una richiesta approvata batte tutto: se c'e' gia', non la si tocca.
+      if(constraints[p.id][d]) return;
+      constraints[p.id][d] = { blocked: cella.code, fissa: cella };
+      giorniFissati++;
+    });
+  });
   // Contate prima di aggiungere gli impegni altrove: sono due cose diverse e
   // vanno spiegate separatamente a chi legge il riepilogo.
   const nRichieste = Object.values(constraints).reduce((n,g)=>n+Object.keys(g).length, 0);
@@ -96,8 +123,15 @@ async function generateRandomShifts(){
      tentativi: 20, scambi: 400});
   // Si sovrascrivono SOLO le date del periodo: i turni delle altre settimane
   // gia' pianificate non devono sparire perche' se ne rigenera una.
+  // Si salva SOLO quello che il periodo chiedeva. I giorni in piu' servivano al
+  // motore per far tornare il conto delle ore su settimane intere, e finiscono
+  // qui: scriverli vorrebbe dire che generando settembre ti riscrivo di
+  // nascosto quattro giorni di ottobre.
   state.staff.forEach(s=>{
-    state.shifts[s.id] = Object.assign(state.shifts[s.id]||{}, newShifts[s.id]||{});
+    const suoi = newShifts[s.id] || {};
+    const solo = {};
+    daSalvare.forEach(d=>{ if(suoi[d]) solo[d] = suoi[d]; });
+    state.shifts[s.id] = Object.assign(state.shifts[s.id]||{}, solo);
   });
   save('shifts');
   renderTurni(); renderOreExtra(); renderPubblicazione(); renderDashboard();
