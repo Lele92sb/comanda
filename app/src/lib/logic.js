@@ -2032,7 +2032,24 @@ function computeShifts(staffList, staffingNeeds, options){
   // ==========================================================================
   const optEcc = options.eccedenza || {};
   const modoEcc = optEcc.modo || 'lascia';
-  const collocaAttiva = (modoEcc === 'auto' || modoEcc === 'giorni');
+  // LE ORE SI CHIUDONO SOLO A SETTIMANA COMPLETA.
+  //
+  // La settimana e' lunedi-domenica e le ore di contratto sono quelle. Se il
+  // periodo ne generа solo un pezzo — l'ultima settimana di un mese, tre giorni
+  // — non si sa ancora quante ore fara' quella persona, e volerle chiudere
+  // significa metterla dove non serve.
+  // Misurato prima di questa riga, sulla cucina vera: un mese con settimane
+  // 6/7/7/7/3 dava 31 posti sovracoperti e 23 «ore collocate», tutte nella
+  // prima e nell'ultima settimana. Le tre settimane INTERE non ne producevano
+  // nessuna, perche' li' nessuno avanza ore: le prende tutte coprendo.
+  // Parole dello chef: "il settimanale funziona, quindi questo ci dice che
+  // anche sul mensile non dovrebbero servire turni extra".
+  //
+  // «Completa» non vuol dire sette giorni nel periodo: vuol dire che dei sette
+  // si sa tutto, o perche' li stiamo generando o perche' sono gia' scritti.
+  // Il resto aspetta di essere generato, e allora si chiudera'.
+  const settimanaCompleta = options.settimanaCompleta !== false;
+  const collocaAttiva = (modoEcc === 'auto' || modoEcc === 'giorni') && settimanaCompleta;
   // Il freno per giornata: al massimo N persone in piu' del richiesto sulla
   // stessa stazione nello stesso servizio. Senza, «sui giorni che scelgo io»
   // e' un generatore di sovracopertura con l'etichetta buona — cinque
@@ -2357,10 +2374,28 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
     return gia;
   };
 
+  // Di questa settimana si sa tutto? Ogni giorno da lunedi a domenica o sta nel
+  // periodo che stiamo generando, o e' gia' scritto. Se qualche giorno e'
+  // ancora bianco e fuori periodo, le ore non si possono chiudere.
+  const settimanaNota = (settimana)=>{
+    if(!settimana.length) return false;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(settimana[0]))) return true;  // giorni per nome: e' una settimana a se
+    const lunedi = startOfWeek(parseISO(settimana[0]));
+    for(let k=0;k<7;k++){
+      const d = new Date(lunedi); d.setDate(lunedi.getDate()+k);
+      const iso = isoDate(d);
+      if(dentro.has(iso)) continue;
+      const scritto = staffList.some(p=> ((options.turniEsistenti||{})[p.id]||{})[iso]?.code);
+      if(!scritto) return false;
+    }
+    return true;
+  };
+
   groupByWeek(dates).forEach((settimana, i)=>{
     const res = computeShifts(staffList, staffingNeeds, {
       config: options.config, days: settimana, constraints: options.constraints,
       oreGiaFatte: oreFuoriPeriodo(settimana),
+      settimanaCompleta: settimanaNota(settimana),
       maxExtraPerPersona: options.maxExtraPerPersona,
       stazioni: options.stazioni,
       // La fase 3 gira DENTRO ogni settimana, sul residuo di quella settimana:

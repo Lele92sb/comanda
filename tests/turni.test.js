@@ -2647,3 +2647,40 @@ test('la settimana e sempre lunedi-domenica: il periodo parziale conta le ore gi
       `lunedi ${codiceLunedi}: la settimana fa solo ${settimanaIntera} ore su ${contratto}`);
   }
 });
+
+
+test('DEROMA su un mese: nessuna sovracopertura, come sulla settimana', () => {
+  // Segnalato dallo chef: "ho generato i turni mensili e sono un disastro,
+  // addirittura ci sono due ai primi e 2 ai secondi nello stesso turno... il
+  // settimanale funziona quindi questo ci dice che anche sul mensile, oltre al
+  // lavaggio, non dovrebbero servire turni extra". Ragionamento giusto, e il
+  // numero gli da' ragione: le scoperture del mese sono esattamente tre volte
+  // quelle della settimana, perche' le settimane intere sono tre.
+  //
+  // La causa era la collocazione delle ore in eccedenza nelle settimane
+  // SPEZZATE dal bordo del mese (6 giorni e 3 giorni): li' il motore credeva
+  // che una persona dovesse 49 ore in sei giorni, e per dargliele la metteva
+  // dove non serviva. Misurato: 31 posti sovracoperti e 23 «ore collocate»,
+  // tutte nella prima e nell'ultima settimana; zero nelle tre intere.
+  const cfg = buildShiftConfig(DEROMA.services, DEROMA.shiftTypes);
+  const dates = monthDates(new Date(2026, 8, 1));
+  for(let i=0;i<4;i++){
+    const r = generaMigliore(DEROMA.staff, DEROMA.staffingNeeds,
+      {config:cfg, stazioni:DEROMA.stations, dates, eccedenza:{modo:'auto'}, tentativi:8});
+    let sovra = 0;
+    dates.forEach(d=> cfg.serviceIds.forEach(sv=>{
+      const conta = {};
+      DEROMA.staff.forEach(p=>{
+        const c = r.newShifts[p.id][d]; if(!c || !c.code) return;
+        if(!(cfg.codeToServices[c.code]||[]).includes(sv)) return;
+        const st = stazioneDi(c, sv); if(st) conta[st] = (conta[st]||0) + 1;
+      });
+      (DEROMA.staffingNeeds[sv]||[]).forEach(n=>{
+        const q = conta[n.stationId] || 0;
+        if(q > n.count) sovra += q - n.count;
+      });
+    }));
+    assert.equal(sovra, 0, `${sovra} posti sovracoperti in un mese`);
+    assert.equal(r.extras.length, 0, `${r.extras.length} turni extra in un mese`);
+  }
+});
