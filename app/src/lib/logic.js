@@ -2442,24 +2442,48 @@ function punteggioProspetto(newShifts, staffList, staffingNeeds, cfg, extra){
 // Cosi' si sciolgono le file di spezzati e i riposi non cadono sempre addosso
 // alle stesse persone negli stessi giorni: due generazioni danno due prospetti
 // diversi, che e' l'altra cosa chiesta.
-function scambiabili(a, b, cellaA, cellaB, cfg){
+// I codici che una persona puo' davvero fare: quelli scritti nella sua quota
+// settimanale, piu' il riposo che vale sempre. La quota non dice solo QUANTI
+// turni: dice anche QUALI, ed e' l'unico posto dove il titolare lo scrive.
+function codiciAmmessiDi(p){
+  const set = new Set([REST_CODE]);
+  (p.weeklyQuota||[]).forEach(g=> (g.codes||[]).forEach(c=> set.add(c)));
+  return set;
+}
+
+function scambiabili(a, b, cellaA, cellaB, cfg, constraints, day){
   if(a.id === b.id) return false;
   // Ferie, malattia e riposi concordati non si scambiano: sono accordi presi.
   const fisso = c => !!(c && c.code && SPECIAL_CODES[c.code] && c.code !== REST_CODE);
   if(fisso(cellaA) || fisso(cellaB)) return false;
-  // Ognuno dei due deve poter fare il turno dell'altro: le stazioni scritte
-  // nella cella devono essere fra quelle che sa fare.
-  const sa = (p, cella) => {
+  const ammessiA = codiciAmmessiDi(a), ammessiB = codiciAmmessiDi(b);
+  // Ognuno dei due deve poter fare il turno dell'altro. TRE condizioni, e la
+  // prima mancava: e' il difetto che ha trovato lo chef provando l'app.
+  //
+  // Carlos ha in quota solo P2, Alessio solo P1 e S1, e stanno tutti e due al
+  // Pass. Controllando la sola stazione lo scambio sembrava lecito, e Carlos si
+  // ritrovava un S1 che nella sua scheda non esiste — piu' le ore che ne
+  // seguivano: 27 su un contratto da 24. La quota non dice solo quanti turni fa
+  // una persona, dice anche QUALI.
+  const puo = (p, ammessi, cella) => {
     if(!cella || !cella.code) return true;
+    if(!ammessi.has(cella.code)) return false;                       // 1. sa fare quel turno?
     const st = stazioniDi(cella, cfg);
-    return st.every(x=> (p.stations||[]).includes(x));
+    if(!st.every(x=> (p.stations||[]).includes(x))) return false;    // 2. sa fare quella partita?
+    // 3. quel giorno puo' lavorare, e su quel servizio? Una richiesta approvata
+    //    "solo pranzo" non deve saltare per via di uno scambio.
+    return codeAllowed(constraints || {}, p.id, day, cella.code, cfg.codeToServices);
   };
-  return sa(a, cellaB) && sa(b, cellaA);
+  // Un turno oltre quota non si passa a chi ha dichiarato di non farne: sarebbe
+  // la stessa regola aggirata dalla porta di servizio.
+  if((cellaA && cellaA.extra && !puoFareExtra(b)) ||
+     (cellaB && cellaB.extra && !puoFareExtra(a))) return false;
+  return puo(b, ammessiB, cellaA) && puo(a, ammessiA, cellaB);
 }
 
 // Prova scambi a caso e tiene solo quelli che migliorano il punteggio. E' la
 // parte "poi va a modificare quelli aggiustandoli" dell'idea dello chef.
-function aggiustaProspetto(newShifts, staffList, staffingNeeds, cfg, extra, rand, passate){
+function aggiustaProspetto(newShifts, staffList, staffingNeeds, cfg, extra, rand, passate, constraints){
   const attivi = staffList.filter(s=> s.stations && s.stations.length);
   if(attivi.length < 2) return newShifts;
   const giorni = Object.keys(newShifts[attivi[0].id] || {});
@@ -2470,7 +2494,7 @@ function aggiustaProspetto(newShifts, staffList, staffingNeeds, cfg, extra, rand
     const a = attivi[Math.floor(rand()*attivi.length)];
     const b = attivi[Math.floor(rand()*attivi.length)];
     const ca = newShifts[a.id][d], cb = newShifts[b.id][d];
-    if(!scambiabili(a, b, ca, cb, cfg)) continue;
+    if(!scambiabili(a, b, ca, cb, cfg, constraints, d)) continue;
     newShifts[a.id][d] = cb; newShifts[b.id][d] = ca;
     const dopo = punteggioProspetto(newShifts, staffList, staffingNeeds, cfg, extra).totale;
     if(dopo < corrente) corrente = dopo;
@@ -2496,7 +2520,8 @@ function generaMigliore(staffList, staffingNeeds, options){
     // com'e' uscita vorrebbe dire scartare bozze che due scambi renderebbero
     // le migliori del mazzo.
     aggiustaProspetto(r.newShifts, staffList, staffingNeeds, cfg, r.extras.length,
-                      Math.random, options.scambi != null ? options.scambi : 400);
+                      Math.random, options.scambi != null ? options.scambi : 400,
+                      options.constraints);
     const p = punteggioProspetto(r.newShifts, staffList, staffingNeeds, cfg, r.extras.length);
     provati.push(p.totale);
     if(!punteggioMigliore || p.totale < punteggioMigliore.totale){

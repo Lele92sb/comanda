@@ -9,7 +9,7 @@ del personale, assistente AI. Italiano e inglese.
 npm ci          # richiede Node >= 22.6 (i test caricano moduli .ts direttamente)
 npm run dev     # sviluppo, ricarica a caldo — le funzioni server NON girano
 npm run preview # build + wrangler: come in produzione, funzioni server comprese
-npm test        # 144 test
+npm test        # 146 test
 npm run typecheck
 npm run lint:import
 ```

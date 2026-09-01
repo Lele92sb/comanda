@@ -2495,3 +2495,60 @@ test('DEROMA: gli scambi non pagano la varieta con la copertura', () => {
     assert.equal(r.punteggio.extra, 0, 'turni extra comparsi dagli scambi');
   }
 });
+
+
+test('DEROMA: nessuno riceve un turno che nella sua scheda non esiste', () => {
+  // Difetto trovato dallo chef provando l'app, e introdotto dagli scambi.
+  // Carlos ha in quota SOLO P2, Alessio solo P1 e S1, e stanno tutti e due al
+  // Pass: lo scambio controllava la partita e non il turno, quindi a Carlos
+  // finiva un S1 che nella sua scheda non c'e' — e con lui 27 ore su un
+  // contratto da 24.
+  //
+  // La quota non dice solo QUANTI turni fa una persona: dice anche QUALI.
+  const cfg = buildShiftConfig(DEROMA.services, DEROMA.shiftTypes);
+  const dates = weekDates(new Date(2026, 8, 7));
+  for(let i=0;i<10;i++){
+    const r = generaMigliore(DEROMA.staff, DEROMA.staffingNeeds,
+      {config:cfg, stazioni:DEROMA.stations, dates, eccedenza:{modo:'lascia'}, tentativi:8});
+    DEROMA.staff.forEach(p=>{
+      const ammessi = new Set(['R']);
+      (p.weeklyQuota||[]).forEach(g=> (g.codes||[]).forEach(c=> ammessi.add(c)));
+      Object.entries(r.newShifts[p.id]||{}).forEach(([d, cella])=>{
+        if(!cella.code) return;
+        assert.ok(ammessi.has(cella.code),
+          `${p.name} il ${d} ha ${cella.code}, che in quota non ha: [${[...ammessi].join(',')}]`);
+      });
+    });
+  }
+});
+
+test('chi ha spento i turni extra non ne riceve nemmeno per scambio', () => {
+  // L'altra meta' dello stesso difetto: uno scambio poteva passare una cella
+  // gia' marcata «extra» a chi ha dichiarato di non farne. La regola vale a
+  // tutte le porte, non solo a quella principale.
+  //
+  // Sulla cucina vera questo test non avrebbe denti: li' di extra non ne nasce
+  // nemmeno uno, quindi la situazione non si presenta e il test passerebbe
+  // anche col controllo tolto (provato col mutante). Serve un fabbisogno che
+  // gli extra li OBBLIGHI: il Pass chiede due persone per servizio invece di
+  // una, e al Pass ci sono sia gente che gli extra li fa (Lorenc, Mohammed,
+  // Nisan) sia gente che li ha spenti (Alessio, Carlos).
+  const cfg = buildShiftConfig(DEROMA.services, DEROMA.shiftTypes);
+  const dates = weekDates(new Date(2026, 8, 7));
+  const duro = sv => DEROMA.staffingNeeds[sv]
+    .map(n=> n.stationId === 'pass' ? {...n, count:2} : n);
+  const needs = { pranzo: duro('pranzo'), cena: duro('cena') };
+  let extraVisti = 0;
+  for(let i=0;i<10;i++){
+    const r = generaMigliore(DEROMA.staff, needs,
+      {config:cfg, stazioni:DEROMA.stations, dates, eccedenza:{modo:'lascia'}, tentativi:8});
+    extraVisti += r.extras.length;
+    DEROMA.staff.filter(p=> p.puoFareExtra === false).forEach(p=>{
+      Object.entries(r.newShifts[p.id]||{}).forEach(([d, cella])=>{
+        assert.ok(!cella.extra, `${p.name} ha un turno extra il ${d} ma li ha spenti`);
+      });
+    });
+  }
+  // Se non nasce nessun extra il test non ha provato niente: meglio saperlo.
+  assert.ok(extraVisti > 0, 'nessun turno extra generato: il test non sta provando niente');
+});
