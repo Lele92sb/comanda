@@ -271,16 +271,32 @@ function semeNumerico(v){
 
 function shuffleArray(arr, rand){ rand = rand || Math.random; for(let i=arr.length-1;i>0;i--){ const j=Math.floor(rand()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
 
-function buildStaffPools(staffList, rand){
+function buildStaffPools(staffList, rand, giorni, cfg, oreGiaFatte){
   const pools = {};
+  const quanti = (giorni && giorni > 0) ? giorni : 7;
+  const oreDi = c => (cfg && cfg.turnoDef && cfg.turnoDef[c] && cfg.turnoDef[c].hours) || 0;
+  // Le ore di una casella: se puo' diventare piu' codici si prende la media,
+  // perche' quale sara' lo decide il giro dei giorni e qui non si sa ancora.
+  const oreSlot = slot => {
+    const h = (slot.codes||[]).map(oreDi);
+    return h.length ? h.reduce((a,b)=>a+b,0)/h.length : 0;
+  };
   staffList.forEach(s=>{
     let slots = [];
     (s.weeklyQuota||[]).forEach(g=>{
       for(let k=0;k<(parseInt(g.count)||0);k++){ slots.push({codes:(g.codes&&g.codes.length)?g.codes.slice():[REST_CODE]}); }
     });
     while(slots.length<7) slots.push({codes:[REST_CODE]});
-    if(slots.length>7) slots = slots.slice(0,7);
-    pools[s.id] = shuffleArray(slots, rand);
+    slots = shuffleArray(slots, rand);
+    // Le caselle restano SETTE anche quando il periodo e' piu' corto: sono
+    // quelle che la persona ha in quota, e tagliarle limiterebbe solo la
+    // disponibilita' senza garantire nessun totale. Provato: tagliandole, le
+    // scoperture su un mese salivano da 6,50 a 7,95 e il totale della settimana
+    // usciva lo stesso sbagliato (27 ore su 49 col lunedi' a riposo).
+    // Il conto delle ore lo fa la fase che colloca l'eccedenza, che sa gia'
+    // quante ne mancano al contratto — ed e' li' che si tiene conto dei giorni
+    // fuori periodo.
+    pools[s.id] = slots;
   });
   return pools;
 }
@@ -954,7 +970,7 @@ function computeShifts(staffList, staffingNeeds, options){
   const riceveDaAltri = {};
   Object.keys(copreOltre).forEach(d=> copreOltre[d].forEach(r=>{ riceveDaAltri[r] = true; }));
 
-  const pools = buildStaffPools(staffList, rand);
+  const pools = buildStaffPools(staffList, rand, days.length, cfg, options.oreGiaFatte);
   // `origineFlag` dice DA DOVE viene un turno, e non e' un doppione di
   // `extraFlag`: due booleani indipendenti («extra» ed «eccedenza») permettono
   // lo stato impossibile "extra E eccedenza", e prima o poi qualcuno li somma.
@@ -2037,8 +2053,20 @@ function computeShifts(staffList, staffingNeeds, options){
   // travestito. Il campo `hours` e' facoltativo in brigata: quando manca resta
   // solo il tetto del pool, e il riepilogo deve dirlo (`oreNonVerificate`).
   const senzaOre = s => !(parseFloat(s.hours) > 0);
+  // IL TETTO E' SETTIMANALE, E LA SETTIMANA E' SEMPRE LUNEDI-DOMENICA.
+  //
+  // Prima qui c'era il contratto rapportato ai giorni del periodo. Su una
+  // settimana intera e' la stessa cosa; su una settimana tagliata a meta' dal
+  // bordo del mese no, e i conti non tornavano piu': in sei giorni uscivano 49
+  // ore o 38 a seconda di come cadeva, mai le 42 che restavano.
+  // Parole dello chef: "a me interessa che da lunedi a domenica faccia 49 ore,
+  // quindi deve tener conto di quello che ha fatto il lunedi per fare il
+  // calcolo". Quindi il tetto e' il contratto INTERO meno le ore gia' scritte
+  // nei giorni di questa settimana che stanno fuori dal periodo generato.
+  const giaFatte = options.oreGiaFatte || {};
   const tettoOre = s => (!rispettaOre || senzaOre(s))
-    ? Infinity : parseFloat(s.hours) * (days.length / 7);
+    ? Infinity
+    : Math.max(0, parseFloat(s.hours) * Math.max(1, days.length / 7) - (giaFatte[s.id] || 0));
 
   // Posti richiesti, per servizio e stazione. Non dipendono dal giorno: nei dati
   // il fabbisogno non ha una dimensione giorno, e fingere che ce l'abbia sarebbe
@@ -2303,9 +2331,36 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
   const nonSpesaPerPersona = {}, motivoPerPersona = {};
   staffList.forEach(s=>{ newShifts[s.id] = {}; });
 
+  // Le ore che una persona ha GIA' nei giorni di questa settimana che stanno
+  // FUORI dal periodo generato. La settimana e' sempre lunedi-domenica: se si
+  // genera un mese che comincia di martedi', il lunedi' esiste lo stesso e la
+  // persona ci lavora. Senza questo conto, il motore ricomincerebbe da zero
+  // ogni volta che la finestra taglia una settimana a meta'.
+  const cfgOre = options.config || buildShiftConfig(null, null);
+  const dentro = new Set(dates.map(String));
+  const oreFuoriPeriodo = (settimana)=>{
+    const gia = {};
+    const esistenti = options.turniEsistenti;
+    if(!esistenti || !settimana.length) return gia;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(settimana[0]))) return gia;   // giorni per nome: niente calendario
+    const lunedi = startOfWeek(parseISO(settimana[0]));
+    for(let k=0;k<7;k++){
+      const d = new Date(lunedi); d.setDate(lunedi.getDate()+k);
+      const iso = isoDate(d);
+      if(dentro.has(iso)) continue;                      // sta nel periodo: lo stiamo rigenerando
+      staffList.forEach(p=>{
+        const c = (esistenti[p.id]||{})[iso];
+        if(!c || !c.code) return;
+        gia[p.id] = (gia[p.id] || 0) + ((cfgOre.turnoDef[c.code]||{}).hours || 0);
+      });
+    }
+    return gia;
+  };
+
   groupByWeek(dates).forEach((settimana, i)=>{
     const res = computeShifts(staffList, staffingNeeds, {
       config: options.config, days: settimana, constraints: options.constraints,
+      oreGiaFatte: oreFuoriPeriodo(settimana),
       maxExtraPerPersona: options.maxExtraPerPersona,
       stazioni: options.stazioni,
       // La fase 3 gira DENTRO ogni settimana, sul residuo di quella settimana:
@@ -2568,7 +2623,18 @@ function aggiustaSettimana(newShifts, staffList, staffingNeeds, cfg, extra, rand
     newShifts[a.id][d] = cb; newShifts[b.id][d] = ca;
     if(d2){ newShifts[a.id][d2] = cb2; newShifts[b.id][d2] = ca2; }
     const dopo = punteggioProspetto(newShifts, staffList, staffingNeeds, cfg, extra).totale;
-    if(dopo < corrente) corrente = dopo;
+    // Si tiene lo scambio se MIGLIORA, e anche — a testa o croce — se lascia
+    // il prospetto esattamente com'era di qualita'.
+    //
+    // Serve alla varieta', ed e' il difetto che lo chef ha descritto cosi':
+    // "a Lorenc capitavano di riposo sempre mar, merc, sab e dom, e mai gli
+    // altri giorni". Di prospetti ugualmente buoni ce ne sono tanti, ma
+    // accettando solo quelli MIGLIORI il motore si ferma al primo e ci resta:
+    // due generazioni partono da bozze diverse e finiscono nella stessa conca.
+    // Accettando anche i pari, la ricerca continua a camminare sul pianoro e i
+    // riposi girano fra i giorni. La qualita' non ne risente: un pari e' un
+    // pari, e i peggioramenti restano rifiutati come prima.
+    if(dopo < corrente || (dopo === corrente && rand() < 0.5)) corrente = dopo;
     else {
       newShifts[a.id][d] = ca; newShifts[b.id][d] = cb;
       if(d2){ newShifts[a.id][d2] = ca2; newShifts[b.id][d2] = cb2; }

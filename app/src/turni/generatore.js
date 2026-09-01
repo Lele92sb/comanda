@@ -88,6 +88,11 @@ async function generateRandomShifts(){
   const { newShifts, shortfalls, extras, nonPianificabili, quotaNonSpesa,
           eccedenzeCollocate } = generaMigliore(state.staff, state.staffingNeeds,
     {config: refreshShiftConfig(), dates, constraints, stazioni: state.stations, eccedenza,
+     // I turni gia' salvati servono al motore per un motivo solo: se il periodo
+     // taglia una settimana a meta', deve sapere quante ore quella persona ha
+     // gia' fatto nei giorni che restano fuori. La settimana e' sempre
+     // lunedi-domenica anche quando la finestra ne mostra sei giorni.
+     turniEsistenti: state.shifts,
      tentativi: 20, scambi: 400});
   // Si sovrascrivono SOLO le date del periodo: i turni delle altre settimane
   // gia' pianificate non devono sparire perche' se ne rigenera una.

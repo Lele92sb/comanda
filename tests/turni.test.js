@@ -2607,3 +2607,43 @@ test('DEROMA su un MESE: ogni settimana intera resta dentro il contratto', () =>
     });
   }
 });
+
+
+test('la settimana e sempre lunedi-domenica: il periodo parziale conta le ore gia fatte', () => {
+  // Parole dello chef: "a me interessa che da lunedi a domenica faccia 49 ore,
+  // quindi in questo caso deve tener conto di quello che ha fatto il lunedi per
+  // fare il calcolo".
+  //
+  // Generando un mese che comincia di martedi', la prima settimana ha sei
+  // giorni DENTRO il periodo e il lunedi' fuori. Prima il motore ricominciava
+  // da zero: costruiva sette caselle e ne buttava una a caso, quindi in quei
+  // sei giorni uscivano 49 ore (se cadeva un riposo) o 38 (se cadeva un turno),
+  // mai le 42 che restavano da fare. Adesso va a leggere il lunedi' gia'
+  // scritto e sottrae.
+  const cfg = buildShiftConfig(DEROMA.services, DEROMA.shiftTypes);
+  const lorenc = DEROMA.staff.find(p=> p.id === 'lorenc');
+  const oreDi = c => (cfg.turnoDef[c] || {}).hours || 0;
+
+  // Il lunedi' e' gia' scritto e sta FUORI dal periodo che generiamo.
+  for(const codiceLunedi of ['R', 'P', 'SP']){
+    const esistenti = {};
+    DEROMA.staff.forEach(p=>{ esistenti[p.id] = { '2026-08-31': {code:codiceLunedi, stations:{}, stationId:null} }; });
+    const dates = ['2026-09-01','2026-09-02','2026-09-03','2026-09-04','2026-09-05','2026-09-06'];
+    const r = computeShiftsForDates(DEROMA.staff, DEROMA.staffingNeeds, {
+      config: cfg, stazioni: DEROMA.stations, dates, seed: 'bordo',
+      eccedenza: {modo:'auto'}, turniEsistenti: esistenti,
+    });
+    const nelPeriodo = dates.reduce((n,d)=> n + oreDi((r.newShifts.lorenc[d]||{}).code), 0);
+    const settimanaIntera = nelPeriodo + oreDi(codiceLunedi);
+    const contratto = parseFloat(lorenc.hours);
+    // NON si sfora mai: sarebbe pagare ore non dovute.
+    assert.ok(settimanaIntera <= contratto,
+      `lunedi ${codiceLunedi}: la settimana fa ${settimanaIntera} ore su un contratto da ${contratto}`);
+    // E non si resta indietro piu' di un turno. L'esattezza non e' sempre
+    // possibile — con turni da 8 e 11 ore non esiste combinazione che faccia
+    // esattamente 41 — ma prima, senza guardare il lunedi', uscivano 27 ore su
+    // 49 col lunedi' a riposo e 57 col lunedi' spezzato.
+    assert.ok(settimanaIntera >= contratto - 11,
+      `lunedi ${codiceLunedi}: la settimana fa solo ${settimanaIntera} ore su ${contratto}`);
+  }
+});
