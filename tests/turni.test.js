@@ -2552,3 +2552,58 @@ test('chi ha spento i turni extra non ne riceve nemmeno per scambio', () => {
   // Se non nasce nessun extra il test non ha provato niente: meglio saperlo.
   assert.ok(extraVisti > 0, 'nessun turno extra generato: il test non sta provando niente');
 });
+
+
+test('DEROMA: gli scambi non spostano ore fra le buste paga', () => {
+  // Difetto trovato dallo chef, e mio: il punteggio misurava lo scarto fra chi
+  // lavora di piu' e chi di meno. Con contratti diversi quel numero non vuol
+  // dire niente — fra un part-time da 24 e un full-time da 49 lo scarto e' 25
+  // anche quando sono tutti e due perfetti — e ridurlo spingeva il full-time
+  // sotto e il part-time sopra. Risultato misurato: tre persone a 38 ore su
+  // 49, altre tre a 60 su 49, e Rakib undici ore oltre il contratto pur avendo
+  // i turni extra spenti.
+  //
+  // Ora ogni scambio che sposta ore ne cerca un secondo, fra le stesse due
+  // persone, che le rimetta a posto. Se non lo trova, rinuncia: meglio una
+  // fila di spezzati che una busta paga sbagliata.
+  const cfg = buildShiftConfig(DEROMA.services, DEROMA.shiftTypes);
+  const dates = weekDates(new Date(2026, 8, 7));
+  for(let i=0;i<10;i++){
+    const r = generaMigliore(DEROMA.staff, DEROMA.staffingNeeds,
+      {config:cfg, stazioni:DEROMA.stations, dates, eccedenza:{modo:'lascia'}, tentativi:10});
+    DEROMA.staff.filter(p=> p.stations.length && parseFloat(p.hours) > 0).forEach(p=>{
+      const fatte = Object.values(r.newShifts[p.id])
+        .reduce((n,c)=> n + ((cfg.turnoDef[c.code]||{}).hours || 0), 0);
+      assert.equal(fatte, parseFloat(p.hours),
+        `${p.name}: ${fatte} ore su un contratto da ${p.hours}`);
+    });
+  }
+});
+
+
+test('DEROMA su un MESE: ogni settimana intera resta dentro il contratto', () => {
+  // E' il caso che ha colpito lo chef, e su una settimana sola non si vedeva:
+  // generando un mese, tre persone finivano a 38 ore su 49 e altre tre a 60,
+  // con punte di 19. Le quote sono SETTIMANALI, ma lo scambio cercava il
+  // compenso fra tutti i giorni del periodo: prendeva ore da una settimana e
+  // le metteva in un'altra, il totale del mese tornava e le due settimane
+  // prese da sole no.
+  //
+  // Si misurano solo le settimane INTERE: in una settimana da tre giorni —
+  // quelle ai bordi del mese — nessuno puo' fare 49 ore, e pretenderlo
+  // sarebbe il test a mentire.
+  const cfg = buildShiftConfig(DEROMA.services, DEROMA.shiftTypes);
+  const dates = monthDates(new Date(2026, 8, 1));
+  for(let i=0;i<4;i++){
+    const r = generaMigliore(DEROMA.staff, DEROMA.staffingNeeds,
+      {config:cfg, stazioni:DEROMA.stations, dates, eccedenza:{modo:'auto'}, tentativi:8});
+    groupByWeek(dates.slice().sort()).filter(w=> w.length === 7).forEach(sett=>{
+      DEROMA.staff.filter(p=> p.stations.length && parseFloat(p.hours) > 0).forEach(p=>{
+        const fatte = sett.reduce((n,d)=>
+          n + ((cfg.turnoDef[(r.newShifts[p.id][d]||{}).code]||{}).hours || 0), 0);
+        assert.equal(fatte, parseFloat(p.hours),
+          `${p.name}, settimana del ${sett[0]}: ${fatte} ore su ${p.hours}`);
+      });
+    });
+  }
+});

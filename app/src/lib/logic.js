@@ -2411,16 +2411,39 @@ function punteggioProspetto(newShifts, staffList, staffingNeeds, cfg, extra){
   const perGiorno = giorni.map(d=> attivi.filter(p=>
     !workingCodes.includes((newShifts[p.id][d]||{}).code)).length);
   const squilibrio = perGiorno.length ? Math.max(...perGiorno) - Math.min(...perGiorno) : 0;
-  // Ore: a parita' di tutto, meglio un prospetto che non fa lavorare uno il
-  // doppio dell'altro fra pari contratto.
-  const ore = attivi.map(p=> giorni.reduce((n,d)=>
-    n + ((turnoDef[(newShifts[p.id][d]||{}).code]||{}).hours || 0), 0));
-  const scartoOre = ore.length ? Math.max(...ore) - Math.min(...ore) : 0;
+  // LE ORE, E OGNUNA CONTRO IL SUO CONTRATTO.
+  //
+  // Qui prima c'era lo scarto fra chi lavora di piu' e chi di meno. E' un
+  // numero che non vuol dire niente quando i contratti sono diversi: fra un
+  // part-time da 24 ore e un full-time da 49 lo scarto e' 25 anche quando
+  // tutti e due sono perfetti, e ridurlo vuol dire spingere il full-time sotto
+  // e il part-time sopra. Peggio: con quel criterio gli scambi hanno portato
+  // tre persone a 38 ore su 49 e altre tre a 60 su 49, e chi non puo' fare
+  // turni extra si e' ritrovato undici ore oltre il contratto.
+  //
+  // Quello che conta e' la distanza di CIASCUNO dal SUO contratto. Le ore in
+  // piu' pesano il doppio di quelle in meno: le prime sono soldi che escono,
+  // le seconde sono soldi gia' spesi che si possono ancora collocare.
+  // Chi ha dichiarato di non fare turni extra non deve superare il contratto e
+  // basta: per lui lo sforamento e' una regola rotta, non una preferenza.
+  const durata = giorni.length / 7;
+  let scartoContratto = 0, oltreVietato = 0;
+  attivi.forEach(p=>{
+    const fatte = giorni.reduce((n,d)=>
+      n + ((turnoDef[(newShifts[p.id][d]||{}).code]||{}).hours || 0), 0);
+    const dovute = (parseFloat(p.hours) > 0) ? parseFloat(p.hours) * durata : null;
+    if(dovute == null) return;              // senza contratto non c'e' niente da confrontare
+    const d = fatte - dovute;
+    scartoContratto += (d > 0) ? d * 2 : -d;
+    if(d > 0 && !puoFareExtra(p)) oltreVietato += d;
+  });
 
   return {
     totale: scoperti*1000 + sovra*1000 + (extra||0)*100
-          + filaSP*12 + squilibrio*8 + scartoOre*0.2,
-    scoperti, sovra, extra: extra||0, filaSP, squilibrio, scartoOre,
+          + oltreVietato*40 + scartoContratto*6
+          + filaSP*12 + squilibrio*8,
+    scoperti, sovra, extra: extra||0, filaSP, squilibrio,
+    scartoContratto: Math.round(scartoContratto*10)/10, oltreVietato,
   };
 }
 
@@ -2486,8 +2509,29 @@ function scambiabili(a, b, cellaA, cellaB, cfg, constraints, day){
 function aggiustaProspetto(newShifts, staffList, staffingNeeds, cfg, extra, rand, passate, constraints){
   const attivi = staffList.filter(s=> s.stations && s.stations.length);
   if(attivi.length < 2) return newShifts;
-  const giorni = Object.keys(newShifts[attivi[0].id] || {});
-  if(!giorni.length) return newShifts;
+  const tutti = Object.keys(newShifts[attivi[0].id] || {});
+  if(!tutti.length) return newShifts;
+  // GLI SCAMBI NON ESCONO DALLA SETTIMANA. Le quote sono settimanali, e le ore
+  // contrattuali pure: uno scambio che pesca il compenso in un'altra settimana
+  // fa tornare il totale del mese e sballa le due settimane prese da sole.
+  // Misurato prima di questa riga: su una settimana zero persone fuori
+  // contratto, su un mese 120, fino a 19 ore di scostamento. Il difetto non si
+  // vedeva generando una settimana per volta — ed e' cosi' che mi era sfuggito.
+  const settimane = /^\d{4}-\d{2}-\d{2}$/.test(String(tutti[0]))
+    ? groupByWeek(tutti.slice().sort()) : [tutti];
+  settimane.forEach(giorni=>
+    aggiustaSettimana(newShifts, staffList, staffingNeeds, cfg, extra, rand,
+                      // Il numero di scambi e' PER SETTIMANA, non da spartire:
+                      // dividendolo, un mese ne riceveva ottanta a settimana
+                      // invece di quattrocento e le file di spezzati tornavano
+                      // (misurato: 19 persone contro 0).
+                      passate, constraints, giorni, attivi));
+  return newShifts;
+}
+
+function aggiustaSettimana(newShifts, staffList, staffingNeeds, cfg, extra, rand, passate, constraints, giorni, attivi){
+  if(giorni.length < 2) return newShifts;
+  const ore = c => ((cfg.turnoDef[(c||{}).code] || {}).hours) || 0;
   let corrente = punteggioProspetto(newShifts, staffList, staffingNeeds, cfg, extra).totale;
   for(let n=0; n<passate; n++){
     const d = giorni[Math.floor(rand()*giorni.length)];
@@ -2495,10 +2539,40 @@ function aggiustaProspetto(newShifts, staffList, staffingNeeds, cfg, extra, rand
     const b = attivi[Math.floor(rand()*attivi.length)];
     const ca = newShifts[a.id][d], cb = newShifts[b.id][d];
     if(!scambiabili(a, b, ca, cb, cfg, constraints, d)) continue;
+
+    // LO SCAMBIO A COPPIE, e serve una spiegazione perche' e' il cuore della
+    // faccenda. Rompere una fila di spezzati sposta ore fra due persone: chi
+    // cede l'accorpato perde tre ore, chi lo prende le guadagna. Un solo
+    // scambio per volta quindi non si puo' fare senza allontanare qualcuno dal
+    // suo contratto — ed e' cosi' che, prima, tre persone finivano a 38 ore su
+    // 49 e altre tre a 60.
+    // La via d'uscita e' muoverli in COPPIA: se il primo scambio sposta +3 ore
+    // da A a B, se ne cerca un secondo, FRA LE STESSE DUE PERSONE e in un altro
+    // giorno, che ne sposti -3. Applicati insieme, le ore di tutti restano
+    // esattamente dove erano e la forma della settimana cambia lo stesso.
+    const delta = ore(cb) - ore(ca);
+    let d2 = null, ca2 = null, cb2 = null;
+    if(delta !== 0){
+      const altri = shuffleArray(giorni.filter(x=> x !== d), rand);
+      for(const x of altri){
+        const pa = newShifts[a.id][x], pb = newShifts[b.id][x];
+        if(ore(pb) - ore(pa) !== -delta) continue;
+        if(!scambiabili(a, b, pa, pb, cfg, constraints, x)) continue;
+        d2 = x; ca2 = pa; cb2 = pb; break;
+      }
+      // Nessun secondo scambio che pareggia: si lascia perdere. Meglio una
+      // fila di spezzati che una busta paga sbagliata.
+      if(!d2) continue;
+    }
+
     newShifts[a.id][d] = cb; newShifts[b.id][d] = ca;
+    if(d2){ newShifts[a.id][d2] = cb2; newShifts[b.id][d2] = ca2; }
     const dopo = punteggioProspetto(newShifts, staffList, staffingNeeds, cfg, extra).totale;
     if(dopo < corrente) corrente = dopo;
-    else { newShifts[a.id][d] = ca; newShifts[b.id][d] = cb; }   // peggiora: si torna indietro
+    else {
+      newShifts[a.id][d] = ca; newShifts[b.id][d] = cb;
+      if(d2){ newShifts[a.id][d2] = ca2; newShifts[b.id][d2] = cb2; }
+    }
   }
   return newShifts;
 }
