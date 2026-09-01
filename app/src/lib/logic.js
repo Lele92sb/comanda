@@ -2392,10 +2392,11 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
   };
 
   groupByWeek(dates).forEach((settimana, i)=>{
+    const completa = settimanaNota(settimana);
     const res = computeShifts(staffList, staffingNeeds, {
       config: options.config, days: settimana, constraints: options.constraints,
       oreGiaFatte: oreFuoriPeriodo(settimana),
-      settimanaCompleta: settimanaNota(settimana),
+      settimanaCompleta: completa,
       maxExtraPerPersona: options.maxExtraPerPersona,
       stazioni: options.stazioni,
       // La fase 3 gira DENTRO ogni settimana, sul residuo di quella settimana:
@@ -2414,7 +2415,13 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
     // ognuna delle quattro settimane di un mese ne ha quattro, non uno.
     (res.quotaNonSpesa||[]).forEach(q=>{
       nonSpesaPerPersona[q.staffId] = (nonSpesaPerPersona[q.staffId]||0) + q.turni;
-      if(!motivoPerPersona[q.staffId]) motivoPerPersona[q.staffId] = q.motivo;
+      // Il motivo VERO viene prima di quello generico. Su una settimana
+      // spezzata dal bordo del periodo la quota resta in tasca non perche' il
+      // fabbisogno non la chiedeva, ma perche' quella settimana non e' finita:
+      // dirlo con la frase sbagliata manda lo chef a cercare un difetto che
+      // non c'e'. Gli e' successo, e gli e' costato tempo.
+      if(!completa) motivoPerPersona[q.staffId] = 'settimana incompleta';
+      else if(!motivoPerPersona[q.staffId]) motivoPerPersona[q.staffId] = q.motivo;
     });
     // Le eccedenze si sommano fra le settimane come la quota non spesa, per lo
     // stesso motivo: sono fatti di settimane diverse, non lo stesso fatto.

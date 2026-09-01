@@ -159,11 +159,43 @@ async function generateRandomShifts(){
     // qualcuno puo' chiudere la settimana sotto le ore contrattuali. E' un
     // numero vero — prima il pareggio si otteneva assegnando turni che non
     // coprivano nessun servizio — ma senza questa riga sembra un difetto.
-    const chi = quotaNonSpesa.map(q=> `${esc(q.staffName)} (${q.turni})`).join(', ');
-    const tot = quotaNonSpesa.reduce((n2,q)=> n2+q.turni, 0);
-    premessa += `<div class="ok-box">${tot} turn${tot>1?'i':'o'} di quota non ${tot>1?'sono stati':'e stato'} assegnat${tot>1?'i':'o'}: il fabbisogno impostato non ${tot>1?'li':'lo'} chiedeva — ${chi}. ` +
-      `Nella colonna Ore queste persone risultano sotto le ore contrattuali, ed e corretto: prima il conto tornava perche l'app assegnava turni che non coprivano nessun servizio. ` +
-      `Se devono comunque lavorare, alza il fabbisogno di quel servizio oppure assegna i turni a mano.</div>`;
+    // DUE MOTIVI DIVERSI, e confonderli costa tempo a chi legge. Il primo:
+    // il fabbisogno non chiedeva quei turni, e allora c'e' una decisione da
+    // prendere. Il secondo: la settimana e' tagliata dal bordo del periodo e
+    // non e' ancora finita, e allora non c'e' niente da fare — si assegneranno
+    // quando si genera il resto. Lo chef ha visto «43 turni non assegnati
+    // perche' non servono» su un mese e ha dovuto chiedere se erano i giorni
+    // mancanti: erano quelli, e la frase glielo nascondeva.
+    const bordo = quotaNonSpesa.filter(q=> q.motivo === 'settimana incompleta');
+    const veri  = quotaNonSpesa.filter(q=> q.motivo !== 'settimana incompleta');
+    const somma = g => g.reduce((n2,q)=> n2+q.turni, 0);
+    const elenco = g => g.map(q=> `${esc(q.staffName)} (${q.turni})`).join(', ');
+    if(bordo.length){
+      // I giorni della prima e dell'ultima settimana che restano fuori dal
+      // periodo: sono quelli che spiegano il numero.
+      const fuori = [];
+      const primo = parseISO(dates[0]), ultimo = parseISO(dates[dates.length-1]);
+      for(let k=1;k<=6;k++){
+        const d = new Date(primo); d.setDate(primo.getDate()-k);
+        if(d.getDay() === 0) break;                       // domenica: settimana finita
+        fuori.unshift(d.toLocaleDateString('it-IT',{weekday:'short', day:'numeric', month:'short'}));
+      }
+      for(let k=1;k<=6;k++){
+        const d = new Date(ultimo); d.setDate(ultimo.getDate()+k);
+        fuori.push(d.toLocaleDateString('it-IT',{weekday:'short', day:'numeric', month:'short'}));
+        if(d.getDay() === 0) break;                       // arrivati a domenica
+      }
+      const n1 = somma(bordo);
+      premessa += `<div class="ok-box">${n1} turn${n1>1?'i':'o'} appartengono a settimane che il periodo taglia a metà, e verranno assegnat${n1>1?'i':'o'} quando genererai anche i giorni che mancano` +
+        (fuori.length ? ` — ${esc(fuori.join(', '))}` : '') + `. ` +
+        `La settimana è sempre lunedì-domenica: finché non è intera le ore non si possono chiudere. Non c'è niente da sistemare.</div>`;
+    }
+    if(veri.length){
+      const n2 = somma(veri);
+      premessa += `<div class="ok-box">${n2} turn${n2>1?'i':'o'} di quota non ${n2>1?'sono stati':'è stato'} assegnat${n2>1?'i':'o'}: il fabbisogno impostato non ${n2>1?'li':'lo'} chiedeva — ${elenco(veri)}. ` +
+        `Nella colonna Ore queste persone risultano sotto le ore contrattuali, ed è corretto: prima il conto tornava perché l'app assegnava turni che non coprivano nessun servizio. ` +
+        `Se devono comunque lavorare, alza il fabbisogno di quel servizio oppure assegna i turni a mano.</div>`;
+    }
   }
   if(nRichieste){
     premessa += `<div class="ok-box">Rispettate le richieste approvate: ${nRichieste} giorni vincolati su ${nPersoneRichieste} person${nPersoneRichieste>1?'e':'a'}.</div>`;
