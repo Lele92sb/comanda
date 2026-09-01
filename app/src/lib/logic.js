@@ -1314,7 +1314,14 @@ function computeShifts(staffList, staffingNeeds, options){
         if(sv2 === sv || serveAncora(sv2, m[sv2])) return;
         const altra = (s.stations||[]).find(st2=>
           st2 !== m[sv2] && serveAncora(sv2, st2));
-        if(altra) m[sv2] = altra;
+        // Nessun'altra partita la vuole: quella meta' di giornata resta SENZA
+        // partita, non parcheggiata su una gia' piena. Parcheggiarla la faceva
+        // contare come una persona in piu' su una postazione che ne chiedeva
+        // una — i «due ai primi» — e quella capienza sprecata tornava indietro
+        // come turno extra da un'altra parte.
+        // La persona lavora lo stesso: il turno accorpato copre due servizi e
+        // lei c'e'. Semplicemente in quella meta' non presidia nessuna partita.
+        m[sv2] = altra || null;
       });
       return m;
     };
@@ -1350,7 +1357,22 @@ function computeShifts(staffList, staffingNeeds, options){
       // dove finisce la meta' di turno che qui non serve piu' dev'essere una
       // sola scritta in un posto solo.
       const m = mappaStazioni(s, voce.code, voce.sv, voce.stationId, voce.stations);
-      if(!Object.keys(m).some(sv2=> serveAncora(sv2, m[sv2]))) return;
+      // ANCHE IL SERVIZIO CHE HA FATTO SCATTARE LA VOCE puo' essere gia'
+      // coperto, e allora non si presidia due volte la stessa partita.
+      //
+      // `mappaStazioni` lo scrive sempre senza discutere, e nel giro dei
+      // candidati e' giusto: quel posto ha appena chiamato la persona, e non
+      // chiuderlo manderebbe il `while` in tondo per sempre. Qui pero' non c'e'
+      // nessun `while`: il piano e' stato deciso PRIMA, e fra allora e adesso
+      // un giorno fissato da una generazione precedente puo' aver gia' chiuso
+      // quel posto. Scrivendolo lo stesso si ottengono i «due ai primi» che lo
+      // chef ha segnalato — uno di copertura e uno del piano — e la capienza
+      // sprecata torna indietro come turno extra da un'altra parte.
+      if(!serveAncora(voce.sv, m[voce.sv])){
+        const altra = (s.stations||[]).find(st2=> st2 !== m[voce.sv] && serveAncora(voce.sv, st2));
+        m[voce.sv] = altra || null;
+      }
+      if(!Object.keys(m).some(sv2=> m[sv2] && serveAncora(sv2, m[sv2]))) return;
       pools[s.id].splice(idx, 1);
       assigned[s.id][day] = voce.code;
       stationAssign[s.id][day] = m;

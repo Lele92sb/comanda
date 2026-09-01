@@ -2708,19 +2708,19 @@ test('un giorno gia scritto non si rigenera, e la sua partita risulta coperta', 
     assert.equal(stazioneDi(r.newShifts.valerio['2026-08-31'], 'pranzo'), 'primi');
     // 2. il fabbisogno di quel giorno lo considera COPERTO: nessun turno di
     //    copertura viene aggiunto ai primi a pranzo oltre al suo.
-    //    NOTA ONESTA su cio' che questo test NON pretende: una persona con lo
-    //    spezzato assegnato ai primi per la CENA porta li' anche la meta' del
-    //    pranzo, e quella meta' puo' cadere su una partita gia' chiusa. E' un
-    //    residuo noto della stessa causa gia' corretta per il caso normale, che
-    //    riaffiora quando un giorno e' pre-fissato: si vede solo qui, e vale la
-    //    pena averlo scritto invece che scoprirlo di nuovo fra sei mesi.
-    const diCopertura = DEROMA.staff.filter(p=>{
+    //    Il residuo dichiarato in un commit precedente e' stato chiuso: il
+    //    piano della settimana viene deciso PRIMA del giro dei giorni e non
+    //    sapeva niente dei giorni fissi, quindi scriveva la sua voce anche su
+    //    un posto gia' chiuso. Nel giro dei candidati scrivere sempre il
+    //    servizio scatenante e' giusto — senza, un `while` non finirebbe — ma
+    //    nell'esecuzione del piano non c'e' nessun `while`, e li' il controllo
+    //    va fatto. Misurato: da 20 giorni su 20 con due persone ai primi, a 0.
+    const aiPrimi = DEROMA.staff.filter(p=>{
       const c = r.newShifts[p.id]['2026-08-31'];
-      return c && c.origine === 'copertura'
-             && (cfg.codeToServices[c.code]||[]).length === 1
+      return c && (cfg.codeToServices[c.code]||[]).includes('pranzo')
              && stazioneDi(c, 'pranzo') === 'primi';
     });
-    assert.equal(diCopertura.length, 1,
-      `ai primi a pranzo il 31 ago ci sono ${diCopertura.length} turni singoli di copertura`);
+    assert.equal(aiPrimi.length, 1,
+      `ai primi a pranzo il 31 ago ci sono ${aiPrimi.length} persone: ${aiPrimi.map(p=>p.name).join(', ')}`);
   }
 });
