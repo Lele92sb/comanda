@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DAYS, computeShifts, buildShiftConfig, computeShiftsForDates,
          weekDates, monthDates, groupByWeek, isoDate, startOfWeek, dayName,
-         codeAllowed, contoCapienza,
+         codeAllowed, contoCapienza, generaMigliore,
          stazioneDi, stazioniDi, normalizzaCella, assegnaStazione,
          serviziDelCodice } from '../app/src/lib/logic.js';
 // La cucina VERA dello chef, esportata dall'app: e' il banco su cui si misura
@@ -2436,4 +2436,62 @@ test('DEROMA: la meta di turno che qui non serve piu va su un ALTRA partita', ()
     'spezzati su due partite a settimana: '+media.toFixed(2)+' (erano 0,00, oggi 3,00)');
   assert.ok(Math.min(...doppi) >= 1,
     'una generazione senza nemmeno uno: allora non e il piano a produrli, e il caso');
+});
+
+
+// ----------------------------------------------------------------------------
+// LE BOZZE. L'idea e' dello chef: "se il generatore prima di compilare i turni
+// si facesse lui dei preturni mentali e poi va a modificare quelli aggiustandoli
+// secondo le regole e solo dopo li mostra?". Questi test misurano le due cose
+// che gli davano fastidio, sulla sua cucina vera.
+// ----------------------------------------------------------------------------
+
+test('DEROMA: due generazioni di fila danno due prospetti diversi', () => {
+  // Prima: 6 prospetti diversi su 20 generazioni, e i riposi cadevano sempre
+  // negli stessi giorni per le stesse persone. Parole sue: "non randomizza i
+  // turni, quindi sono sempre uguali, io invece vorrei che ogni volta che
+  // genero i turni cambiano".
+  const cfg = buildShiftConfig(DEROMA.services, DEROMA.shiftTypes);
+  const dates = weekDates(new Date(2026, 8, 7));
+  const firma = r => DEROMA.staff
+    .map(p=> Object.values(r.newShifts[p.id]).map(c=>c.code).join('')).join('|');
+  const viste = new Set();
+  for(let i=0;i<10;i++){
+    viste.add(firma(generaMigliore(DEROMA.staff, DEROMA.staffingNeeds,
+      {config:cfg, stazioni:DEROMA.stations, dates, eccedenza:{modo:'lascia'}, tentativi:5})));
+  }
+  assert.ok(viste.size >= 8, `solo ${viste.size} prospetti diversi su 10 generazioni`);
+});
+
+test('DEROMA: nessuno si becca tre spezzati di fila', () => {
+  // Prima: cinque persone su tredici, ogni volta, con la fila "SP SP SP".
+  // Parole sue: "da sempre 3 sp di seguito, e sono pesanti, puo' capitare ma
+  // non deve essere la regola". Gli spezzati restano tutti — sono nella quota
+  // e servono a coprire — ma non piu' attaccati.
+  const cfg = buildShiftConfig(DEROMA.services, DEROMA.shiftTypes);
+  const dates = weekDates(new Date(2026, 8, 7));
+  let peggiore = 0;
+  for(let i=0;i<8;i++){
+    const r = generaMigliore(DEROMA.staff, DEROMA.staffingNeeds,
+      {config:cfg, stazioni:DEROMA.stations, dates, eccedenza:{modo:'lascia'}, tentativi:20});
+    peggiore = Math.max(peggiore, r.punteggio.filaSP);
+  }
+  assert.ok(peggiore <= 1, `${peggiore} persone con tre spezzati di fila`);
+});
+
+test('DEROMA: gli scambi non pagano la varieta con la copertura', () => {
+  // Il modo piu' facile di sbagliare qui e' rendere il prospetto piu' vario
+  // scoprendo una postazione. Lo scambio avviene fra due persone NELLO STESSO
+  // GIORNO sulla stessa partita: quel giorno la partita vede esattamente gli
+  // stessi turni. La copertura non cambia per costruzione, e questo test lo
+  // pretende con i numeri gia' raggiunti prima delle bozze.
+  const cfg = buildShiftConfig(DEROMA.services, DEROMA.shiftTypes);
+  const dates = weekDates(new Date(2026, 8, 7));
+  for(let i=0;i<8;i++){
+    const r = generaMigliore(DEROMA.staff, DEROMA.staffingNeeds,
+      {config:cfg, stazioni:DEROMA.stations, dates, eccedenza:{modo:'lascia'}, tentativi:20});
+    assert.equal(r.punteggio.sovra, 0, 'sovracopertura comparsa dagli scambi');
+    assert.ok(r.punteggio.scoperti <= 2, `${r.punteggio.scoperti} posti scoperti: erano 2`);
+    assert.equal(r.punteggio.extra, 0, 'turni extra comparsi dagli scambi');
+  }
 });

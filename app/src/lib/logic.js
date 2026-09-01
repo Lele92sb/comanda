@@ -2352,6 +2352,167 @@ function computeShiftsForDates(staffList, staffingNeeds, options){
            eccedenzeCollocate };
 }
 
+// ============================================================================
+// LE BOZZE — l'idea e' dello chef: "se il generatore prima di compilare i turni
+// si facesse lui dei preturni mentali e poi va a modificare quelli aggiustandoli
+// secondo le regole e solo dopo li mostra? magari riesce a essere piu' accurato,
+// anche se invece di un nanosecondo ci impiega 5 secondi non e' un problema".
+//
+// E' esattamente la cosa giusta, e risolve tre difetti che il giro singolo non
+// sapeva risolvere:
+//   - i turni erano sempre uguali (6 prospetti diversi su 20 generazioni);
+//   - usciva sempre "SP SP SP P P R R": tre spezzati di fila a cinque persone
+//     su tredici, ogni volta, perche' a inizio settimana entrambi i servizi
+//     sono scoperti e lo spezzato ne chiude due;
+//   - i riposi cadevano sempre negli stessi giorni.
+// Nessuno di questi si vede guardando UNA giornata: si vedono solo guardando la
+// settimana finita. Ed e' per questo che il posto giusto dove correggerli e'
+// qui, dopo, e non dentro il giro dei giorni.
+//
+// Il motore non si tocca: resta quello che disegna la bozza. Qui si disegnano
+// tante bozze e si tiene la piu' bella.
+// ============================================================================
+
+// Quanto e' brutto un prospetto. Piu' basso, meglio e'. I pesi non sono
+// opinioni: separano cio' che e' SBAGLIATO da cio' che e' solo SPIACEVOLE, e
+// una scopertura non deve mai essere barattata con tre spezzati di fila.
+function punteggioProspetto(newShifts, staffList, staffingNeeds, cfg, extra){
+  const { serviceIds, codeToServices, workingCodes, turnoDef } = cfg;
+  const attivi = staffList.filter(s=> s.stations && s.stations.length);
+  const giorni = attivi.length ? Object.keys(newShifts[attivi[0].id] || {}) : [];
+  let scoperti = 0, sovra = 0;
+  giorni.forEach(d=>{
+    serviceIds.forEach(sv=>{
+      const conta = {};
+      staffList.forEach(p=>{
+        const c = newShifts[p.id] && newShifts[p.id][d]; if(!c) return;
+        if(!(codeToServices[c.code]||[]).includes(sv)) return;
+        const st = stazioneDi(c, sv); if(st) conta[st] = (conta[st]||0) + 1;
+      });
+      (staffingNeeds[sv]||[]).forEach(n=>{
+        const q = conta[n.stationId] || 0, chiede = parseInt(n.count)||0;
+        if(q < chiede) scoperti += chiede - q;
+        if(q > chiede) sovra += q - chiede;
+      });
+    });
+  });
+  // Spezzati di fila e riposi: le due cose che lo chef ha chiesto di limare.
+  let filaSP = 0;
+  attivi.forEach(p=>{
+    let cur = 0;
+    giorni.forEach(d=>{
+      const c = newShifts[p.id][d] || {};
+      const accorpato = (codeToServices[c.code]||[]).length > 1;
+      if(accorpato){ cur++; if(cur >= 3) filaSP++; } else cur = 0;
+    });
+  });
+  // Quanto sono sbilanciati i riposi fra un giorno e l'altro: sei persone a
+  // riposo un giorno e due il giorno dopo e' proprio cio' che lo chef non vuole.
+  const perGiorno = giorni.map(d=> attivi.filter(p=>
+    !workingCodes.includes((newShifts[p.id][d]||{}).code)).length);
+  const squilibrio = perGiorno.length ? Math.max(...perGiorno) - Math.min(...perGiorno) : 0;
+  // Ore: a parita' di tutto, meglio un prospetto che non fa lavorare uno il
+  // doppio dell'altro fra pari contratto.
+  const ore = attivi.map(p=> giorni.reduce((n,d)=>
+    n + ((turnoDef[(newShifts[p.id][d]||{}).code]||{}).hours || 0), 0));
+  const scartoOre = ore.length ? Math.max(...ore) - Math.min(...ore) : 0;
+
+  return {
+    totale: scoperti*1000 + sovra*1000 + (extra||0)*100
+          + filaSP*12 + squilibrio*8 + scartoOre*0.2,
+    scoperti, sovra, extra: extra||0, filaSP, squilibrio, scartoOre,
+  };
+}
+
+// LO SCAMBIO CHE NON TOCCA LA COPERTURA.
+//
+// Tre spezzati di fila non sono una scelta del motore: sono nella quota che il
+// titolare ha impostato (3 SP a testa) e servono tutti, perche' ogni partita ha
+// due persone per coprire quattordici posti. Provato: rinunciare a un accorpato
+// apre quasi sempre una scopertura, e infatti una manopola che ci provava non
+// cambiava niente nemmeno spinta a 0,8.
+//
+// Quello che si puo' cambiare e' SU QUALI GIORNI cadono. E c'e' una mossa che
+// lo fa senza rischiare niente: scambiare fra loro le celle di DUE PERSONE
+// NELLO STESSO GIORNO. Se lavorano sulla stessa partita, quel giorno la partita
+// vede esattamente gli stessi turni di prima — la copertura non cambia di una
+// virgola, per costruzione, non per fortuna. Cambia solo CHI fa cosa, e quindi
+// la forma della settimana di ciascuno.
+//
+// Cosi' si sciolgono le file di spezzati e i riposi non cadono sempre addosso
+// alle stesse persone negli stessi giorni: due generazioni danno due prospetti
+// diversi, che e' l'altra cosa chiesta.
+function scambiabili(a, b, cellaA, cellaB, cfg){
+  if(a.id === b.id) return false;
+  // Ferie, malattia e riposi concordati non si scambiano: sono accordi presi.
+  const fisso = c => !!(c && c.code && SPECIAL_CODES[c.code] && c.code !== REST_CODE);
+  if(fisso(cellaA) || fisso(cellaB)) return false;
+  // Ognuno dei due deve poter fare il turno dell'altro: le stazioni scritte
+  // nella cella devono essere fra quelle che sa fare.
+  const sa = (p, cella) => {
+    if(!cella || !cella.code) return true;
+    const st = stazioniDi(cella, cfg);
+    return st.every(x=> (p.stations||[]).includes(x));
+  };
+  return sa(a, cellaB) && sa(b, cellaA);
+}
+
+// Prova scambi a caso e tiene solo quelli che migliorano il punteggio. E' la
+// parte "poi va a modificare quelli aggiustandoli" dell'idea dello chef.
+function aggiustaProspetto(newShifts, staffList, staffingNeeds, cfg, extra, rand, passate){
+  const attivi = staffList.filter(s=> s.stations && s.stations.length);
+  if(attivi.length < 2) return newShifts;
+  const giorni = Object.keys(newShifts[attivi[0].id] || {});
+  if(!giorni.length) return newShifts;
+  let corrente = punteggioProspetto(newShifts, staffList, staffingNeeds, cfg, extra).totale;
+  for(let n=0; n<passate; n++){
+    const d = giorni[Math.floor(rand()*giorni.length)];
+    const a = attivi[Math.floor(rand()*attivi.length)];
+    const b = attivi[Math.floor(rand()*attivi.length)];
+    const ca = newShifts[a.id][d], cb = newShifts[b.id][d];
+    if(!scambiabili(a, b, ca, cb, cfg)) continue;
+    newShifts[a.id][d] = cb; newShifts[b.id][d] = ca;
+    const dopo = punteggioProspetto(newShifts, staffList, staffingNeeds, cfg, extra).totale;
+    if(dopo < corrente) corrente = dopo;
+    else { newShifts[a.id][d] = ca; newShifts[b.id][d] = cb; }   // peggiora: si torna indietro
+  }
+  return newShifts;
+}
+
+// Disegna `tentativi` bozze e restituisce la piu' bella. Il seme cambia a ogni
+// bozza E a ogni chiamata: due click sul bottone danno due prospetti diversi,
+// che e' l'altra cosa che lo chef ha chiesto ("se prima uno riposava lun e mar
+// dopo riposa gio e ven").
+function generaMigliore(staffList, staffingNeeds, options){
+  const tentativi = Math.max(1, parseInt(options.tentativi) || 1);
+  const cfg = options.config || buildShiftConfig(null, null);
+  const radice = (options.seed != null) ? semeNumerico(options.seed)
+                                        : Math.floor(Math.random() * 2147483647);
+  let migliore = null, punteggioMigliore = null, provati = [];
+  for(let i=0; i<tentativi; i++){
+    const r = computeShiftsForDates(staffList, staffingNeeds,
+      Object.assign({}, options, { seed: radice + i * 7919 }));
+    // Prima si aggiusta la bozza con gli scambi, poi la si giudica: giudicarla
+    // com'e' uscita vorrebbe dire scartare bozze che due scambi renderebbero
+    // le migliori del mazzo.
+    aggiustaProspetto(r.newShifts, staffList, staffingNeeds, cfg, r.extras.length,
+                      Math.random, options.scambi != null ? options.scambi : 400);
+    const p = punteggioProspetto(r.newShifts, staffList, staffingNeeds, cfg, r.extras.length);
+    provati.push(p.totale);
+    if(!punteggioMigliore || p.totale < punteggioMigliore.totale){
+      migliore = r; punteggioMigliore = p;
+    }
+  }
+  return Object.assign({}, migliore, {
+    punteggio: punteggioMigliore,
+    bozzeProvate: tentativi,
+    // Serve a capire se aumentare i tentativi porterebbe ancora qualcosa: se
+    // il peggio e il meglio coincidono, il motore non sta esplorando niente e
+    // il numero di bozze e' fiato sprecato.
+    punteggioPeggiore: Math.max(...provati),
+  });
+}
+
 export {
   DAYS,
   SPECIAL_CODES,
@@ -2379,4 +2540,6 @@ export {
   codeAllowed,
   puoFareExtra,
   contoCapienza,
+  punteggioProspetto,
+  generaMigliore,
 };
