@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DAYS, computeShifts, buildShiftConfig, computeShiftsForDates,
          weekDates, monthDates, groupByWeek, isoDate, startOfWeek, dayName,
-         codeAllowed, contoCapienza, generaMigliore,
+         codeAllowed, contoCapienza, generaMigliore, settimaneIntere,
          stazioneDi, stazioniDi, normalizzaCella, assegnaStazione,
          serviziDelCodice } from '../app/src/lib/logic.js';
 // La cucina VERA dello chef, esportata dall'app: e' il banco su cui si misura
@@ -2767,5 +2767,70 @@ test('DEROMA: i riposi girano su tutti i giorni, anche per chi non e scambiabile
   attivi.forEach(p=>{
     assert.ok(visti[p.id].size >= 5,
       `${p.name} riposa sempre negli stessi ${visti[p.id].size} giorni: ${[...visti[p.id]].join(', ')}`);
+  });
+});
+
+
+test('una settimana dentro un mese esce come una settimana da sola', () => {
+  // Domanda dello chef: "hai applicato le stesse logiche al settimanale cosi
+  // generano con la stessa logica e lo stesso pensiero? sono allineati?".
+  //
+  // Per struttura si', ed e' voluto: il generatore non guarda MAI se sei in
+  // vista settimana o mese. Prende i giorni del periodo, li allarga a settimane
+  // intere, e chiama il motore una volta sola con gli stessi venti tentativi e
+  // gli stessi quattrocento scambi. Su una settimana l'allargamento non allarga
+  // niente, e le due strade sono la stessa strada.
+  //
+  // Ma «per struttura» non basta: basta un ramo aggiunto per distrazione e le
+  // due viste divergono senza che nessuno se ne accorga, perche' ognuna presa
+  // da sola sembra ragionevole. Questo test misura le stesse cose alla stessa
+  // maniera nei due casi e pretende gli stessi numeri.
+  const cfg = buildShiftConfig(DEROMA.services, DEROMA.shiftTypes);
+  const attivi = DEROMA.staff.filter(p=> p.stations.length);
+  const misura = (newShifts, w) => {
+    let sovra = 0, quota = 0, fuori = 0;
+    w.forEach(d=> cfg.serviceIds.forEach(sv=>{
+      const conta = {};
+      DEROMA.staff.forEach(p=>{
+        const c = newShifts[p.id][d]; if(!c || !c.code) return;
+        if(!(cfg.codeToServices[c.code]||[]).includes(sv)) return;
+        const st = stazioneDi(c, sv); if(st) conta[st] = (conta[st]||0) + 1;
+      });
+      (DEROMA.staffingNeeds[sv]||[]).forEach(n=>{
+        const q = conta[n.stationId] || 0; if(q > n.count) sovra += q - n.count;
+      });
+    }));
+    attivi.forEach(p=>{
+      const gruppi = (p.weeklyQuota||[]).map(g=>({c:g.codes||[], r:parseInt(g.count)||0}));
+      let f = 0;
+      w.forEach(d=>{
+        const cod = newShifts[p.id][d].code; if(!cod) return;
+        const g = gruppi.find(x=> x.r>0 && x.c.length===1 && x.c[0]===cod)
+               || gruppi.find(x=> x.r>0 && x.c.includes(cod));
+        if(g) g.r--; else f++;
+      });
+      if(f) quota++;
+      if(parseFloat(p.hours) > 0){
+        const h = w.reduce((n,d)=> n + ((cfg.turnoDef[newShifts[p.id][d].code]||{}).hours||0), 0);
+        if(Math.abs(h - parseFloat(p.hours)) > 0.01) fuori++;
+      }
+    });
+    return {sovra, quota, fuori};
+  };
+
+  const sett = weekDates(new Date(2026, 8, 7));
+  for(let i=0;i<3;i++){
+    const sola = generaMigliore(DEROMA.staff, DEROMA.staffingNeeds,
+      {config:cfg, stazioni:DEROMA.stations, dates:sett, eccedenza:{modo:'auto'}, tentativi:10, scambi:300});
+    const m1 = misura(sola.newShifts, sett);
+    assert.deepEqual(m1, {sovra:0, quota:0, fuori:0}, `settimana da sola: ${JSON.stringify(m1)}`);
+  }
+  const mese = settimaneIntere(monthDates(new Date(2026, 8, 1)));
+  const nel = generaMigliore(DEROMA.staff, DEROMA.staffingNeeds,
+    {config:cfg, stazioni:DEROMA.stations, dates:mese, eccedenza:{modo:'auto'}, tentativi:10, scambi:300});
+  groupByWeek(mese).filter(w=> w.length === 7).forEach(w=>{
+    const m2 = misura(nel.newShifts, w);
+    assert.deepEqual(m2, {sovra:0, quota:0, fuori:0},
+      `settimana del ${w[0]} dentro il mese: ${JSON.stringify(m2)}`);
   });
 });
