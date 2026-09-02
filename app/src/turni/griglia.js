@@ -52,8 +52,20 @@ const SIGLA_VUOTA = '—';
 export function coloreStazione(stationId){
   const i = state.stations.findIndex(st=>st.id===stationId);
   if(i < 0) return 'var(--brass)';
+  // Il colore scelto dal titolare vince su quello calcolato: quello automatico
+  // e' un ripiego decoroso, il suo e' un'informazione — «il lavaggio e' blu» se
+  // lo dice lui vuol dire qualcosa in cucina.
+  const scelto = state.stations[i].colore;
+  if(scelto) return scelto;
   const n = Math.max(state.stations.length, 1);
   return 'hsl(' + (Math.round(i*360/n) + 24) % 360 + ' 38% 58%)';
+}
+
+/* Colore di un TIPO DI TURNO. Stessa regola: se il titolare l'ha scelto vale
+   il suo, altrimenti resta quello che il foglio di stile da' alla sigla. */
+export function coloreTurno(code){
+  const t = (state.shiftTypes||[]).find(x=> x.code === code);
+  return (t && t.colore) || null;
 }
 
 /* Chi non ha nessuna stazione assegnata. Il generatore non lo assegna mai
@@ -507,7 +519,11 @@ function cellaHtml(s, d, oggi){
     + (cella.extra ? ' · turno extra' : '');
   return `<td class="${d===oggi?'today-col':''}">
     <button type="button" class="cella-turno${cella.extra?' extra':''}" data-staff="${esc(s.id)}" data-day="${esc(d)}" title="${esc(titolo)}">
-      <span class="ct-sigla ${esc(cella.code)}">${esc(cella.code || SIGLA_VUOTA)}</span>
+      <span class="ct-sigla ${esc(cella.code)}"${(()=>{ const c = coloreTurno(cella.code);
+        // Il colore scelto si scrive in riga: le regole del foglio di stile
+        // (.ct-sigla.P, .ct-sigla.SP...) valgono solo per le sigle predefinite,
+        // e una sigla inventata dal titolare non ne avrebbe nessuna.
+        return c ? ` style="background:${esc(c)};border-color:${esc(c)};color:#1d1b18;font-weight:700;"` : ''; })()}>${esc(cella.code || SIGLA_VUOTA)}</span>
       <span class="ct-orario">${esc(orario)}</span>
       <span class="ct-stazione">${partite.map(st=>
         `<i class="ct-pallino" style="--pallino:${coloreStazione(st.id)}"></i>`).join('')}${nome

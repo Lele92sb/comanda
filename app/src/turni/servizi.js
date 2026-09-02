@@ -27,7 +27,16 @@ export function renderServices(){
         <div class="contact">${usato.length ? 'coperto dai turni: '+esc(usato.join(', ')) : '⚠ nessun turno lo copre'}</div>
       </div>
       <div class="col">
-        <button class="btn ghost small sv-up" data-i="${i}" ${i===0?'disabled':''}>▲</button>
+        <div class="row gap-3">
+          ${/* La prima riga scende soltanto, l'ultima sale soltanto, quelle in
+                mezzo fanno tutte e due. Prima c'era la sola freccia in su,
+                DISABILITATA sulla prima: con due servizi se ne vedevano due
+                identiche e nessuna che scendesse — segnalato dallo chef, che
+                aveva ragione anche sul caso a tre. */''}
+          ${state.services.length > 1 ? `
+            ${i > 0 ? `<button class="btn ghost small sv-up" data-i="${i}" title="Sposta su">▲</button>` : ''}
+            ${i < state.services.length-1 ? `<button class="btn ghost small sv-giu" data-i="${i}" title="Sposta giù">▼</button>` : ''}` : ''}
+        </div>
         <button class="btn ghost small sv-del text-alert" data-id="${esc(sv.id)}">Elimina</button>
       </div>
     </div>`;
@@ -39,11 +48,14 @@ export function renderServices(){
     if(!nome){ toast('Il servizio deve avere un nome'); renderServices(); return; }
     sv.name = nome; save('services'); afterShiftConfigChange(); toast('Servizio rinominato');
   }));
-  el.querySelectorAll('.sv-up').forEach(b=>b.addEventListener('click', ()=>{
-    const i = parseInt(b.dataset.i);
-    [state.services[i-1], state.services[i]] = [state.services[i], state.services[i-1]];
+  const scambiaServizi = (i, j)=>{
+    [state.services[i], state.services[j]] = [state.services[j], state.services[i]];
     save('services'); afterShiftConfigChange();
-  }));
+  };
+  el.querySelectorAll('.sv-up').forEach(b=>b.addEventListener('click', ()=>{
+    const i = parseInt(b.dataset.i); scambiaServizi(i, i-1); }));
+  el.querySelectorAll('.sv-giu').forEach(b=>b.addEventListener('click', ()=>{
+    const i = parseInt(b.dataset.i); scambiaServizi(i, i+1); }));
   el.querySelectorAll('.sv-del').forEach(b=>b.addEventListener('click', async ()=>{
     const sv = state.services.find(x=>x.id===b.dataset.id);
     const turni = state.shiftTypes.filter(t=>(t.services||[]).includes(sv.id));
@@ -114,6 +126,13 @@ document.getElementById('service-add-btn').addEventListener('click', ()=>{
   afterShiftConfigChange(); toast('Servizio aggiunto');
 });
 
+/* I colori che il foglio di stile da' alle sigle predefinite. Servono come
+   valore di partenza del selettore: senza, il campo si mette su nero e la prima
+   modifica salverebbe quel nero anche a chi il colore non voleva cambiarlo. */
+const COLORI_SIGLA = { P:'#b06b34', S:'#332c24', SP:'#6b8064', C:'#d38f57',
+                       R:'#2e2a25', F:'#2e2a25', M:'#2e2a25' };
+function coloreSigla(code){ return COLORI_SIGLA[code] || '#b8873f'; }
+
 export function renderShiftTypes(){
   const el = document.getElementById('shifttype-list');
   if(!state.shiftTypes.length){ el.innerHTML = `<div class="empty">Nessun tipo di turno: il generatore non ha niente da assegnare.</div>`; return; }
@@ -123,6 +142,10 @@ export function renderShiftTypes(){
         <div><label>Sigla</label><input type="text" class="st-code upper" data-id="${esc(t.id)}" value="${esc(t.code)}" maxlength="4"></div>
         <div><label>Orario</label><input type="text" class="st-label" data-id="${esc(t.id)}" value="${esc(t.label)}" placeholder="es. 9:00–17:00"></div>
         <div><label>Ore</label><input type="number" step="0.5" min="0" class="st-hours" data-id="${esc(t.id)}" value="${t.hours}"></div>
+        <div><label>Colore</label>
+          <input type="color" class="st-colore-turno" data-id="${esc(t.id)}"
+                 value="${esc(t.colore || coloreSigla(t.code))}" title="Colore della sigla nella griglia">
+        </div>
       </div>
       <label>Servizi coperti</label>
       <div class="chip-toggle st-services" data-id="${esc(t.id)}">
@@ -160,6 +183,11 @@ export function renderShiftTypes(){
   }));
   el.querySelectorAll('.st-label').forEach(inp=>inp.addEventListener('change', ()=>{
     state.shiftTypes.find(x=>x.id===inp.dataset.id).label = inp.value.trim(); salva();
+  }));
+  el.querySelectorAll('.st-colore-turno').forEach(inp=> inp.addEventListener('change', ()=>{
+    const t = state.shiftTypes.find(x=>x.id===inp.dataset.id);
+    t.colore = inp.value;
+    save('shiftTypes'); afterShiftConfigChange(); toast(`${t.code}: colore cambiato`);
   }));
   el.querySelectorAll('.st-hours').forEach(inp=>inp.addEventListener('change', ()=>{
     state.shiftTypes.find(x=>x.id===inp.dataset.id).hours = parseFloat(inp.value)||0; salva();
