@@ -72,13 +72,9 @@
     <section class="view" id="view-ricette">
       <h2 class="section-title" data-t>Ricettario</h2>
       <p class="section-sub" data-t>Ingredienti → sub-ricette → piatti, con food cost reale</p>
-      <nav class="subtabs" id="ricette-subtabs">
-        <button data-sub="ingredienti" class="active" data-t>Ingredienti</button>
-        <button data-sub="subricette" data-t>Sub-ricette</button>
-        <button data-sub="piatti" data-t>Piatti</button>
-        <button data-sub="fornitori" data-t>Fornitori</button>
-        <button data-sub="fatture" data-t>Fatture</button>
-      </nav>
+      <!-- Vuoto apposta: i pulsanti li disegna tabs.js dalla struttura NAV,
+           cosi' l'elenco delle sezioni sta in un posto solo. -->
+      <nav class="subtabs" id="ricette-subtabs"></nav>
       <input type="file" id="dish-photo-input" accept="image/*" capture="environment" class="file-hidden">
       <div id="ocr-status" class="small-note hidden" ></div>
 
@@ -137,50 +133,9 @@
       <div id="menu-list"></div>
     </section>
 
-    <section class="view" id="view-brigata">
-      <h2 class="section-title" data-t>Brigata</h2>
-      <p class="section-sub" data-t>Anagrafica dello staff di cucina</p>
-      <button class="btn full mb-4" id="btn-new-staff" data-t>+ Aggiungi persona</button>
-      <div id="staff-form-holder"></div>
-      <div id="staff-list"></div>
-    </section>
-
     <section class="view" id="view-turni">
       <h2 class="section-title" data-t>Turni</h2>
-      <p class="section-sub" data-t>Pianificazione, partite, fabbisogno e generazione automatica</p>
-      <nav class="subtabs" id="turni-subtabs">
-        <button data-sub="piano" class="active" data-t>Pianificazione</button>
-        <button data-sub="servizi" data-t>Servizi e turni</button>
-        <button data-sub="stazioni" data-t>Stazioni</button>
-        <button data-sub="fabbisogno" data-t>Fabbisogno</button>
-        <button data-sub="quote" data-t>Quote per persona</button>
-      </nav>
-
-      <div class="subview" id="turnisub-servizi">
-        <div class="panel">
-          <h3 data-t>I servizi della giornata</h3>
-          <p class="small-note mt-0"  data-t>I momenti in cui la cucina lavora. Colazione, pranzo e cena sono solo un punto di partenza: aggiungi aperitivo, brunch, lunch o quello che serve nel tuo locale.</p>
-          <div class="grid2 mb-3" >
-            <input type="text" id="service-name-input" placeholder="Nome servizio, es. Aperitivo" data-t-placeholder>
-            <button class="btn" id="service-add-btn" data-t>+ Aggiungi servizio</button>
-          </div>
-          <div id="service-list"></div>
-        </div>
-        <div class="panel hidden" id="copia-config-panel">
-          <h3 data-t>Copia da un'altra cucina</h3>
-          <p class="small-note mt-0"  data-t>Se i tuoi locali lavorano in modo simile, prendi servizi, tipi di turno e stazioni da uno già impostato invece di riscrivere tutto.</p>
-          <div class="grid2">
-            <select id="copia-da"></select>
-            <button class="btn" id="copia-btn" data-t>Copia qui</button>
-          </div>
-        </div>
-        <div class="panel">
-          <h3 data-t>I tipi di turno</h3>
-          <p class="small-note mt-0" >Ogni turno ha una sigla (quella che vedrai nella griglia), un orario, le ore che vale, e i servizi che copre. Un turno che copre <b>due servizi</b> è lo spezzato: una persona sola ne chiude due.</p>
-          <div id="shifttype-list"></div>
-          <button class="btn ghost small full mt-3" id="shifttype-add-btn" data-t>+ Aggiungi tipo di turno</button>
-        </div>
-      </div>
+      <p class="section-sub" data-t>Il prospetto della settimana, e chi lo copre</p>
 
       <div class="subview active" id="turnisub-piano">
         <div class="period-bar">
@@ -260,24 +215,8 @@
         </div>
       </div>
 
-      <div class="subview" id="turnisub-stazioni">
-        <p class="small-note mt-0"  data-t>Le partite/reparti di cucina (es. Cucina calda, Pasticceria, Plonge...).</p>
-        <div class="grid2 mb-3" >
-          <input type="text" id="station-name-input" placeholder="Nome stazione, es. Griglia" data-t-placeholder>
-          <button class="btn" id="station-add-btn" data-t>+ Aggiungi stazione</button>
-        </div>
-        <div id="station-list"></div>
-      </div>
 
-      <div class="subview" id="turnisub-fabbisogno">
-        <p class="small-note mt-0"  data-t>Per ciascun servizio (colazione, pranzo, cena), quante persone servono per ogni stazione. Con quale tipo di turno venga coperto il servizio non conta qui — lo decide il generatore in base a quanti turni di ciascun tipo deve fare ogni persona.</p>
-        <div id="needs-panel"></div>
-      </div>
 
-      <div class="subview" id="turnisub-quote">
-        <p class="small-note mt-0"  data-t>Per ogni persona: quanti turni di ciascun tipo deve fare a settimana (es. 3 Spezzato, 2 Pranzo-o-Cena, 2 Riposo). La somma dovrebbe fare 7.</p>
-        <div id="quota-panel"></div>
-      </div>
     </section>
 
     <section class="view" id="view-richieste">
@@ -350,6 +289,70 @@
       </div>
       <div class="panel"><h3 data-t>Situazione settimanale (ore effettive registrate)</h3><div id="wb-summary"></div></div>
       <div class="panel"><h3 data-t>Promemoria</h3><div class="small-note" id="wb-tips" style="font-size:12px;line-height:1.7;"></div></div>
+    </section>
+
+    <!-- IMPOSTAZIONI CUCINA. Cinque cose che si impostano una volta e poi non
+         si toccano piu': la brigata, i servizi, le partite, il fabbisogno e le
+         quote. Prima "Brigata" era una scheda principale e le altre quattro
+         stavano dentro Turni, accanto alla pianificazione — che invece e' il
+         lavoro di tutte le settimane. Mescolare quello che si fa ogni giorno
+         con quello che si decide una volta costringe a passare in mezzo alla
+         configurazione per arrivare al prospetto. -->
+    <section class="view" id="view-impostazioni">
+      <h2 class="section-title" data-t>Impostazioni cucina</h2>
+      <p class="section-sub" data-t>Brigata, servizi, partite, fabbisogno e quote</p>
+      <nav class="subtabs" id="impostazioni-subtabs"></nav>
+
+      <div class="subview active" id="impsub-brigata">
+        <p class="small-note mt-0" data-t>Anagrafica dello staff di cucina</p>
+      <h2 class="section-title" data-t>Brigata</h2>
+      <p class="section-sub" data-t>Anagrafica dello staff di cucina</p>
+      <button class="btn full mb-4" id="btn-new-staff" data-t>+ Aggiungi persona</button>
+      <div id="staff-form-holder"></div>
+      <div id="staff-list"></div>
+      </div>
+      <div class="subview" id="impsub-servizi">
+        <div class="panel">
+          <h3 data-t>I servizi della giornata</h3>
+          <p class="small-note mt-0"  data-t>I momenti in cui la cucina lavora. Colazione, pranzo e cena sono solo un punto di partenza: aggiungi aperitivo, brunch, lunch o quello che serve nel tuo locale.</p>
+          <div class="grid2 mb-3" >
+            <input type="text" id="service-name-input" placeholder="Nome servizio, es. Aperitivo" data-t-placeholder>
+            <button class="btn" id="service-add-btn" data-t>+ Aggiungi servizio</button>
+          </div>
+          <div id="service-list"></div>
+        </div>
+        <div class="panel hidden" id="copia-config-panel">
+          <h3 data-t>Copia da un'altra cucina</h3>
+          <p class="small-note mt-0"  data-t>Se i tuoi locali lavorano in modo simile, prendi servizi, tipi di turno e stazioni da uno già impostato invece di riscrivere tutto.</p>
+          <div class="grid2">
+            <select id="copia-da"></select>
+            <button class="btn" id="copia-btn" data-t>Copia qui</button>
+          </div>
+        </div>
+        <div class="panel">
+          <h3 data-t>I tipi di turno</h3>
+          <p class="small-note mt-0" >Ogni turno ha una sigla (quella che vedrai nella griglia), un orario, le ore che vale, e i servizi che copre. Un turno che copre <b>due servizi</b> è lo spezzato: una persona sola ne chiude due.</p>
+          <div id="shifttype-list"></div>
+          <button class="btn ghost small full mt-3" id="shifttype-add-btn" data-t>+ Aggiungi tipo di turno</button>
+        </div>
+      </div>
+
+      <div class="subview" id="impsub-stazioni">
+        <p class="small-note mt-0"  data-t>Le partite/reparti di cucina (es. Cucina calda, Pasticceria, Plonge...).</p>
+        <div class="grid2 mb-3" >
+          <input type="text" id="station-name-input" placeholder="Nome stazione, es. Griglia" data-t-placeholder>
+          <button class="btn" id="station-add-btn" data-t>+ Aggiungi stazione</button>
+        </div>
+        <div id="station-list"></div>
+      </div>
+      <div class="subview" id="impsub-fabbisogno">
+        <p class="small-note mt-0"  data-t>Per ciascun servizio (colazione, pranzo, cena), quante persone servono per ogni stazione. Con quale tipo di turno venga coperto il servizio non conta qui — lo decide il generatore in base a quanti turni di ciascun tipo deve fare ogni persona.</p>
+        <div id="needs-panel"></div>
+      </div>
+      <div class="subview" id="impsub-quote">
+        <p class="small-note mt-0"  data-t>Per ogni persona: quanti turni di ciascun tipo deve fare a settimana (es. 3 Spezzato, 2 Pranzo-o-Cena, 2 Riposo). La somma dovrebbe fare 7.</p>
+        <div id="quota-panel"></div>
+      </div>
     </section>
   </main>
 </div>
