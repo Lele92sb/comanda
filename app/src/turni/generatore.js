@@ -63,8 +63,37 @@ async function generateRandomShifts(){
   // approvata — con in piu' la partita, altrimenti il motore crederebbe quelle
   // postazioni scoperte e ce ne metterebbe altre sopra.
   const bordi = new Set(daSalvare.map(String));
+  const inBrigata = state.staff.filter(p=> p.stations && p.stations.length);
+  const scritto = d => inBrigata.length > 0 &&
+    inBrigata.every(p=> ((state.shifts[p.id]||{})[d]||{}).code);
+
+  // UNA SETTIMANA GIA' FATTA PER INTERO NON SI RIFA'.
+  //
+  // Il caso: hai gia' preparato la settimana del 31 agosto, poi generi il mese
+  // di settembre. Quella settimana sta a cavallo. Fissare il solo lunedi' e
+  // rigenerare gli altri sei giorni sembra la cosa giusta, e invece e' il
+  // problema: il lunedi' era stato deciso dentro un equilibrio che ora si
+  // rompe, e per rimetterlo in piedi il motore deve chiamare turni oltre quota.
+  // Misurato sulla cucina vera: 4,1 extra e 32 quote sfondate su 520, tutte in
+  // quella settimana. Sul mese generato da zero: zero e zero.
+  //
+  // Quella settimana e' gia' a posto: si lascia stare tutta, e i giorni del
+  // mese che le appartengono restano quelli. Il riepilogo lo dice.
+  const settimaneSalte = [];
+  const daGenerare = dates.filter(d=>{
+    const lun = new Date(d); lun.setDate(lun.getDate() - ((lun.getDay()+6)%7));
+    const giorniSett = [...Array(7)].map((_,i)=>{ const x=new Date(lun); x.setDate(lun.getDate()+i);
+      return x.toISOString().slice(0,10); });
+    const tocca = giorniSett.some(x=> !bordi.has(x));      // la settimana esce dal periodo?
+    if(!tocca) return true;                                 // tutta dentro: si genera
+    if(!giorniSett.every(scritto)) return true;             // non e' completa: si genera
+    const k = giorniSett[0];
+    if(!settimaneSalte.includes(k)) settimaneSalte.push(k);
+    return false;
+  });
+
   let giorniFissati = 0;
-  dates.forEach(d=>{
+  daGenerare.forEach(d=>{
     if(bordi.has(d)) return;
     state.staff.forEach(p=>{
       const cella = (state.shifts[p.id]||{})[d];
@@ -114,7 +143,7 @@ async function generateRandomShifts(){
   // Costa 104 millisecondi: lui aveva messo in conto cinque secondi.
   const { newShifts, shortfalls, extras, nonPianificabili, quotaNonSpesa,
           eccedenzeCollocate } = generaMigliore(state.staff, state.staffingNeeds,
-    {config: refreshShiftConfig(), dates, constraints, stazioni: state.stations, eccedenza,
+    {config: refreshShiftConfig(), dates: daGenerare, constraints, stazioni: state.stations, eccedenza,
      // I turni gia' salvati servono al motore per un motivo solo: se il periodo
      // taglia una settimana a meta', deve sapere quante ore quella persona ha
      // gia' fatto nei giorni che restano fuori. La settimana e' sempre
@@ -173,6 +202,10 @@ async function generateRandomShifts(){
     const nomi = nonPianificabili.map(p=> esc(p.staffName)).join(', ');
     premessa += `<div class="alert-box">Il generatore non ha dato turni a ${nomi}: ${nonPianificabili.length>1?'non hanno':'non ha'} nessuna stazione assegnata, e un turno senza stazione non copre nessun servizio — conterebbe nelle ore ma non coprirebbe niente. ` +
       `Nella griglia ${nonPianificabili.length>1?'restano visibili, marcati':'resta visibile, marcato'} con un pallino vuoto: i turni si assegnano a mano, oppure si assegnano le stazioni nella scheda della persona.</div>`;
+  }
+  if(settimaneSalte.length){
+    const q = settimaneSalte.map(k=> parseISO(k).toLocaleDateString('it-IT',{day:'numeric', month:'short'}));
+    premessa += `<div class="ok-box">${settimaneSalte.length === 1 ? 'La settimana' : 'Le settimane'} del ${esc(q.join(', '))} ${settimaneSalte.length === 1 ? 'era già completa' : 'erano già complete'} e ${settimaneSalte.length === 1 ? 'non è stata rifatta' : 'non sono state rifatte'}: sta a cavallo del periodo, e rifarne solo una parte avrebbe richiesto turni oltre quota per rimettere in piedi un equilibrio che era già a posto. Se la vuoi diversa, rigenerala dalla vista settimana.</div>`;
   }
   if(eccedenzeCollocate && eccedenzeCollocate.length){
     // Tenuta SEPARATA dai turni extra, e non e' pignoleria: un extra e' oltre
