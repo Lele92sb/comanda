@@ -290,7 +290,46 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
   font-family:var(--font-mono);font-size:var(--turni-dettaglio);
 }
 .shift-table.con-orario{--riga-orario:12px;}
-@media(max-width:560px){ .shift-table{--turni-nome:92px;} }
+/* LA SETTIMANA INTERA SU UN TELEFONO, senza scorrere in orizzontale.
+   Chiesto dal proprietario: "si riescono a leggere solo 5 giorni, la dobbiamo
+   ridimensionare in modo che si visualizzi almeno l'intera settimana".
+   Misurato prima: area utile 302px, colonna nomi 92, colonna giorno 56, colonna
+   ore 76 -> 3,8 giorni su 7.
+   Il conto che decide questi numeri, e che va rifatto se qualcuno li cambia:
+     302 (area) + 32 (margini del riquadro, tolti qui sotto) = 334
+     334 - 66 (nomi) = 268 ;  268 / 7 = 38,3  ->  colonna 38px
+   La colonna ORE esce dalla griglia perche' le stesse ore sono gia' scritte,
+   per intero e con lo scarto dal contratto, nel riquadro "Ore extra del
+   periodo" che sta sotto: era l'unica delle tre cose in cella che avesse gia'
+   un altro posto dove vivere.
+   Dalla cella escono orario e nome della partita: restano la sigla e il
+   PALLINO, che il colore lo dice meglio di sei lettere tagliate. Toccando la
+   cella si apre lo stesso dialogo di sempre, con dentro tutto. */
+@media(max-width:767px){
+  .shift-table{
+    /* 80 al nome e 36 al giorno: 80 + 7x36 = 332, dentro i 334 disponibili.
+       A 66px i nomi si riducevano a una lettera sola — e con due R in brigata
+       una lettera non dice chi e'. Due pixel per giorno pagano un nome
+       leggibile: la sigla del turno sta in 24px, il resto era aria. */
+    --turni-nome:80px;
+    --turni-col:36px;
+    --turni-ore:0px;
+    --turni-cella-h:46px;   /* resta sopra i 44px del bersaglio per il dito */
+    --turni-sigla:11px;
+  }
+  /* Colonna ore fuori: e' l'unico dato che ha gia' un altro posto dove stare. */
+  .shift-table col.c-ore,
+  .shift-table th.ore-col,
+  .shift-table td.ore-col{display:none;}
+  /* Orario e nome della partita spariscono dalla cella: a 38px non ci stanno,
+     e tagliati direbbero una cosa falsa. Il pallino resta. */
+  .shift-table .ct-orario,
+  .shift-table .ct-nome-stazione{display:none !important;}
+  .shift-table{--riga-orario:0px;}
+  /* Il riquadro non stringe piu' la griglia: 16px per lato sono mezzo giorno. */
+  #turni-panel{padding-left:0;padding-right:0;}
+}
+@media(max-width:560px){ .shift-table{--turni-nome:80px;} }
 .shift-table col.c-nome{width:var(--turni-nome);}
 .shift-table col.c-ore{width:var(--turni-ore);}
 .shift-table th,.shift-table td{border:1px solid var(--line);padding:var(--space-1);text-align:center;vertical-align:middle;}

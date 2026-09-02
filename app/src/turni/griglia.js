@@ -547,7 +547,7 @@ function orePersonaHtml(r){
   const classe = r.extra > 0 ? 'extra' : (r.under > 0 ? 'under' : '');
   const titolo = r.name + ' · ' + r.totalHours.toFixed(1) + 'h pianificate'
     + (r.contracted ? ' su ' + r.contracted.toFixed(1) + 'h contrattuali nel periodo' : '');
-  return `<td class="ore" title="${esc(titolo)}">
+  return `<td class="ore ore-col" title="${esc(titolo)}">
     <span class="ore-tot">${r.totalHours.toFixed(1)}h</span>
     <span class="ore-scarto ${classe}">${esc(scarto)}</span>
   </td>`;
@@ -572,7 +572,7 @@ function totaliHtml(dates, oggi, ore){
   const totale = ore.reduce((n,r)=> n + r.totalHours, 0);
   return `<tfoot><tr>
     <th class="name-col left">Totale</th>${celle}
-    <td class="ore"><span class="ore-tot">${totale.toFixed(1)}h</span><span class="ore-scarto">periodo</span></td>
+    <td class="ore ore-col"><span class="ore-tot">${totale.toFixed(1)}h</span><span class="ore-scarto">periodo</span></td>
   </tr></tfoot>`;
 }
 
