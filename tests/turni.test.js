@@ -665,14 +665,31 @@ test('gli extra scendono al minimo strutturale: nessun turno oltre quota sprecat
   }
 });
 
-test('gli extra non cadono più a metà settimana: la quota arriva fino in fondo', () => {
-  // PRIMA, extra medi per giorno: Ven 0,06 · Sab 1,11 · Dom 3,00.
-  // DOPO: solo l'ultimo giorno, quello in cui la quota è oggettivamente finita.
-  for(let i=0;i<200;i++){
-    const { extras } = computeShifts(BRIGATA_STRETTA, FABBISOGNO_STRETTO, {config:BASE});
-    extras.forEach(e=> assert.ok(GIORNI7.indexOf(e.day) >= 5,
-      `un turno oltre quota il ${e.day}: la quota è stata bruciata troppo presto`));
+test('gli extra restano in fondo alla settimana, dove la squadra li vede arrivare', () => {
+  // Il vuoto di domenica la brigata lo vede arrivare; quello di lunedi' le
+  // arriva addosso. PRIMA, extra medi per giorno: Ven 0,06 · Sab 1,11 · Dom 3,00.
+  //
+  // Il motore da solo NON lo garantisce piu', ed e' un cambio voluto: lo
+  // garantiva riempiendo sempre il giorno piu' vicino a pari merito, e quella
+  // regola rendeva alcune persone identiche a ogni generazione — misurato su
+  // DEROMA, Alessio riposava lunedi, martedi e mercoledi 40 volte su 40, Carlos
+  // mercoledi, giovedi e venerdi 40 su 40. Sono gli unici due con codici che
+  // nessun altro sa fare: se non varia il piano, per loro non varia niente.
+  //
+  // Adesso il giorno a pari merito e' casuale e la preferenza per il fondo
+  // settimana la fa il PUNTEGGIO: fra venti bozze ugualmente buone vince quella
+  // con gli extra piu' avanti. Il test quindi passa da `computeShifts` a
+  // `generaMigliore`, che e' anche quello che usa l'app.
+  const dates = weekDates(new Date(2026, 8, 7));
+  let precoci = 0, totali = 0;
+  for(let i=0;i<25;i++){
+    const r = generaMigliore(BRIGATA_STRETTA, FABBISOGNO_STRETTO,
+      {config:BASE, dates, eccedenza:{modo:'lascia'}, tentativi:20, scambi:200});
+    r.extras.forEach(e=>{ totali++; if(dates.indexOf(e.day) < 5) precoci++; });
   }
+  assert.ok(totali > 0, 'nessun extra generato: il test non sta provando niente');
+  assert.ok(precoci / totali <= 0.15,
+    `${precoci} extra su ${totali} caduti prima del sabato`);
 });
 
 test('gli extra si spargono sulla brigata, non si accumulano su una testa sola', () => {
@@ -2723,4 +2740,32 @@ test('un giorno gia scritto non si rigenera, e la sua partita risulta coperta', 
     assert.equal(aiPrimi.length, 1,
       `ai primi a pranzo il 31 ago ci sono ${aiPrimi.length} persone: ${aiPrimi.map(p=>p.name).join(', ')}`);
   }
+});
+
+
+test('DEROMA: i riposi girano su tutti i giorni, anche per chi non e scambiabile', () => {
+  // Segnalato dallo chef: "i riposi random sono quasi sempre gli stessi per le
+  // stesse persone". Misurato su 40 prospetti prima della correzione:
+  //   Alessio  Lun 40  Mar 40  Mer 40  e zero negli altri quattro giorni
+  //   Carlos   Mer 40  Gio 40  Ven 40  e zero negli altri
+  // Tutti e 40 identici. Sono gli unici due della brigata con codici che nessun
+  // altro sa fare — P1/S1 e P2 — quindi nessuno scambio li tocca: se non varia
+  // il piano, per loro non varia niente. E il piano, a pari merito fra due
+  // giorni equivalenti, prendeva sempre il piu' vicino.
+  const cfg = buildShiftConfig(DEROMA.services, DEROMA.shiftTypes);
+  const dates = weekDates(new Date(2026, 8, 7));
+  const attivi = DEROMA.staff.filter(p=> p.stations.length);
+  const visti = {};
+  attivi.forEach(p=> visti[p.id] = new Set());
+  for(let i=0;i<25;i++){
+    const r = generaMigliore(DEROMA.staff, DEROMA.staffingNeeds,
+      {config:cfg, stazioni:DEROMA.stations, dates, eccedenza:{modo:'auto'}, tentativi:20, scambi:400});
+    dates.forEach(d=> attivi.forEach(p=>{
+      if(!cfg.workingCodes.includes(r.newShifts[p.id][d].code)) visti[p.id].add(dayName(d));
+    }));
+  }
+  attivi.forEach(p=>{
+    assert.ok(visti[p.id].size >= 5,
+      `${p.name} riposa sempre negli stessi ${visti[p.id].size} giorni: ${[...visti[p.id]].join(', ')}`);
+  });
 });

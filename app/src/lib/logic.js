@@ -808,6 +808,12 @@ function pianificaSettimana(staffList, staffingNeeds, ctx){
 
   // La collocazione migliore di UNA persona su UNA partita, cercata su tutti i
   // suoi slot, tutti i codici ammessi e tutti i giorni del periodo.
+  // Un ordine dei giorni diverso a ogni bozza, usato SOLO come ultimo
+  // spareggio. Si calcola una volta per pianificazione: dentro la stessa bozza
+  // deve restare stabile, altrimenti due chiamate darebbero risposte diverse
+  // sullo stesso identico caso.
+  const ordineGiorni = shuffleArray(days.map((_,i)=> i), rand);
+
   const miglioreCollocazione = (p, st) => {
     let best = null;
     days.forEach((day, i)=>{
@@ -860,7 +866,24 @@ function pianificaSettimana(staffList, staffingNeeds, ctx){
             riserve,                 // prima i giorni dove questa partita ha meno riserve
             -servizi.reduce((n,sv)=> n + (bisogno[st][i][sv]||0), 0),
             slot.codes.filter(c=> WORK.includes(c)).length,  // lo slot piu' rigido
-            i,                       // e a pari merito il giorno piu' vicino
+            // A PARI MERITO, UN GIORNO A CASO — non piu' il piu' vicino.
+            //
+            // Qui c'era `i`. Tutti i criteri veri stanno sopra: questo scatta
+            // solo quando due giorni sono equivalenti sotto ogni aspetto, e
+            // prendere sempre il piu' vicino rendeva alcune persone identiche a
+            // ogni generazione. Misurato su 40 prospetti: Alessio riposava
+            // lunedi, martedi e mercoledi tutte e 40 le volte, Carlos mercoledi,
+            // giovedi e venerdi tutte e 40. Sono gli unici due con codici che
+            // nessun altro sa fare, quindi nessuno scambio li tocca: se non
+            // varia il piano, non varia niente.
+            //
+            // Un tentativo precedente di mettere il caso sui giorni era stato
+            // scartato perche' i turni oltre quota cadevano di giovedi' invece
+            // che di domenica. Quella misura pero' e' di PRIMA che esistessero
+            // le bozze: adesso se ne disegnano venti e si tiene la migliore, e
+            // un pescaggio storto viene scartato dal punteggio invece che
+            // finire sul prospetto.
+            ordineGiorni[i],
           ];
           if(!best || chiaveMinore(chiave, best.chiave)){
             best = {i, slot, code, mappa, servizi, chiave};
@@ -2599,11 +2622,27 @@ function punteggioProspetto(newShifts, staffList, staffingNeeds, cfg, extra){
     if(d > 0 && !puoFareExtra(p)) oltreVietato += d;
   });
 
+  // QUANDO cadono i turni oltre quota, non solo quanti. Il vuoto in fondo alla
+  // settimana la squadra lo vede arrivare; quello di lunedi' arriva addosso.
+  // Il motore lo garantiva riempiendo i giorni dal piu' vicino, ma quella
+  // regola rendeva alcune persone identiche a ogni generazione — Alessio
+  // riposava lunedi, martedi e mercoledi 40 volte su 40. Adesso il giorno a
+  // pari merito e' casuale, e la preferenza per il fondo settimana si ottiene
+  // qui: fra due bozze ugualmente buone vince quella che ha gli extra piu'
+  // avanti. Si paga in punteggio, non in varieta'.
+  let extraPrecoci = 0;
+  attivi.forEach(p=>{
+    giorni.forEach((d, i)=>{
+      const c = newShifts[p.id][d];
+      if(c && c.extra) extraPrecoci += (giorni.length - i);
+    });
+  });
+
   return {
     totale: scoperti*1000 + sovra*1000 + (extra||0)*100
           + oltreVietato*40 + scartoContratto*6
-          + filaSP*12 + squilibrio*8,
-    scoperti, sovra, extra: extra||0, filaSP, squilibrio,
+          + filaSP*12 + squilibrio*8 + extraPrecoci*3,
+    scoperti, sovra, extra: extra||0, filaSP, squilibrio, extraPrecoci,
     scartoContratto: Math.round(scartoContratto*10)/10, oltreVietato,
   };
 }
