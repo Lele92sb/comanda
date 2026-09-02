@@ -181,8 +181,16 @@ nav.tabs button{background:none;border:none;color:var(--brass);font-family:var(-
 nav.tabs button.active{color:var(--paper);border-bottom-color:var(--copper);}
 nav.tabs button:hover{color:var(--paper);}
 
-nav.subtabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:16px;scrollbar-width:none;}
-nav.subtabs::-webkit-scrollbar{display:none;}
+/* LE SOTTO-SCHEDE VANNO A CAPO, non scorrono.
+   Segnalato dal proprietario: "ti sei dimenticata di mettere quote persona in
+   impostazioni". Non era dimenticata — era FUORI SCHERMO. La riga misurava
+   545px dentro 335 disponibili, e le ultime due voci stavano oltre il bordo
+   destro senza nessun segno che si potesse scorrere.
+   Una riga che scorre in orizzontale nasconde delle scelte e non lo dice: chi
+   guarda vede quattro voci e conclude che le altre non esistono. Andando a capo
+   si vedono tutte, e due righe su una schermata di impostazioni costano meno di
+   una funzione che sembra non esserci. */
+nav.subtabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;}
 nav.subtabs button{background:var(--bg-elev);border:1px solid var(--line);color:var(--brass);font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.5px;text-transform:uppercase;padding:7px 12px;border-radius:20px;white-space:nowrap;}
 nav.subtabs button.active{background:var(--copper);border-color:var(--copper);color:#1d1b18;font-weight:700;}
 
