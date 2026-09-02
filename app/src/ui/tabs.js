@@ -43,23 +43,23 @@ import { renderMenuList } from '../viste/menu.js';
  * poi diverge da quella vera.
  */
 const NAV = [
-  {id:'dashboard',  label:'Dashboard',     soloChiModifica:true, render:()=>renderDashboard()},
-  {id:'ricette',    label:'Ricettario', sezioni:[
+  {id:'dashboard',  label:'Dashboard', icona:'📋',     soloChiModifica:true, render:()=>renderDashboard()},
+  {id:'ricette',    label:'Ricettario', icona:'📖', sezioni:[
     {id:'ingredienti', label:'Ingredienti', render:()=>renderIngredients()},
     {id:'subricette',  label:'Sub-ricette', render:()=>renderSubrecipes()},
     {id:'piatti',      label:'Piatti',      render:()=>renderDishes()},
     {id:'fornitori',   label:'Fornitori',   render:()=>renderSuppliers(),          soloSeVedeCosti:true},
     {id:'fatture',     label:'Fatture',     render:()=>renderStoricoImportazioni(), soloSeVedeCosti:true},
   ]},
-  {id:'menu',       label:'Menu',          soloChiModifica:true, render:()=>renderMenuList()},
-  {id:'turni',      label:'Turni',         render:()=>{ renderTurni(); renderOreExtra(); renderPubblicazione(); }},
-  {id:'richieste',  label:'Richieste',     render:()=>renderRichieste()},
-  {id:'assistente', label:'Assistente AI', soloChiModifica:true, render:()=>{ renderKB(); renderChat(); }},
-  {id:'benessere',  label:'Benessere',     soloChiModifica:true,
+  {id:'menu',       label:'Menu', icona:'🍽',          soloChiModifica:true, render:()=>renderMenuList()},
+  {id:'turni',      label:'Turni', icona:'📅',         render:()=>{ renderTurni(); renderOreExtra(); renderPubblicazione(); }},
+  {id:'richieste',  label:'Richieste', icona:'✋',     render:()=>renderRichieste()},
+  {id:'assistente', label:'Assistente AI', icona:'💬', soloChiModifica:true, render:()=>{ renderKB(); renderChat(); }},
+  {id:'benessere',  label:'Benessere', icona:'🌱',     soloChiModifica:true,
    render:()=>{ renderWbStaffOptions(); renderWbSummary(); renderWbTips(); }},
   // Ultima voce, ed e' voluto: sono le cose che si impostano una volta. Chi
   // apre l'app ogni giorno cerca i turni, non il fabbisogno.
-  {id:'impostazioni', label:'Impostazioni cucina', soloChiModifica:true, sezioni:[
+  {id:'impostazioni', label:'Impostazioni cucina', icona:'⚙', soloChiModifica:true, sezioni:[
     {id:'brigata',    label:'Brigata',           render:()=>renderStaffList()},
     {id:'servizi',    label:'Servizi e turni',   render:()=>{ renderServices(); renderShiftTypes(); renderCopiaConfig(); }},
     {id:'stazioni',   label:'Stazioni',          render:()=>renderStations()},
@@ -106,11 +106,48 @@ function montaSezioni(voce){
 // perche' `montaSezioni` deve poterlo comporre senza sapere di chi si tratta.
 NAV.forEach(v=>{ v.prefisso = v.id === 'ricette' ? 'sub-' : (v.id === 'impostazioni' ? 'impsub-' : v.id + 'sub-'); });
 
+/* Quante voci stanno in fondo allo schermo senza diventare illeggibili.
+   Cinque e' il numero che tutte le app usano, e non per moda: sotto i 64px per
+   voce la parola non si legge piu' e restano icone che nessuno sa decifrare.
+   375 / 5 = 75px. La sesta e le successive vanno dietro «Altro». */
+const VOCI_IN_BASSO = 5;
+const eTelefono = () => window.matchMedia('(max-width:767px)').matches;
+
+function chiudiAltro(){ document.querySelector('.tab-altro-sheet')?.remove(); }
+
+function apriAltro(nascoste){
+  chiudiAltro();
+  const d = document.createElement('div');
+  d.className = 'tab-altro-sheet';
+  d.innerHTML = nascoste.map(v=>
+    `<button data-tab="${v.id}"><span>${v.icona||''}</span>${esc(t(v.label))}</button>`).join('');
+  d.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{
+    chiudiAltro(); switchTab(b.dataset.tab);
+  }));
+  document.body.appendChild(d);
+  // Un tocco fuori chiude: su un telefono non c'e' il tasto Esc.
+  setTimeout(()=> document.addEventListener('click', function fuori(e){
+    if(!d.contains(e.target)){ chiudiAltro(); document.removeEventListener('click', fuori); }
+  }), 0);
+}
+
 export function initTabs(){
   const nav = document.getElementById('tabs');
   const visibili = NAV.filter(puoVedere);
-  nav.innerHTML = visibili.map(x=>`<button data-tab="${x.id}">${esc(t(x.label))}</button>`).join('');
-  nav.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>switchTab(b.dataset.tab)));
+  // In basso ci stanno le prime cinque; le altre dietro «Altro». Su schermo
+  // largo ci stanno tutte e la voce non compare.
+  const inBarra = eTelefono() && visibili.length > VOCI_IN_BASSO
+    ? visibili.slice(0, VOCI_IN_BASSO - 1) : visibili;
+  const nascoste = visibili.filter(v=> !inBarra.includes(v));
+  nav.innerHTML = inBarra.map(x=>
+      `<button data-tab="${x.id}" data-icona="${esc(x.icona||'')}">${esc(t(x.label))}</button>`).join('')
+    + (nascoste.length ? `<button data-altro data-icona="⋯">${esc(t('Altro'))}</button>` : '');
+  nav.querySelectorAll('button[data-tab]').forEach(b=> b.addEventListener('click', ()=>{
+    chiudiAltro(); switchTab(b.dataset.tab);
+  }));
+  nav.querySelector('[data-altro]')?.addEventListener('click', e=>{
+    e.stopPropagation(); apriAltro(nascoste);
+  });
   visibili.forEach(montaSezioni);
   // Chi ha solo lettura entra dai turni: e' quello che viene a guardare.
   switchTab(visibili.some(v=>v.id==='dashboard') ? 'dashboard' : 'turni');
@@ -132,3 +169,16 @@ export function switchTab(id){
     if(sz.render) sz.render();
   }
 }
+
+
+/* Girando il telefono, o passando da finestra stretta a larga, cambia quante
+   voci ci stanno: la barra si rifa'. Senza, restava quella del primo caricamento
+   — otto voci schiacciate su un telefono, o «Altro» inutile su un desktop. */
+let ultimoTelefono = eTelefono();
+window.addEventListener('resize', ()=>{
+  if(eTelefono() === ultimoTelefono) return;
+  ultimoTelefono = eTelefono();
+  const attiva = document.querySelector('nav.tabs button.active')?.dataset.tab;
+  initTabs();
+  if(attiva) switchTab(attiva);
+});

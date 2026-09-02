@@ -167,7 +167,15 @@ header.top .brand{font-family:var(--font-display);font-weight:700;font-size:26px
 header.top .brand .mark{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--copper);transform:translateY(-2px);}
 header.top .sub{font-family:var(--font-mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--brass);margin-top:4px;}
 
-nav.tabs{display:flex;gap:4px;overflow-x:auto;padding:14px 20px 0;border-bottom:1px solid var(--line);scrollbar-width:none;}
+/* LA NAVIGAZIONE E' FISSA, e in due posti diversi a seconda di chi la usa.
+   Su un telefono in basso, dove arriva il pollice, come in ogni app che la
+   brigata ha gia' sul telefono. Su un computer in alto, appiccicata: NON in una
+   colonna a sinistra, e la ragione e' misurabile — una colonna ruba larghezza, e
+   la griglia dei turni e' la vista piu' affamata di larghezza dell'app, quella
+   che stiamo cercando di far entrare in sette giorni. Il tempo si compra in
+   verticale, che ce n'e', non in orizzontale, che manca. */
+nav.tabs{display:flex;gap:4px;overflow-x:auto;padding:14px 20px 0;border-bottom:1px solid var(--line);scrollbar-width:none;
+  position:sticky;top:0;z-index:30;background:var(--bg);}
 nav.tabs::-webkit-scrollbar{display:none;}
 nav.tabs button{background:none;border:none;color:var(--brass);font-family:var(--font-mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:9px 12px 12px;white-space:nowrap;border-bottom:2px solid transparent;transition:color .15s, border-color .15s;}
 nav.tabs button.active{color:var(--paper);border-bottom-color:var(--copper);}
@@ -687,3 +695,59 @@ input[type=color]::-webkit-color-swatch-wrapper{padding:2px;}
 input[type=color]::-webkit-color-swatch{border:0; border-radius:50%;}
 input[type=color]::-moz-color-swatch{border:0; border-radius:50%;}
 .st-nome{flex:1; min-width:0;}
+
+
+/* ---------------------------------------------------------------------------
+   LA BARRA IN BASSO, SUL TELEFONO.
+   Sotto i 768px la navigazione si stacca dall'alto e si incolla in fondo. Le
+   voci diventano icona + parola, incolonnate, come nelle app che la brigata usa
+   gia': si riconoscono senza leggere.
+   Il numero di voci non e' fisso — un cuoco in sola lettura ne vede tre, un
+   titolare otto — quindi la barra le distribuisce e le eccedenti finiscono
+   dietro «Altro». Cosi' regge anche il giorno in cui saranno venti.
+   --------------------------------------------------------------------------- */
+@media(max-width:767px){
+  nav.tabs{
+    position:fixed; left:0; right:0; bottom:0; top:auto;
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+    gap:0; overflow:visible;
+    border-top:1px solid var(--line); border-bottom:0;
+    background:var(--bg-elev);
+    box-shadow:0 -6px 18px rgba(0,0,0,.35);
+  }
+  nav.tabs button{
+    flex:1 1 0; min-width:0;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:7px 2px 5px;
+    font-size:9px; letter-spacing:0.3px;
+    border-bottom:0; border-top:2px solid transparent;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  nav.tabs button::before{
+    content:attr(data-icona); font-size:17px; line-height:1;
+    font-family:'Apple Color Emoji','Segoe UI Emoji',sans-serif;
+  }
+  nav.tabs button.active{border-top-color:var(--copper); border-bottom-color:transparent;}
+  /* Lo spazio in fondo alla pagina vale quanto la barra piu' il bordo sicuro
+     dei telefoni senza tasto: senza, l'ultima riga finisce sotto la barra e
+     nessuno la vede — e' l'errore piu' comune di questa disposizione. */
+  #app{padding-bottom:calc(66px + env(safe-area-inset-bottom, 0px));}
+  /* L'intestazione col nome della cucina non serve incollata: su uno schermo
+     alto 812px ogni pixel fisso in alto e' un pixel in meno di griglia. */
+  header.top{position:static;}
+}
+
+/* Il foglio di via per «Altro»: la voce che raccoglie quelle che non entrano. */
+.tab-altro-sheet{
+  position:fixed; left:0; right:0; bottom:0; z-index:40;
+  background:var(--bg-elev); border-top:1px solid var(--line);
+  padding:12px 16px calc(78px + env(safe-area-inset-bottom, 0px));
+  box-shadow:0 -10px 30px rgba(0,0,0,.5);
+}
+.tab-altro-sheet button{
+  display:flex; align-items:center; gap:10px; width:100%;
+  background:none; border:0; color:var(--paper);
+  font-family:var(--font-mono); font-size:12px; letter-spacing:1px; text-transform:uppercase;
+  padding:13px 4px; border-bottom:1px solid var(--line);
+}
+.tab-altro-sheet button:last-child{border-bottom:0;}
