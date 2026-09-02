@@ -275,14 +275,112 @@ async function generateRandomShifts(){
   if(!extras.length && !shortfalls.length){
     html += `<div class="ok-box">✓ Fabbisogno coperto per tutti i servizi, tutti i giorni, senza bisogno di turni extra.</div>`;
   }
+  // UNA RIGA, e il resto dietro un clic.
+  //
+  // Le informazioni erano giuste ma il posto no: cinque riquadri uno sotto
+  // l'altro, e per arrivare ai turni bisognava scorrere mezza pagina. Parole
+  // dello chef: "sono molto invadenti e per vedere i turni bisogna scorrere
+  // troppo".
+  // Quello che non puo' aspettare — un buco da coprire — resta scritto anche
+  // a riepilogo chiuso: e' l'unica cosa che chiede una decisione oggi.
+  const riass = document.getElementById('generate-riassunto');
   logEl.innerHTML = html;
+  logEl.classList.add('hidden');
+  const nScoperti = shortfalls.reduce((n2,x)=> n2 + (x.missing||1), 0);
+  const voci = [];
+  if(nScoperti) voci.push(`<b class="text-alert">${nScoperti} post${nScoperti>1?'i scoperti':'o scoperto'}</b>`);
+  if(extras.length) voci.push(`${extras.length} extra`);
+  if(eccedenzeCollocate && eccedenzeCollocate.length) voci.push(`${eccedenzeCollocate.length} or${eccedenzeCollocate.length>1?'e':'a'} collocat${eccedenzeCollocate.length>1?'e':'a'}`);
+  if(nonPianificabili.length) voci.push(`${nonPianificabili.length} senza stazione`);
+  if(quotaNonSpesa && quotaNonSpesa.length) voci.push(`${quotaNonSpesa.reduce((n2,q)=>n2+q.turni,0)} turni non assegnati`);
+  const esito = voci.length
+    ? voci.join(' · ')
+    : '<b>✓ Fabbisogno coperto, senza turni extra</b>';
+  riass.classList.toggle('hidden', !html);
+  riass.innerHTML = html
+    ? `<div class="riassunto-riga">
+         <span class="wrap-anywhere">${esito}</span>
+         <button class="btn ghost small" id="btn-dettagli">${t('Dettagli')}</button>
+       </div>`
+    : '';
+  const btnDett = document.getElementById('btn-dettagli');
+  if(btnDett) btnDett.addEventListener('click', ()=>{
+    const chiuso = logEl.classList.toggle('hidden');
+    btnDett.textContent = chiuso ? t('Dettagli') : t('Nascondi');
+  });
   toast(shortfalls.length ? 'Turni generati — alcune postazioni restano scoperte, vedi dettagli' : (extras.length ? 'Turni generati — con alcuni turni extra' : 'Turni generati — fabbisogno coperto'));
 }
 document.getElementById('btn-generate-shifts').addEventListener('click', generateRandomShifts);
+
+// SVUOTA. Cancella i turni del periodo mostrato, non tutti quelli che esistono:
+// il periodo e' quello che hai davanti, ed e' l'unica cosa che ti aspetti di
+// perdere. Se qualcuno di quei giorni era pubblicato, lo si dice PRIMA: la
+// brigata li ha gia' visti e cancellarli senza avvisare e' il modo migliore per
+// far presentare qualcuno a un turno che non esiste piu'.
+document.getElementById('btn-svuota-turni').addEventListener('click', async ()=>{
+  const dates = periodDates();
+  const quanti = state.staff.reduce((n,p)=>
+    n + dates.filter(d=> ((state.shifts[p.id]||{})[d]||{}).code).length, 0);
+  if(!quanti){ toast(t("Non c'è niente da svuotare in questo periodo")); return; }
+  const pubblicate = new Set(state.publishedShifts || []);
+  const nPubb = dates.filter(d=> pubblicate.has(d)).length;
+  const ok = await conferma(
+    t('Svuotare i turni di questo periodo?'),
+    t('{n} turni verranno cancellati.', {n: quanti})
+      + (nPubb ? ' ' + (nPubb === 1
+          ? t('Uno di questi giorni è già pubblicato: la brigata lo vede adesso e dopo non lo vedrà più.')
+          : t('{g} di questi giorni sono già pubblicati: la brigata li vede adesso e dopo non li vedrà più.', {g: nPubb})) : '')
+      + ' ' + t('I turni degli altri periodi non si toccano.'),
+    {conferma: t('Svuota'), pericolo: true});
+  if(!ok) return;
+  state.staff.forEach(p=>{ dates.forEach(d=>{ if(state.shifts[p.id]) delete state.shifts[p.id][d]; }); });
+  const salvato = await save('shifts');
+  if(!salvato) return;
+  // Un giorno svuotato non resta «pubblicato»: non c'e' piu' niente da vedere,
+  // e lasciarlo segnato darebbe «Pubblicato in parte: 1 giorno su 7» su una
+  // griglia vuota. La pubblicazione segue i turni, non li precede.
+  if(nPubb){
+    const restano = new Set(state.publishedShifts || []);
+    dates.forEach(d=> restano.delete(d));
+    state.publishedShifts = [...restano].sort();
+    await save('publishedShifts');
+  }
+  document.getElementById('generate-riassunto').classList.add('hidden');
+  document.getElementById('generate-log').classList.add('hidden');
+  renderTurni(); renderOreExtra(); renderPubblicazione(); renderDashboard();
+  toast(t('Turni svuotati'));
+});
+
+// REVOCA. Toglie la pubblicazione dei giorni del periodo, e si puo' fare SEMPRE
+// — anche a periodo pubblicato solo a meta'. Prima il pulsante diventava
+// «Nascondi» unicamente quando il periodo era pubblicato per intero: con mezzo
+// periodo pubblicato per sbaglio non c'era modo di tornare indietro.
+document.getElementById('btn-revoca').addEventListener('click', async ()=>{
+  const dates = periodDates();
+  const pubblicate = new Set(state.publishedShifts || []);
+  const quanti = dates.filter(d=> pubblicate.has(d)).length;
+  if(!quanti){ toast(t("In questo periodo non c'è niente di pubblicato")); return; }
+  const ok = await conferma(
+    t('Togliere la pubblicazione?'),
+    t('{n} giorni torneranno invisibili alla brigata. I turni restano come sono: si possono ripubblicare quando vuoi.', {n: quanti}),
+    {conferma: t('Revoca')});
+  if(!ok) return;
+  dates.forEach(d=> pubblicate.delete(d));
+  state.publishedShifts = [...pubblicate].sort();
+  const salvato = await save('publishedShifts');
+  if(!salvato) return;
+  renderPubblicazione(); renderTurni();
+  toast(t('Pubblicazione revocata'));
+});
 document.querySelectorAll('#ecc-modo button').forEach(b=> b.addEventListener('click', ()=>{
   const cfg = state.eccedenzaOre || (state.eccedenzaOre = {modo:'auto', giorni:[]});
   cfg.modo = b.dataset.modo;
-  save('eccedenzaOre'); renderEccedenza();
+  save('eccedenzaOre'); document.getElementById('btn-ecc-apri').addEventListener('click', ()=>{
+  const corpo = document.getElementById('ecc-corpo');
+  const chiuso = corpo.classList.toggle('hidden');
+  document.getElementById('btn-ecc-apri').textContent = chiuso ? t('Cambia') : t('Chiudi');
+});
+renderEccedenza();
 }));
 
 /* ---- Navigazione del periodo ---- */
@@ -311,6 +409,14 @@ export function renderEccedenza(){
   document.querySelectorAll('#ecc-modo button').forEach(b=>
     b.classList.toggle('on', b.dataset.modo === cfg.modo));
   document.getElementById('ecc-giorni-wrap').classList.toggle('hidden', cfg.modo !== 'giorni');
+  // Lo stato in chiaro sulla riga chiusa: senza, il riquadro chiuso non dice
+  // cosa fara' l'app, e chiuderlo diventa nascondere invece che riassumere.
+  const stato = document.getElementById('ecc-stato');
+  if(stato) stato.textContent = cfg.modo === 'lascia' ? t('restano in tasca')
+    : cfg.modo === 'giorni'
+      ? ((cfg.giorni||[]).length ? t('sui giorni che hai scelto') + ' (' + cfg.giorni.join(', ') + ')'
+                                 : t('le scegli tu, ma non hai ancora scelto i giorni'))
+      : t('le colloca l’app');
   const box = document.getElementById('ecc-giorni');
   box.innerHTML = DAYS.map(g=>{
     const i = (cfg.giorni||[]).indexOf(g);
@@ -347,6 +453,10 @@ export function renderPubblicazione(){
   const btn = document.getElementById('btn-pubblica');
   btn.textContent = tutte ? t('Nascondi') : t('Pubblica');
   btn.classList.toggle('ghost', tutte);
+  // Revoca: compare appena c'e' anche un solo giorno pubblicato, e sparisce
+  // quando lo fa gia' il pulsante principale (a periodo intero «Nascondi» e
+  // «Revoca» sarebbero due bottoni per la stessa cosa).
+  document.getElementById('btn-revoca').classList.toggle('hidden', tutte || !quante);
 }
 
 document.getElementById('btn-pubblica').addEventListener('click', async ()=>{

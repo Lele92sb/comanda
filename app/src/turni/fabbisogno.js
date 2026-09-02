@@ -83,7 +83,11 @@ function montaBoxPiano(){
   const d = document.createElement('div');
   d.id = 'capienza-piano';
   d.className = 'capienza-box';
-  btn.before(d);
+  // Sopra la RIGA dei pulsanti, non dentro: da quando il pulsante «Svuota» gli
+  // sta accanto, `btn.before()` infilava il riquadro dentro la riga e i tre
+  // finivano affiancati — su un telefono il bottone si riduceva a 82 pixel.
+  const riga = btn.closest('.row') || btn;
+  riga.before(d);
 }
 
 /* Chi dà una mano a questa partita restando sulla propria. È la stessa
@@ -143,9 +147,22 @@ export function renderCapienza(){
   const coperti = conto.partite.reduce((n,p)=> n + p.allocata, 0);
   const mancano = conto.extraStrutturali;
   const senzaNessuno = conto.partite.filter(p=> !p.qualificati.length);
+  // IL CONTO STA CHIUSO, e la riga di sopra dice gia' la sola cosa che serve
+  // prima di premere: quanti posti servono, quanti sono coperti, quanti extra
+  // saranno inevitabili. Il dettaglio partita per partita si apre se lo chiedi.
+  // Prima questo riquadro era alto 1568 pixel su un telefono, ed era il vero
+  // motivo per cui per vedere i turni bisognava scorrere: il riepilogo dopo la
+  // generazione, che avevo gia' condensato, ne pesava 250.
+  const sintesi = `<b class="cap-cifra">${domanda}</b> servono ·
+    <b class="cap-cifra${coperti>=domanda?' ok':''}">${coperti}</b> coperti` +
+    (mancano ? ` · <b class="cap-cifra alert">${mancano}</b> extra inevitabil${mancano>1?'i':'e'}` : '');
   const html = `
     <div class="panel capienza">
-      <h3>Il conto, prima di generare</h3>
+      <div class="riassunto-riga" style="border:0;padding:0;background:none;">
+        <span class="wrap-anywhere">${sintesi}</span>
+        <button class="btn ghost small" id="btn-conto-dettagli">Il conto</button>
+      </div>
+      <div id="conto-dettagli" class="hidden mt-3">
       <p class="small-note mt-0">${esc(periodLabel())} · ${conto.giorni} giorni.
         Si contano i <b>posti</b>: una persona, su una partita, in un servizio — «due al lavaggio»
         a pranzo e a cena sono 4 posti al giorno.</p>
@@ -172,6 +189,15 @@ export function renderCapienza(){
       <p class="small-note">È un <b>minimo</b>. Il conto non sa chi sarà in ferie o quali richieste
         sono approvate: quelle tolgono capienza, non ne aggiungono. Dopo la generazione il riepilogo
         può dire più extra di così, mai meno.</p>
+      </div>
     </div>`;
-  box.forEach(b=> b.innerHTML = html);
+  box.forEach(b=>{
+    b.innerHTML = html;
+    const btn = b.querySelector('#btn-conto-dettagli');
+    const det = b.querySelector('#conto-dettagli');
+    if(btn && det) btn.addEventListener('click', ()=>{
+      const chiuso = det.classList.toggle('hidden');
+      btn.textContent = chiuso ? 'Il conto' : 'Chiudi';
+    });
+  });
 }

@@ -659,3 +659,17 @@ body.readonly main label.btn{opacity:0.45;}
   .capienza .cap-riga.intestazione .cap-chi{display:none;}
   .capienza .cap-riga.intestazione .cap-n{font-size:8.5px;}
 }
+
+/* La riga del riepilogo dopo la generazione. Sta su una riga sola e apre il
+   dettaglio solo se glielo si chiede: prima erano cinque riquadri uno sotto
+   l'altro e per arrivare ai turni bisognava scorrere mezza pagina. */
+.riassunto-riga{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  flex-wrap:wrap;
+  padding:10px 14px;
+  border:1px solid var(--line);
+  border-radius:6px;
+  background:var(--bg-elev);
+  font-size:13px;
+}
+.riassunto-riga .btn{flex-shrink:0;}
