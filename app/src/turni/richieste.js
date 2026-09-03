@@ -90,7 +90,10 @@ export async function renderRichieste(){
   if(!el) return;
   await caricaRichieste();
 
-  const sonoTitolare = !Cloud.enabled || Cloud.isOwner();
+  // Non piu' «sono il titolare» ma «posso decidere»: il permesso si puo' dare
+  // anche a un secondo, e da qui in giu' il codice non deve sapere la
+  // differenza.
+  const sonoTitolare = !Cloud.enabled || Cloud.puoDecidereRichieste();
   const mia = miaSchedaBrigata();
   // Chi non e' titolare vede solo le proprie: e' il database a non mandargli
   // le altre (policy requests_select). Questo filtro non protegge niente, evita
@@ -123,7 +126,7 @@ function collega(v){
     dopo(()=> Cloud.createRequest({
       staff_id: staffId, dal: d.dal, al: d.al, tipo: d.tipo,
       servizi: d.servizi, nota: d.nota,
-    }), Cloud.enabled && !Cloud.isOwner()
+    }), Cloud.enabled && !Cloud.puoDecidereRichieste()
         ? 'Richiesta inviata — in attesa di approvazione'
         : 'Richiesta registrata');
   });

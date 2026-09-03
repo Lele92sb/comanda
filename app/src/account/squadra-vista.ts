@@ -38,6 +38,16 @@ export interface MembroVista {
   /** È l'account con cui si sta guardando: il proprio ruolo non si cambia da qui. */
   io: boolean;
   ruolo: string;
+  /**
+   * Puo' decidere sulle richieste degli altri: vederle, approvarle,
+   * rifiutarle, registrarne per chi non ha un account.
+   *
+   * E' un permesso a parte e non un quarto ruolo: si da' a chi serve senza
+   * cambiare il significato di «puo' modificare». Al titolare non si mostra —
+   * ce l'ha sempre, e un interruttore acceso che non si puo' spegnere sarebbe
+   * solo una domanda in piu'.
+   */
+  gestisceRichieste: boolean;
 }
 
 export interface InvitoVista {
@@ -177,6 +187,12 @@ export class Squadra extends LitElement {
                               this.manda('membro-ruolo', { id: m.id, ruolo: e.detail.valore })}></cmd-scelta>`}
           </div>
         </div>
+        ${m.io || m.ruolo === 'owner' ? nothing : html`
+          <cmd-interruttore ?acceso=${m.gestisceRichieste}
+                            etichetta=${t('Può gestire le richieste')}
+                            spiega=${t('Vede le richieste di tutti, le approva o le rifiuta, e può registrarne per chi non ha un account. Non tocca i permessi né gli accessi: quelli restano tuoi.')}
+                            @cmd-interruttore=${(e: CustomEvent<{ acceso: boolean }>) =>
+                              this.manda('membro-richieste', { id: m.id, acceso: e.detail.acceso })}></cmd-interruttore>` }
         <div class="sotto">
           <input type="text" .value=${m.nome === t('Senza nome') ? '' : m.nome}
                  placeholder=${t('nome nell\'app, es. Marco secondo')}

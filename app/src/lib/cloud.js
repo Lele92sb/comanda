@@ -41,6 +41,15 @@ const Cloud = {
 
 Cloud.canWrite = function(){ return Cloud.role === 'owner' || Cloud.role === 'editor'; };
 Cloud.isOwner  = function(){ return Cloud.role === 'owner'; };
+/* Chi decide sulle richieste degli altri: il titolare, piu' chi ha il permesso.
+   Il titolare ce l'ha sempre senza che nessuno glielo accenda — e' gia' suo per
+   via del ruolo, e doverglielo dare sarebbe un modo di dimenticarselo.
+
+   Qui e' solo per NON MOSTRARE porte che dietro non hanno niente: a difendere
+   c'e' la policy `gestisce_richieste` nel database, che e' l'unica che conta. */
+Cloud.puoDecidereRichieste = function(){
+  return Cloud.role === 'owner' || Cloud.gestisceRichieste === true;
+};
 
 // --------------------------------------------------------------------------
 // Avvio: in cloud crea il client e recupera la sessione già attiva (se c'è).
@@ -93,7 +102,7 @@ Cloud.resetPassword = async function(email){
 Cloud.loadMemberships = async function(){
   const { data, error } = await Cloud.client
     .from('kitchen_members')
-    .select('role, display_name, kitchen:kitchens(id, name, status, trial_ends_at, editor_vede_costi, editor_vede_personali)')
+    .select('role, display_name, gestisce_richieste, kitchen:kitchens(id, name, status, trial_ends_at, editor_vede_costi, editor_vede_personali)')
     .eq('user_id', Cloud.user.id)
     .order('created_at', { ascending: true });
   if(error) throw error;
@@ -106,6 +115,11 @@ Cloud.selectKitchen = function(kitchenId){
   if(!m) throw new Error('Cucina non trovata tra le tue');
   Cloud.kitchen = m.kitchen;
   Cloud.role = m.role;
+  // `=== true` e non `||`: finche' la migrazione non e' applicata la colonna
+  // non c'e' e il campo arriva `undefined`. Cosi' vale «no», che e' il
+  // comportamento di prima — l'app funziona lo stesso, semplicemente il
+  // permesso non lo ha nessuno.
+  Cloud.gestisceRichieste = m.gestisce_richieste === true;
   Cloud.myDisplayName = m.display_name || null;
   Cloud.versions = {};
   try{ localStorage.setItem(LS_PREFIX+'last_kitchen', kitchenId); }catch(e){}
@@ -152,10 +166,24 @@ Cloud.setMemberName = async function(userId, nome){
   if(!data || !data.length) throw new Error('Non hai i permessi per rinominare le persone.');
 };
 
+/* Dare o togliere il permesso sulle richieste. Solo il titolare ci riesce: a
+   fermare chi non lo e' non e' questa funzione ma la policy `members_write`,
+   che chiede il ruolo di titolare per scrivere su `kitchen_members`. Qui si
+   controlla solo che la scrittura sia andata a segno — se torna zero righe,
+   RLS ha detto di no, e va detto invece di far finta di niente. */
+Cloud.setMemberGestisceRichieste = async function(userId, acceso){
+  const { data, error } = await Cloud.client.from('kitchen_members')
+    .update({ gestisce_richieste: !!acceso })
+    .eq('kitchen_id', Cloud.kitchen.id).eq('user_id', userId)
+    .select('user_id');
+  if(error) throw error;
+  if(!data || !data.length) throw new Error('Non hai i permessi per cambiare questo.');
+};
+
 Cloud.listMembers = async function(){
   const { data, error } = await Cloud.client
     .from('kitchen_members')
-    .select('user_id, role, display_name, email, created_at')
+    .select('user_id, role, display_name, email, created_at, gestisce_richieste')
     .eq('kitchen_id', Cloud.kitchen.id)
     .order('created_at', { ascending: true });
   if(error) throw error;
@@ -459,7 +487,7 @@ Cloud.createRequest = async function(req){
     servizi: req.servizi || [], nota: req.nota || null,
     // Quando è il titolare a registrare una richiesta ricevuta a voce, non ha
     // senso che debba poi approvare sé stesso.
-    stato: Cloud.isOwner() ? 'approvata' : 'in_attesa',
+    stato: Cloud.puoDecidereRichieste() ? 'approvata' : 'in_attesa',
   }).select('id');
   if(error) throw error;
   if(!data || !data.length) throw new Error('Non hai i permessi per inserire questa richiesta.');

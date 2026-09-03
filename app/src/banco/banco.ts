@@ -344,13 +344,16 @@ const CUCINE: CucinaVista[] = [
 
 const MEMBRI_SQUADRA: MembroVista[] = [
   { id: 'u0', nome: 'Emanuele', email: 'emanuele@ristorante.it', quando: 'sei tu',
-    io: true, ruolo: 'titolare' },
+    io: true, ruolo: 'owner', gestisceRichieste: true },
+  /* Il secondo: puo' modificare E decide sulle richieste. E' il caso per cui
+     il permesso esiste — in una cucina da venti persone il titolare diventava
+     un collo di bottiglia per una cosa che il suo secondo sa decidere meglio. */
   { id: 'u1', nome: 'Valerio', email: 'valerio@ristorante.it', quando: 'dal 12/03/2026',
-    io: false, ruolo: 'editor' },
+    io: false, ruolo: 'editor', gestisceRichieste: true },
   /* Chi non ha ancora scelto un nome: nell'elenco compare l'email, e il campo
      sotto e' vuoto invece di ripeterla — altrimenti sembra gia' compilato. */
   { id: 'u2', nome: 'Senza nome', email: 'nuovo@ristorante.it', quando: 'dal 30/08/2026',
-    io: false, ruolo: 'viewer' },
+    io: false, ruolo: 'viewer', gestisceRichieste: false },
 ];
 
 const INVITI: InvitoVista[] = [

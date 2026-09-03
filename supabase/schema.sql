@@ -45,6 +45,14 @@ create table if not exists public.kitchens (
 alter table public.kitchens add column if not exists editor_vede_costi     boolean not null default true;
 alter table public.kitchens add column if not exists editor_vede_personali boolean not null default false;
 
+-- Chi può gestire le richieste degli ALTRI: vederle, approvarle, rifiutarle, e
+-- registrarne per chi non ha un account. Sta sulla riga del MEMBRO e non nei
+-- dati della cucina, perché chi può modificare i dati potrebbe altrimenti
+-- scriversi il permesso da solo; `kitchen_members` la scrive solo il titolare.
+-- Non è un quarto ruolo apposta: ogni ruolo nuovo costringerebbe a rileggere
+-- le quindici funzioni che oggi confrontano `= 'owner'`.
+alter table public.kitchen_members add column if not exists gestisce_richieste boolean not null default false;
+
 create table if not exists public.kitchen_members (
   kitchen_id   uuid not null references public.kitchens(id) on delete cascade,
   user_id      uuid not null references auth.users(id) on delete cascade,
@@ -220,13 +228,31 @@ create policy user_data_all on public.user_data
   for all using (user_id = auth.uid())
   with check (user_id = auth.uid());
 
--- Richieste: ognuno vede e crea le proprie; il titolare le vede tutte e decide.
+-- Richieste: ognuno vede e crea le proprie; chi le GESTISCE le vede tutte e
+-- decide. «Chi le gestisce» è il titolare, più chiunque abbia il permesso
+-- `gestisce_richieste`: in una cucina da venti persone il titolare diventava
+-- un collo di bottiglia per una cosa che il suo secondo decide meglio di lui.
 alter table public.kitchen_requests enable row level security;
+
+-- Il titolare ce l'ha sempre, senza che nessuno glielo debba accendere.
+create or replace function public.gestisce_richieste(p_kitchen uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select coalesce(
+    (select role = 'owner' or gestisce_richieste
+       from public.kitchen_members
+      where kitchen_id = p_kitchen and user_id = auth.uid()),
+    false);
+$$;
 
 drop policy if exists requests_select on public.kitchen_requests;
 create policy requests_select on public.kitchen_requests
   for select using (
-    user_id = auth.uid() or public.my_role(kitchen_id) = 'owner'
+    user_id = auth.uid() or public.gestisce_richieste(kitchen_id)
   );
 
 -- La persona della brigata collegata a chi sta usando l'app. Il collegamento
@@ -257,22 +283,25 @@ grant execute on function public.my_staff_id(uuid) to authenticated;
 drop policy if exists requests_insert on public.kitchen_requests;
 create policy requests_insert on public.kitchen_requests
   for insert with check (
-    public.my_role(kitchen_id) = 'owner'
+    public.gestisce_richieste(kitchen_id)
     or (user_id = auth.uid() and staff_id = public.my_staff_id(kitchen_id))
   );
 
--- Approvare o rifiutare è solo del titolare: altrimenti chiunque potrebbe
--- auto-approvarsi le ferie e vincolare il generatore.
+-- Approvare o rifiutare resta la cosa più delicata dell'app: una richiesta
+-- approvata è un vincolo ASSOLUTO per il generatore, e chi se la
+-- auto-approvasse si prenderebbe le ferie da solo. Per questo non basta poter
+-- modificare i dati — ci vuole `gestisce_richieste`, e quello lo dà solo il
+-- titolare.
 drop policy if exists requests_update on public.kitchen_requests;
 create policy requests_update on public.kitchen_requests
-  for update using (public.my_role(kitchen_id) = 'owner')
-  with check (public.my_role(kitchen_id) = 'owner');
+  for update using (public.gestisce_richieste(kitchen_id))
+  with check (public.gestisce_richieste(kitchen_id));
 
 -- Ritirare una richiesta: il titolare sempre, l'interessato finché è in attesa.
 drop policy if exists requests_delete on public.kitchen_requests;
 create policy requests_delete on public.kitchen_requests
   for delete using (
-    public.my_role(kitchen_id) = 'owner'
+    public.gestisce_richieste(kitchen_id)
     or (user_id = auth.uid() and stato = 'in_attesa')
   );
 
@@ -421,6 +450,7 @@ grant execute on function public.set_my_display_name(uuid, text)           to au
 grant execute on function public.save_kitchen_data(uuid, text, jsonb, bigint) to authenticated;
 grant execute on function public.my_role(uuid)                             to authenticated;
 grant execute on function public.can_write(uuid)                           to authenticated;
+grant execute on function public.gestisce_richieste(uuid)                   to authenticated;
 
 -- ============================================================================
 -- RISERVATEZZA DEI DATI PER RUOLO

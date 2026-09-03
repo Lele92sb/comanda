@@ -312,6 +312,9 @@ async function openTeam(){
         : t('dal {quando}', { quando: dataNumerica(new Date(m.created_at)) }),
       io: m.user_id === Cloud.user.id,
       ruolo: m.user_id === Cloud.user.id ? nomeRuolo(m.role) : m.role,
+      // `=== true` e non `||`: finche' la migrazione non e' applicata la
+      // colonna non c'e' e il campo arriva `undefined`. Cosi' vale «no».
+      gestisceRichieste: m.gestisce_richieste === true,
     }));
     vistaSquadra.inviti = inviti.filter(Cloud.inviteIsPending).map(i => ({
       codice: i.code,
@@ -331,6 +334,11 @@ function collegaSquadra(v){
 
   v.addEventListener('membro-ruolo', e =>
     dopo(()=> Cloud.setMemberRole(e.detail.id, e.detail.ruolo), 'Ruolo aggiornato'));
+
+  v.addEventListener('membro-richieste', e => dopo(async ()=>{
+    await Cloud.setMemberGestisceRichieste(e.detail.id, e.detail.acceso);
+    await openTeam();
+  }, e.detail.acceso ? t('Ora può gestire le richieste') : t('Non gestisce più le richieste')));
 
   v.addEventListener('membro-nome', e => dopo(async ()=>{
     await Cloud.setMemberName(e.detail.id, e.detail.nome);
