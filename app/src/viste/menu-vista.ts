@@ -11,6 +11,7 @@
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { t } from '../core/lingua.ts';
+import { soldi } from '../core/valuta.ts';
 import '../ds/bottone.ts';
 import '../ds/campo.ts';
 import '../ds/chip.ts';
@@ -78,11 +79,11 @@ export class Menu extends LitElement {
                    categoria=${m.portate.length + ' ' + (m.portate.length === 1 ? t('portata') : t('portate'))}>
         <ul class="portate">
           ${m.portate.map(p => html`
-            <li><span>${p.nome}</span><span class="prezzo">€${p.prezzo.toFixed(2)}</span></li>`)}
+            <li><span>${p.nome}</span><span class="prezzo">${soldi(p.prezzo)}</span></li>`)}
         </ul>
         <div class="conti">
-          <span class="conto">${t('Costo totale')}<b>€ ${m.costoTotale.toFixed(2)}</b></span>
-          <span class="conto">${t('Prezzo totale')}<b>€ ${m.prezzoTotale.toFixed(2)}</b></span>
+          <span class="conto">${t('Costo totale')}<b>${soldi(m.costoTotale)}</b></span>
+          <span class="conto">${t('Prezzo totale')}<b>${soldi(m.prezzoTotale)}</b></span>
           <span class="conto ${m.foodCostMedio === null ? '' : m.fuoriLinea ? 'storto' : 'buono'}">
             ${t('Food cost medio')}<b>${m.foodCostMedio === null ? '—' : m.foodCostMedio.toFixed(1) + '%'}</b></span>
         </div>

@@ -8,6 +8,7 @@
 // sovrascrivere il prezzo dell'ingrediente sbagliato.
 // ============================================================================
 import { leggiFatturaXML, unitaDaFattura } from './leggi.ts';
+import { soldiUnitari } from '../../core/valuta.ts';
 import { èRigaDiServizio } from './servizi.ts';
 import type { DocumentoFattura, Importazione } from './tipi.ts';
 
@@ -131,9 +132,9 @@ export function applicaFatture(
         esistente.unit = unit;
         ingredientiAggiornati++;
         const variazione = prezzoPrima > 0
-          ? ` (era € ${prezzoPrima.toFixed(3)}, ${riga.prezzoUnitario > prezzoPrima ? '+' : ''}${((riga.prezzoUnitario - prezzoPrima) / prezzoPrima * 100).toFixed(0)}%)`
+          ? ` (era ${soldiUnitari(prezzoPrima)}, ${riga.prezzoUnitario > prezzoPrima ? '+' : ''}${((riga.prezzoUnitario - prezzoPrima) / prezzoPrima * 100).toFixed(0)}%)`
           : '';
-        resoconto.push(`↻ ${esistente.name} → € ${riga.prezzoUnitario.toFixed(3)}/${unit}${variazione}`);
+        resoconto.push(`↻ ${esistente.name} → ${soldiUnitari(riga.prezzoUnitario)}/${unit}${variazione}`);
       } else {
         const nuovo: Ingrediente = {
           id: nuovoId(), name: riga.descrizione, supplier: fornitore.name,
@@ -143,7 +144,7 @@ export function applicaFatture(
         creati.push(nuovo);
         traccia.creati.push(nuovo.id);
         ingredientiNuovi++;
-        resoconto.push(`+ ${riga.descrizione} (€ ${riga.prezzoUnitario.toFixed(3)}/${unit})`);
+        resoconto.push(`+ ${riga.descrizione} (${soldiUnitari(riga.prezzoUnitario)}/${unit})`);
       }
     }
 

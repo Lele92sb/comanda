@@ -16,6 +16,7 @@
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { t } from '../core/lingua.ts';
+import { simbolo, soldiUnitari } from '../core/valuta.ts';
 import '../ds/bottone.ts';
 import '../ds/campo.ts';
 import '../ds/etichetta.ts';
@@ -87,9 +88,9 @@ export class Ingredienti extends LitElement {
         ${!prezzo ? html`<cmd-etichetta slot="stato" tono="allarme">${t('prezzo mancante')}</cmd-etichetta>` : nothing}
         ${i.resaStimata ? html`<cmd-etichetta slot="stato" tono="ok">${t('resa stimata AI')}</cmd-etichetta>` : nothing}
 
-        <div class="riga">${i.fornitore || '—'} · € ${prezzo.toFixed(3)}/${i.unita} ${t('acquisto')}
+        <div class="riga">${i.fornitore || '—'} · ${soldiUnitari(prezzo)}/${i.unita} ${t('acquisto')}
           · ${t('resa')} ${i.resa}% · ${t('scarto')} ${scarto.toFixed(0)}%</div>
-        <div class="riga costo">${t('costo effettivo')}: € ${i.costoEffettivo.toFixed(3)}/${i.unita}</div>
+        <div class="riga costo">${t('costo effettivo')}: ${soldiUnitari(i.costoEffettivo)}/${i.unita}</div>
 
         ${this.soloLettura ? nothing : html`
           <cmd-bottone slot="azioni" misura="piccolo" variante="fantasma"
@@ -239,7 +240,7 @@ export class SchedaIngrediente extends LitElement {
             <cmd-scelta .opzioni=${opzioniUnita} valore=${this.bozza.unita}
                         @cmd-cambio=${(e: CustomEvent<{ valore: string }>) => this.scrivi('unita', e.detail.valore)}></cmd-scelta>
           </cmd-campo>
-          <cmd-campo etichetta=${t('Prezzo acquisto (€/unità)')} style="margin:0">
+          <cmd-campo etichetta=${t('Prezzo acquisto ({v}/unità)', { v: simbolo() })} style="margin:0">
             <input type="number" step="0.001" .value=${this.bozza.prezzo}
                    @input=${(e: Event) => this.scrivi('prezzo', (e.target as HTMLInputElement).value)}>
           </cmd-campo>
@@ -250,11 +251,11 @@ export class SchedaIngrediente extends LitElement {
         </div>
 
         <div class="conto">
-          <span class="valore">€ ${effettivo.toFixed(3)}</span>
+          <span class="valore">${soldiUnitari(effettivo)}</span>
           <span class="spiega">${t('per')} ${this.bozza.unita} ${t('nel piatto')} — ${t('scarto')} ${scarto.toFixed(0)}%.
             ${scarto > 0
-              ? t('Un {u} pagato € {p} ne rende {r} di parte edibile: quello che finisce nel piatto costa di più.',
-                  { u: this.bozza.unita, p: prezzo.toFixed(3), r: (resa / 100).toFixed(2) })
+              ? t('Un {u} pagato {p} ne rende {r} di parte edibile: quello che finisce nel piatto costa di più.',
+                  { u: this.bozza.unita, p: soldiUnitari(prezzo), r: (resa / 100).toFixed(2) })
               : t('Niente scarto: quello che paghi è quello che usi.')}</span>
         </div>
 

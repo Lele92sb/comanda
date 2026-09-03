@@ -18,6 +18,7 @@ import { renderStations } from '../turni/stazioni.js';
 import { renderBenessere } from '../viste/benessere.js';
 import { renderStaffList } from '../viste/brigata.js';
 import { renderDashboard } from '../viste/dashboard.js';
+import { renderImpostazioni } from '../viste/impostazioni.js';
 import { renderMenuList } from '../viste/menu.js';
 /* ============================= TABS ============================= */
 // Le etichette si traducono al momento di disegnarle, non qui: la lingua può
@@ -63,6 +64,7 @@ const NAV = [
   // un'etichetta tagliata si legge come un guasto, non come un'abbreviazione.
   {id:'impostazioni', label:'Impostazioni cucina', breve:'Impostazioni', icona:'⚙', soloChiModifica:true, sezioni:[
     {id:'brigata',    label:'Brigata',           render:()=>renderStaffList()},
+    {id:'generale',   label:'Generale',          render:()=>renderImpostazioni()},
     {id:'servizi',    label:'Servizi e turni',   render:()=>{ renderServices(); renderShiftTypes(); renderCopiaConfig(); }},
     {id:'stazioni',   label:'Stazioni',          render:()=>renderStations()},
     {id:'fabbisogno', label:'Fabbisogno',        render:()=>renderNeeds()},

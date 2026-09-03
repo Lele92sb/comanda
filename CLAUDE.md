@@ -9,7 +9,7 @@ del personale, assistente AI. Italiano e inglese.
 npm ci          # richiede Node >= 22.6 (i test caricano moduli .ts direttamente)
 npm run dev     # sviluppo, ricarica a caldo — le funzioni server NON girano
 npm run preview # build + wrangler: come in produzione, funzioni server comprese
-npm test        # 153 test
+npm test        # 166 test
 npm run typecheck
 npm run lint:import
 ```
@@ -157,6 +157,8 @@ Cercare una stringa dentro il pacchetto costruito **non è una prova**: nel
 pacchetto ci sono entrambe le configurazioni e una sola viene scelta. Si
 esegue il codice e si guarda cosa fa.
 
-I test coprono motore turni, fatture e ambienti. **Non coprono l'interfaccia**:
+I test coprono motore turni, fatture, valuta e ambienti. Dell'interfaccia
+coprono **il contrasto**: `banco/contrasto.ts` misura ogni testo della pagina
+nei due temi (bottone «Prova il contrasto» nel banco). Il resto no:
 le due regressioni visive di un design system sono state trovate confrontando
 schermate, non dai test.

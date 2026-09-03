@@ -13,6 +13,8 @@
 // pena: un testo scollegato si nota (torna in italiano), un codice sbagliato no.
 // ============================================================================
 
+import { impostaLingua } from './valuta.ts';
+
 export type Lingua = 'it' | 'en';
 
 export const LINGUE: { codice: Lingua; nome: string }[] = [
@@ -42,11 +44,15 @@ function linguaIniziale(): Lingua {
 }
 
 let corrente: Lingua = linguaIniziale();
+impostaLingua(corrente);
 
 export function lingua(): Lingua { return corrente; }
 
 export async function caricaLingua(l: Lingua): Promise<void> {
   corrente = l;
+  // Anche i PREZZI cambiano lingua, non solo le parole: «18,00 €» in italiano
+  // e «€18.00» in inglese sono lo stesso importo scritto come si scrive li'.
+  impostaLingua(l);
   try { localStorage.setItem(CHIAVE_SALVATAGGIO, l); } catch { /* non bloccante */ }
   if (l === 'it') return;                 // l'italiano è il testo nel codice
   if (dizionari[l]) return;               // già in memoria

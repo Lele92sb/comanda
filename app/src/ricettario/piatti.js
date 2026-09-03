@@ -1,4 +1,5 @@
 import { ALLERGENS, save, state, toast, uid } from '../core/state.js';
+import { soldi } from '../core/valuta.ts';
 import { Cloud } from '../lib/cloud.js';
 import { dishTotalCost, itemCost, itemLabel } from './costi.js';
 import { resizeImageToDataUrl } from './foto-ricetta.js';
@@ -30,19 +31,19 @@ function daDisegnare(){
                   d.prepMin ? d.prepMin + ' min' : ''].filter(Boolean).join(' · '),
       foto: d.photo || '',
       metriche: [
-        { etichetta: 'Costo materia prima', valore: '€ ' + costo.toFixed(2) },
-        { etichetta: 'Prezzo suggerito (target ' + target + '%)', valore: '€ ' + suggerito.toFixed(2) },
-        { etichetta: 'Prezzo effettivo', valore: '€ ' + prezzo.toFixed(2) },
+        { etichetta: 'Costo materia prima', valore: soldi(costo) },
+        { etichetta: 'Prezzo suggerito (target ' + target + '%)', valore: soldi(suggerito) },
+        { etichetta: 'Prezzo effettivo', valore: soldi(prezzo) },
         { etichetta: 'Food cost reale',
           valore: foodCost !== null ? foodCost.toFixed(1) + '%' : '—',
           tono: foodCost !== null && foodCost > SOGLIA_FOOD_COST ? 'storto' : 'buono' },
-        { etichetta: 'Margine effettivo', valore: '€ ' + margine.toFixed(2),
+        { etichetta: 'Margine effettivo', valore: soldi(margine),
           tono: margine < 0 ? 'storto' : 'buono' },
       ],
       allergeni: (d.allergens || []).slice(),
       voci: (d.items || []).map(it => ({
         nome: itemLabel(it),
-        quantita: it.qty + it.unit + ' · €' + itemCost(it).toFixed(2),
+        quantita: it.qty + it.unit + ' · ' + soldi(itemCost(it)),
       })),
       procedimento: d.steps || '',
       note: d.notes || '',
@@ -123,10 +124,10 @@ export function openDishForm(existing, prefill){
     const foodCost = prezzo > 0 ? (costo / prezzo * 100) : null;
     const margine = prezzo - costo;
     scheda.conto = {
-      costo: '€ ' + costo.toFixed(2),
-      suggerito: '€ ' + suggerito.toFixed(2),
+      costo: soldi(costo),
+      suggerito: soldi(suggerito),
       foodCost: foodCost !== null ? foodCost.toFixed(1) + '%' : '—',
-      margine: '€ ' + margine.toFixed(2),
+      margine: soldi(margine),
       fuoriLinea: foodCost !== null && foodCost > SOGLIA_FOOD_COST,
       margineNegativo: margine < 0,
     };

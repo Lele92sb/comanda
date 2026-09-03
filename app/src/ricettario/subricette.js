@@ -1,4 +1,5 @@
 import { save, state, toast, uid } from '../core/state.js';
+import { soldi } from '../core/valuta.ts';
 import { Cloud } from '../lib/cloud.js';
 import { itemCost, itemLabel, subrecipeCost, subrecipeRawWeightKg } from './costi.js';
 import { montaRighe } from './righe.js';
@@ -28,11 +29,11 @@ function daDisegnare(){
             + (calo !== null ? ' · calo peso ' + calo.toFixed(0) + '%' : ''),
       voci: (sub.items || []).map(it => ({
         nome: itemLabel(it),
-        quantita: it.qty + it.unit + ' · €' + itemCost(it).toFixed(2),
+        quantita: it.qty + it.unit + ' · ' + soldi(itemCost(it)),
       })),
       metriche: [
-        { etichetta: 'Costo totale', valore: '€ ' + totalCost.toFixed(2) },
-        { etichetta: 'Costo per ' + sub.yieldUnit, valore: '€ ' + costPerUnit.toFixed(2) },
+        { etichetta: 'Costo totale', valore: soldi(totalCost) },
+        { etichetta: 'Costo per ' + sub.yieldUnit, valore: soldi(costPerUnit) },
       ],
       note: sub.notes || '',
     };
@@ -90,8 +91,8 @@ export function openSubForm(existing, prefill){
     const totale = items.reduce((n, it) => n + itemCost(it), 0);
     const resa = parseFloat(scheda.resa) || 0;
     scheda.conto = {
-      totale: '€ ' + totale.toFixed(2),
-      perUnita: resa > 0 ? '€ ' + (totale / resa).toFixed(2) : '',
+      totale: soldi(totale),
+      perUnita: resa > 0 ? soldi(totale / resa) : '',
       // Il calo peso e' la ragione per cui il costo per chilo di una
       // sub-ricetta non e' il costo dei suoi componenti diviso il loro peso.
       spiega: resa > 0

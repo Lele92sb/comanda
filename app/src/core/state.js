@@ -3,14 +3,23 @@ import '../ds/bottone.ts';
 import '../ds/campo.ts';
 import '../ds/dialogo.ts';
 import { DAYS, DEFAULT_SERVICES, DEFAULT_SHIFT_TYPES, buildShiftConfig, monthDates, normalizzaCella, parseISO, weekDates } from '../lib/logic.js';
+import { VALUTA_PREDEFINITA, impostaValuta } from './valuta.ts';
 /* ============================= STATE ============================= */
-export const STORE_KEYS = ['ingredients','subrecipes','recipes','menus','staff','shifts','knowledge','chatHistory','wellbeing','suppliers','stations','staffingNeeds','services','shiftTypes','importedInvoices','invoiceHistory','publishedShifts','eccedenzaOre'];
+export const STORE_KEYS = ['ingredients','subrecipes','recipes','menus','staff','shifts','knowledge','chatHistory','wellbeing','suppliers','stations','staffingNeeds','services','shiftTypes','importedInvoices','invoiceHistory','publishedShifts','eccedenzaOre','impostazioni'];
 export let state = { ingredients:[], subrecipes:[], recipes:[], menus:[], staff:[], shifts:{}, knowledge:[], chatHistory:[], wellbeing:[], suppliers:[], stations:[], staffingNeeds:{}, services:[], shiftTypes:[], importedInvoices:[], invoiceHistory:[], publishedShifts:[],
   // Dove finiscono le ore di contratto che il fabbisogno non chiede.
   // 'auto' e' il comportamento chiesto dallo chef: le colloca dove il servizio
   // preme di piu'. 'giorni' le concentra sui giorni che sceglie lui, in ordine
   // di preferenza. 'lascia' le lascia in tasca (era il comportamento di prima).
-  eccedenzaOre: { modo:'auto', giorni:[] } };
+  eccedenzaOre: { modo:'auto', giorni:[] },
+  // Le impostazioni della CUCINA — non della persona e non del dispositivo.
+  // La valuta sta qui perche' un ristorante ne ha una sola, e chi entra nella
+  // stessa cucina deve vedere gli stessi prezzi: tenerla nel browser
+  // significherebbe che il titolare li legge in euro e il suo secondo in
+  // dollari, sugli stessi numeri.
+  // (Il tema e la lingua fanno l'opposto e stanno nel dispositivo: quelli
+  // dipendono da DOVE stai guardando, non da che cucina e'.)
+  impostazioni: { valuta: VALUTA_PREDEFINITA } };
 
 export const ALLERGENS = ["Glutine","Crostacei","Uova","Pesce","Arachidi","Soia","Latte","Frutta a guscio","Sedano","Senape","Sesamo","Solfiti","Lupini","Molluschi"];
 // Periodo mostrato nella pianificazione: una settimana o un mese, ancorato a una
@@ -71,6 +80,14 @@ export function uid(){ return Date.now().toString(36)+Math.random().toString(36)
 export async function loadAll(){
   for(const k of STORE_KEYS){ const v = await storageGet(k); if(v !== null) state[k] = v; }
   migrateData();
+  applicaImpostazioni();
+}
+
+/* Porta nei moduli che le usano le impostazioni appena lette. La valuta e' la
+   prima: `core/valuta.ts` non se la va a prendere da solo apposta — cosi' non
+   dipende da `state` e si puo' provare dentro Node, senza browser. */
+export function applicaImpostazioni(){
+  impostaValuta(state.impostazioni?.valuta);
 }
 export async function save(key){
   const ok = await storageSet(key, state[key]);

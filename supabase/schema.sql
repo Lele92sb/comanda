@@ -460,7 +460,11 @@ as $$
     when p_ruolo = 'viewer' then p_key in (
       -- Quello che serve a un cuoco: sapere quando lavora e come si fa un piatto.
       'shifts', 'staff', 'stations', 'services', 'shiftTypes', 'staffingNeeds',
-      'recipes', 'subrecipes', 'ingredients', 'menus', 'publishedShifts'
+      'recipes', 'subrecipes', 'ingredients', 'menus', 'publishedShifts',
+      -- La valuta della cucina. Non e' un dato riservato — e' il SEGNO con cui
+      -- si scrivono i prezzi — e senza, chi ha solo lettura vedrebbe i prezzi
+      -- del menu in euro anche in una cucina che lavora in sterline.
+      'impostazioni'
     )
 
     else false

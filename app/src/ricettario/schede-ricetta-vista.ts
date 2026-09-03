@@ -19,6 +19,7 @@
 // ============================================================================
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { t } from '../core/lingua.ts';
+import { simbolo, soldi } from '../core/valuta.ts';
 import '../ds/avviso.ts';
 import '../ds/bottone.ts';
 import '../ds/campo.ts';
@@ -27,9 +28,9 @@ import '../ds/scelta.ts';
 import type { Opzione } from '../ds/scelta.ts';
 
 export interface ContoRicetta {
-  /** «€ 8.70», già scritto. */
+  /** «8,70 €», già scritto da chi passa i dati. */
   totale: string;
-  /** «€ 4.35 per kg», o '' se la resa non è ancora indicata. */
+  /** «4,35 € per kg», o '' se la resa non è ancora indicata. */
   perUnita: string;
   /** Una frase che spiega, o ''. */
   spiega: string;
@@ -121,7 +122,7 @@ export class SchedaSub extends LitElement {
     this.unita = 'kg';
     this.note = '';
     this.unitaPossibili = ['kg', 'l', 'pz'];
-    this.conto = { totale: '€ 0.00', perUnita: '', spiega: '' };
+    this.conto = { totale: soldi(0), perUnita: '', spiega: '' };
     this.daFoto = false;
     this.nuova = true;
     this.errore = '';
@@ -229,7 +230,7 @@ export class SchedaPiatto extends LitElement {
     this.campi = { nome: '', categoria: '', porzione: '', minuti: '', target: '30', prezzo: '', procedimento: '', note: '' };
     this.allergeniPossibili = [];
     this.allergeni = [];
-    this.conto = { costo: '€ 0.00', suggerito: '€ 0.00', foodCost: '—', margine: '€ 0.00',
+    this.conto = { costo: soldi(0), suggerito: soldi(0), foodCost: '—', margine: soldi(0),
                    fuoriLinea: false, margineNegativo: false };
     this.foto = '';
     this.daFoto = false;
@@ -291,7 +292,7 @@ export class SchedaPiatto extends LitElement {
         <div class="due" style="margin-top:var(--space-3)">
           ${this.campo('target', t('Food cost obiettivo (%)'), 'number',
                        t('Da qui esce il prezzo suggerito.'))}
-          ${this.campo('prezzo', t('Prezzo di vendita (€)'), 'number',
+          ${this.campo('prezzo', t('Prezzo di vendita ({v})', { v: simbolo() }), 'number',
                        t('Quello vero, in carta.'))}
         </div>
 

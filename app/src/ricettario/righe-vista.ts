@@ -26,6 +26,7 @@
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { t } from '../core/lingua.ts';
+import { simbolo, soldiUnitari } from '../core/valuta.ts';
 import '../ds/bottone.ts';
 import '../ds/scelta.ts';
 import type { Opzione } from '../ds/scelta.ts';
@@ -164,12 +165,12 @@ export class RigheRicetta extends LitElement {
 
         ${r.tipo === 'custom'
           ? html`<input class="numero costo-libero" type="number" step="0.01" value=${r.costoUnitario}
-                        placeholder="€/unità" aria-label=${t('Prezzo per unità')}
+                        placeholder=${simbolo() + '/' + t('unità')} aria-label=${t('Prezzo per unità')}
                         style="grid-column:1/-1"
                         ?disabled=${this.soloLettura}
                         @input=${(e: Event) => this.cambia(i, 'costoUnitario', (e.target as HTMLInputElement).value)}>`
           : html`<div class="costo ${r.refId ? '' : 'manca'}">${r.refId
-              ? t('costo riga') + ': € ' + r.costoRiga.toFixed(3)
+              ? t('costo riga') + ': ' + soldiUnitari(r.costoRiga)
               : '⚠ ' + t('scegli una voce, altrimenti questa riga non conta niente')}</div>`}
       </div>`;
   }
