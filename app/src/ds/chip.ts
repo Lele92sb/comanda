@@ -38,7 +38,7 @@ export class Chip extends Elemento {
       display:inline-flex;align-items:center;gap:6px;
       min-height:32px;padding:6px 11px;
       background:transparent;border:1px solid var(--line-strong);border-radius:var(--radius-pill);
-      color:var(--paper);font-family:var(--font-mono);font-size:var(--text-xs);
+      color:var(--paper);font-family:var(--font-body);font-weight:600;font-size:var(--text-sm);
       line-height:1.2;cursor:pointer;
       transition:background-color var(--tempo-istante) var(--curva),
                  border-color var(--tempo-istante) var(--curva),

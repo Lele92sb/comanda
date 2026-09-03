@@ -225,14 +225,14 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .period-nav{display:flex;align-items:center;gap:6px;}
 .period-nav button{background:transparent;border:1px solid var(--line-strong);color:var(--paper);font-family:var(--font-body);font-size:var(--text-sm);padding:5px 10px;border-radius:5px;}
 .period-nav button:hover{border-color:var(--copper);}
-#period-label{font-family:var(--font-mono);font-size:var(--text-sm);color:var(--copper-light);min-width:150px;text-align:center;text-transform:capitalize;}
+#period-label{font-family:var(--font-body);font-weight:600;font-size:var(--text-md);color:var(--copper-light);min-width:150px;text-align:center;text-transform:capitalize;}
 
 /* Qui stavano la CONVERSAZIONE e le voci della BASE DI CONOSCENZA: 13 righe,
    andate dentro <cmd-chat> e <cmd-conoscenza>. */
 
-.empty{font-family:var(--font-mono);font-size:var(--text-sm);color:var(--brass);border:1px dashed var(--line-strong);border-radius:6px;padding:18px;text-align:center;}
+.empty{font-family:var(--font-body);font-size:var(--text-md);color:var(--brass);border:1px dashed var(--line-strong);border-radius:6px;padding:18px;text-align:center;}
 
-.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--paper);color:var(--ink);padding:9px 16px;border-radius:20px;font-family:var(--font-mono);font-size:var(--text-sm);box-shadow:0 6px 20px rgba(0,0,0,0.4);opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;z-index:100;}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--paper);color:var(--ink);padding:9px 16px;border-radius:20px;font-family:var(--font-body);font-weight:600;font-size:var(--text-md);box-shadow:0 6px 20px rgba(0,0,0,0.4);opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;z-index:100;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
 
 .small-note{font-family:var(--font-body);font-size:10.5px;color:var(--brass);margin-top:6px;line-height:1.6;}
@@ -254,7 +254,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .overlay .logo .mark{width:10px;height:10px;border-radius:50%;background:var(--copper);display:inline-block;transform:translateY(-3px);}
 .overlay .lead{font-family:var(--font-body);font-weight:600;font-size:var(--text-sm);color:var(--brass);margin:0 0 24px;}
 .gate-error{background:var(--alert-soft);border:1px solid var(--alert-linea);border-radius:6px;padding:10px 12px;font-size:var(--text-sm);margin-bottom:12px;}
-.gate-switch{background:none;border:none;color:var(--copper-light);font-family:var(--font-mono);font-size:var(--text-sm);text-decoration:underline;padding:6px 0;}
+.gate-switch{background:none;border:none;color:var(--copper-light);font-family:var(--font-body);font-weight:600;font-size:var(--text-md);text-decoration:underline;padding:6px 0;}
 
 #account-bar{display:none;justify-content:space-between;align-items:center;gap:var(--space-3);margin-top:var(--space-2);flex-wrap:wrap;}
 #account-bar .who{font-family:var(--font-body);font-size:var(--text-xs);color:var(--brass);display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;min-width:0;}

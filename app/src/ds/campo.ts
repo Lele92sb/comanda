@@ -75,6 +75,13 @@ export class Campo extends Elemento {
        cancellare, e i campi avranno UN aspetto solo invece di due che si
        somigliano finche' qualcuno non ne tocca uno. */
     ::slotted(input),::slotted(textarea),::slotted(select){
+      /* box-sizing VA DETTO QUI. Con width:100% piu' 20px di padding e 2 di
+         bordo, un campo sborda di 22px dal proprio contenitore a meno che la
+         pagina non abbia il reset globale. L'app ce l'ha e copriva il difetto;
+         il banco carica solo i token, apposta, ed e' li' che si e' visto.
+         Un componente che ha bisogno del foglio di stile della pagina per
+         stare dentro i suoi bordi non e' un componente. */
+      box-sizing:border-box;
       width:100%;
       background:var(--bg-elev2);
       border:1px solid var(--line-strong);
@@ -96,7 +103,7 @@ export class Campo extends Elemento {
     :host([errore]) ::slotted(select){border-color:var(--alert);}
 
     .aiuto,.errore{
-      margin:var(--space-1) 0 0;font-family:var(--font-mono);font-size:var(--text-xs);
+      margin:var(--space-1) 0 0;font-family:var(--font-body);font-size:var(--text-sm);
       line-height:1.6;
     }
     .aiuto{color:var(--brass);}

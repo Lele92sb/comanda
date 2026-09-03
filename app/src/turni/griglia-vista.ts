@@ -264,11 +264,11 @@ export class GrigliaTurni extends LitElement {
     .shift-nav{display:flex;align-items:center;justify-content:center;
       gap:var(--space-2);margin-bottom:var(--space-2);}
     .shift-nav button{background:transparent;border:1px solid var(--line-strong);color:var(--paper);
-      font-family:var(--font-mono);font-size:13px;line-height:1;padding:8px 14px;
+      font-family:var(--font-body);font-weight:600;font-size:var(--text-sm);line-height:1;padding:8px 14px;
       border-radius:var(--radius-sm);cursor:pointer;}
     .shift-nav button:hover:not(:disabled){border-color:var(--copper);}
     .shift-nav button:disabled{opacity:0.35;cursor:default;}
-    .shift-nav .shift-nav-label{font-family:var(--font-mono);font-size:var(--text-xs);
+    .shift-nav .shift-nav-label{font-family:var(--font-body);font-weight:600;font-size:var(--text-sm);
       color:var(--copper-light);min-width:130px;text-align:center;}
 
     /* --- Colonna delle ore e riga dei totali ------------------------------

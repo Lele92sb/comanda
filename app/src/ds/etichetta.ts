@@ -33,7 +33,7 @@ export class Etichetta extends Elemento {
     :host{display:inline-flex;vertical-align:middle;}
     span{
       display:inline-block;
-      font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:0.3px;line-height:1.5;
+      font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);line-height:1.5;
       padding:3px 7px;border-radius:var(--radius-pill);
       background:var(--film);color:var(--paper-dim);
     }

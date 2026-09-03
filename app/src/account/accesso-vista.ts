@@ -68,7 +68,7 @@ export class Accesso extends LitElement {
     .altro{text-align:center;margin-top:var(--space-3);}
     .collegamento{
       background:none;border:none;color:var(--copper-light);
-      font-family:var(--font-mono);font-size:var(--text-sm);text-decoration:underline;
+      font-family:var(--font-body);font-weight:600;font-size:var(--text-sm);text-decoration:underline;
       padding:6px 4px;cursor:pointer;
     }
     .collegamento:hover{color:var(--paper);}
@@ -176,7 +176,7 @@ export class Cucine extends LitElement {
     .altro{text-align:center;margin-top:var(--space-3);}
     .collegamento{
       background:none;border:none;color:var(--copper-light);
-      font-family:var(--font-mono);font-size:var(--text-sm);text-decoration:underline;
+      font-family:var(--font-body);font-weight:600;font-size:var(--text-sm);text-decoration:underline;
       padding:6px 4px;cursor:pointer;
     }
     .collegamento:hover{color:var(--paper);}

@@ -103,7 +103,7 @@ export class RigheRicetta extends LitElement {
 
     .costo{
       grid-column:1/-1;
-      font-family:var(--font-mono);font-size:var(--text-xs);color:var(--brass);
+      font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       text-align:right;
     }
     .costo.manca{color:var(--alert);}

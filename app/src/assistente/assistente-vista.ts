@@ -172,7 +172,7 @@ export class Chat extends LitElement {
       content:"Sous-chef AI";display:block;
       font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);color:var(--brass);
       margin-bottom:4px;}
-    .msg.scrive{color:var(--brass);font-family:var(--font-mono);font-size:var(--text-xs);}
+    .msg.scrive{color:var(--brass);font-family:var(--font-body);font-size:var(--text-sm);}
 
     /* I tre puntini: un movimento piccolo che dice «sta succedendo qualcosa»
        senza chiedere di guardarlo. */

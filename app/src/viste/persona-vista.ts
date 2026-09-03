@@ -122,7 +122,7 @@ export class SchedaPersona extends LitElement {
     }
     .partita.principale{border-color:var(--copper);background:var(--copper-soft);}
     .rango{
-      font-family:var(--font-mono);font-size:var(--text-xs);font-weight:700;
+      font-family:var(--font-body);font-size:var(--text-xs);font-weight:700;
       width:26px;height:26px;flex-shrink:0;border-radius:50%;
       display:flex;align-items:center;justify-content:center;
       background:var(--bg);color:var(--brass);
