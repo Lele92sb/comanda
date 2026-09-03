@@ -1,9 +1,10 @@
-import { ALLERGENS, esc, save, state, toast, uid } from '../core/state.js';
+import { ALLERGENS, save, state, toast, uid } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
 import { dishTotalCost, itemCost, itemLabel } from './costi.js';
 import { resizeImageToDataUrl } from './foto-ricetta.js';
 import { montaRighe } from './righe.js';
 import './ricette-vista.ts';
+import './schede-ricetta-vista.ts';
 /* ============================= PIATTI (dishes) ============================= */
 // Sopra questa soglia il food cost e' fuori linea. E' la stessa della dashboard
 // e del menu: una regola sola, in tre posti che la leggono, non tre soglie che
@@ -75,83 +76,99 @@ export function renderDishes(){
   elenco.soloLettura = Cloud.enabled && !Cloud.canWrite();
 }
 
+let scheda = null;
+
+function chiudiScheda(){
+  const holder = document.getElementById('dish-form-holder');
+  if(holder) holder.replaceChildren();
+  scheda = null;
+}
+
 export function openDishForm(existing, prefill){
   const holder = document.getElementById('dish-form-holder');
-  const base = {id:uid(), name:'', category:'', items:[], portionG:'', foodCostTargetPct:30, priceActual:'', allergens:[], steps:'', prepMin:'', notes:'', photo:''};
-  const d = existing || Object.assign(base, prefill||{});
-  let items = JSON.parse(JSON.stringify(d.items));
-  holder.innerHTML = `
-    <div class="panel">
-      <h3>${existing?'Modifica piatto':'Nuovo piatto'}</h3>
-      ${prefill&&!existing? `<div class="ok-box">Campi precompilati dalla foto — controlla e correggi prima di salvare, specialmente quantità e costi.</div>`:''}
-      <label>Nome piatto</label>
-      <input type="text" id="d-name" value="${esc(d.name)}" placeholder="es. Tagliatelle al ragù">
-      <div class="grid3">
-        <div><label>Categoria</label><input type="text" id="d-cat" value="${esc(d.category)}" placeholder="Primi, antipasti..."></div>
-        <div><label>Porzione finale (g/ml)</label><input type="number" id="d-portion" value="${d.portionG}"></div>
-        <div><label>Tempo di preparazione (min)</label><input type="number" id="d-prep" value="${d.prepMin||''}"></div>
-      </div>
-      <label>Food cost target (%)</label>
-      <input type="number" id="d-target" value="${d.foodCostTargetPct}">
-      <label>Allergeni</label>
-      <div class="chip-toggle" id="d-allergens">${ALLERGENS.map(a=>`<button type="button" data-a="${a}" class="${(d.allergens||[]).includes(a)?'on':''}">${a}</button>`).join('')}</div>
-      <label>Componenti (ingredienti e/o sub-ricette — digita per cercare)</label>
-      <div id="d-items"></div>
-      <label>Prezzo di vendita effettivo (€)</label>
-      <input type="number" step="0.01" id="d-price" value="${d.priceActual}">
-      <p class="small-note" id="d-preview">—</p>
-      <label>Procedimento</label>
-      <textarea id="d-steps">${esc(d.steps)}</textarea>
-      <label>Note (impiattamento, varianti...)</label>
-      <textarea id="d-notes">${esc(d.notes||'')}</textarea>
-      <label>Foto del piatto (opzionale)</label>
-      <input type="file" id="d-photo-input" accept="image/*">
-      <div id="d-photo-preview">${d.photo? `<img src="${d.photo}" class="thumb">`:''}</div>
-      <div class="row gap-3 mt-4">
-        <button class="btn" id="d-save">Salva piatto</button>
-        <button class="btn ghost" id="d-cancel">Annulla</button>
-      </div>
-    </div>
-  `;
-  let photoData = d.photo || '';
-  document.getElementById('d-photo-input').addEventListener('change', async (e)=>{
-    const file = e.target.files[0]; if(!file) return;
-    photoData = await resizeImageToDataUrl(file, 500, 0.7);
-    document.getElementById('d-photo-preview').innerHTML = `<img src="${photoData}" class="thumb">`;
-  });
-  const itemsContainer = document.getElementById('d-items');
-  // Vedi la nota nelle sub-ricette: `items` si aggiorna sul posto, e non c'e'
-  // piu' nessun DOM da rileggere prima di salvare.
-  montaRighe(itemsContainer, items, { alCambio: updateDPreview });
-  document.querySelectorAll('#d-allergens button').forEach(b=> b.addEventListener('click', ()=> b.classList.toggle('on')));
-  function updateDPreview(){
-    const cost = items.reduce((s,it)=>s+itemCost(it),0);
-    const target = parseFloat(document.getElementById('d-target').value)||30;
-    const sugg = target>0? cost/(target/100) : 0;
-    const priceActual = parseFloat(document.getElementById('d-price').value)||0;
-    const realFc = priceActual>0 ? (cost/priceActual*100) : null;
-    document.getElementById('d-preview').textContent = `Costo materia prima: € ${cost.toFixed(2)} · Prezzo suggerito: € ${sugg.toFixed(2)}${realFc!==null?` · Food cost reale: ${realFc.toFixed(1)}%`:''}`;
-  }
-  ['d-target','d-price'].forEach(id=> document.getElementById(id).addEventListener('input', updateDPreview));
-  updateDPreview();
-  document.getElementById('d-cancel').addEventListener('click', ()=> holder.innerHTML='');
-  document.getElementById('d-save').addEventListener('click', ()=>{
-    const name = document.getElementById('d-name').value.trim();
-    if(!name){ toast('Serve almeno il nome del piatto'); return; }
-    const newDish = {
-      id:d.id, name, category:document.getElementById('d-cat').value.trim(),
-      items: items.filter(it=> it.kind!=='custom' || it.name),
-      portionG:document.getElementById('d-portion').value, foodCostTargetPct:document.getElementById('d-target').value,
-      priceActual:document.getElementById('d-price').value,
-      allergens: Array.from(document.querySelectorAll('#d-allergens button.on')).map(b=>b.dataset.a),
-      steps:document.getElementById('d-steps').value.trim(),
-      prepMin:document.getElementById('d-prep').value,
-      notes:document.getElementById('d-notes').value.trim(),
-      photo: photoData,
+  if(!holder) return;
+  const base = {id:uid(), name:'', category:'', items:[], portionG:'', foodCostTargetPct:30,
+                priceActual:'', allergens:[], steps:'', prepMin:'', notes:'', photo:''};
+  const d = existing || Object.assign(base, prefill || {});
+  // Copia dei componenti: chi annulla non cambia niente.
+  const items = JSON.parse(JSON.stringify(d.items || []));
+  let foto = d.photo || '';
+
+  scheda = document.createElement('cmd-scheda-piatto');
+  scheda.nuovo = !existing;
+  scheda.daFoto = Boolean(prefill && !existing);
+  scheda.allergeniPossibili = ALLERGENS;
+  scheda.allergeni = (d.allergens || []).slice();
+  scheda.foto = foto;
+  scheda.campi = {
+    nome: d.name || '',
+    categoria: d.category || '',
+    porzione: d.portionG == null ? '' : String(d.portionG),
+    minuti: d.prepMin == null ? '' : String(d.prepMin),
+    target: d.foodCostTargetPct == null ? '30' : String(d.foodCostTargetPct),
+    prezzo: d.priceActual == null ? '' : String(d.priceActual),
+    procedimento: d.steps || '',
+    note: d.notes || '',
+  };
+
+  const righe = document.createElement('div');
+  righe.slot = 'righe';
+  scheda.appendChild(righe);
+
+  const rifaiConto = ()=>{
+    const costo = items.reduce((n, it) => n + itemCost(it), 0);
+    const target = parseFloat(scheda.campi.target) || 30;
+    const suggerito = target > 0 ? costo / (target / 100) : 0;
+    const prezzo = parseFloat(scheda.campi.prezzo) || 0;
+    const foodCost = prezzo > 0 ? (costo / prezzo * 100) : null;
+    const margine = prezzo - costo;
+    scheda.conto = {
+      costo: '€ ' + costo.toFixed(2),
+      suggerito: '€ ' + suggerito.toFixed(2),
+      foodCost: foodCost !== null ? foodCost.toFixed(1) + '%' : '—',
+      margine: '€ ' + margine.toFixed(2),
+      fuoriLinea: foodCost !== null && foodCost > SOGLIA_FOOD_COST,
+      margineNegativo: margine < 0,
     };
-    const idx = state.recipes.findIndex(x=>x.id===d.id);
-    if(idx>=0) state.recipes[idx]=newDish; else state.recipes.push(newDish);
-    save('recipes'); holder.innerHTML=''; renderDishes(); toast('Piatto salvato');
+  };
+
+  montaRighe(righe, items, { alCambio: rifaiConto });
+  rifaiConto();
+
+  scheda.addEventListener('piatto-conto', rifaiConto);
+  scheda.addEventListener('piatto-annulla', chiudiScheda);
+
+  scheda.addEventListener('piatto-foto', async e => {
+    // Rimpicciolita PRIMA di salvarla: una foto da telefono pesa quanto tutto
+    // il resto della cucina messo insieme, e finisce dentro lo stesso blob JSON
+    // che si riscrive a ogni salvataggio.
+    foto = await resizeImageToDataUrl(e.detail.file, 500, 0.7);
+    scheda.foto = foto;
   });
+
+  scheda.addEventListener('piatto-salva', e => {
+    const c = e.detail.campi;
+    const idx = state.recipes.findIndex(x => x.id === d.id);
+    const aggiornato = Object.assign({}, idx >= 0 ? state.recipes[idx] : {}, {
+      id: d.id,
+      name: c.nome,
+      category: c.categoria.trim(),
+      items: items.filter(it => it.kind !== 'custom' || it.name),
+      portionG: c.porzione,
+      prepMin: c.minuti,
+      foodCostTargetPct: c.target,
+      priceActual: c.prezzo,
+      allergens: e.detail.allergeni,
+      steps: c.procedimento.trim(),
+      notes: c.note.trim(),
+      photo: foto,
+    });
+    if(idx >= 0) state.recipes[idx] = aggiornato; else state.recipes.push(aggiornato);
+    save('recipes'); chiudiScheda(); renderDishes(); toast('Piatto salvato');
+  });
+
+  holder.replaceChildren(scheda);
+  scheda.updateComplete.then(()=> scheda.renderRoot.querySelector('#p-nome')?.focus());
 }
+
 document.getElementById('btn-new-dish').addEventListener('click', ()=> openDishForm(null));

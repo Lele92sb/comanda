@@ -633,3 +633,76 @@ customElements.define('cmd-griglia-turni', GrigliaTurni);
 declare global {
   interface HTMLElementTagNameMap { 'cmd-griglia-turni': GrigliaTurni }
 }
+
+/* ============================================================================
+   <cmd-ore-extra> — quanto ha lavorato ciascuno, in cifre.
+
+   E' lo STESSO calcolo della colonna «Ore» dentro la griglia: qui c'e' anche
+   il monte ore contrattuale, che in cella non ci starebbe. Sul telefono la
+   colonna della griglia sparisce proprio perche' questo riquadro esiste — era
+   l'unico dei tre dati in cella ad avere gia' un altro posto dove vivere.
+   ============================================================================ */
+export interface RigaOre {
+  nome: string;
+  pianificate: string;
+  contrattuali: string;
+  scarto: string;
+  classe: string;
+}
+
+export class OreExtra extends LitElement {
+  static override properties = { righe: { type: Array } };
+
+  declare righe: RigaOre[];
+
+  constructor() {
+    super();
+    this.righe = [];
+  }
+
+  static override styles = css`
+    :host{display:block;font-family:var(--font-body);color:var(--paper);}
+    *,*::before,*::after{box-sizing:border-box;}
+    table{width:100%;border-collapse:collapse;font-size:12.5px;}
+    th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;}
+    th{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;color:var(--brass);}
+    td.num{font-family:var(--font-mono);text-align:right;}
+    td.num.extra{color:var(--copper-light);font-weight:700;}
+    td.num.under{color:var(--brass);}
+    .vuoto{font-family:var(--font-mono);font-size:var(--text-sm);color:var(--brass);
+      border:1px dashed var(--line-strong);border-radius:var(--radius-md);
+      padding:var(--space-3);text-align:center;}
+  `;
+
+  override render(): TemplateResult {
+    if (!this.righe.length) {
+      return html`<div class="vuoto">${t('Nessuna persona in brigata.')}</div>`;
+    }
+    return html`
+      <table>
+        <thead>
+          <tr>
+            <th>${t('Persona')}</th>
+            <th>${t('Ore pianificate')}</th>
+            <th>${t('Contrattuali')}</th>
+            <th>${t('Scarto')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${this.righe.map(r => html`
+            <tr>
+              <td>${r.nome}</td>
+              <td class="num">${r.pianificate}</td>
+              <td class="num">${r.contrattuali}</td>
+              <td class="num ${r.classe}">${r.scarto}</td>
+            </tr>`)}
+        </tbody>
+      </table>`;
+  }
+}
+
+customElements.define('cmd-ore-extra', OreExtra);
+
+declare global {
+  interface HTMLElementTagNameMap { 'cmd-ore-extra': OreExtra }
+}

@@ -86,12 +86,6 @@
    dietro il proprio stile. Le regole della disposizione larga che le
    riguardavano sono sparite con loro. */
 
-/* Miniatura di un'immagine caricata. */
-.thumb{max-width:140px;border-radius:var(--radius-md);margin-top:var(--space-2);display:block;}
-
-/* Etichette semantiche, sugli stessi colori dei riquadri di avviso. */
-.tag.alert{background:var(--alert-soft);color:var(--alert);}
-.tag.ok{background:var(--sage-soft);color:var(--sage);}
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--paper);font-family:var(--font-body);}
 body{min-height:100vh;-webkit-font-smoothing:antialiased;}
@@ -171,7 +165,6 @@ p.section-sub{font-family:var(--font-mono);font-size:11px;color:var(--brass);let
    Verificato prima di togliere: nel markup dell'app e nei moduli non-componente
    non compare piu' nessuna di quelle classi. */
 
-.tag{display:inline-block;font-family:var(--font-mono);font-size:10px;letter-spacing:0.3px;padding:3px 7px;border-radius:20px;background:rgba(29,27,24,0.08);margin:2px 4px 0 0;}
 .panel{background:var(--bg-elev);border:1px solid var(--line);border-radius:6px;padding:16px;margin-bottom:14px;}
 .panel h3{margin:0 0 12px;font-family:var(--font-display);font-size:16px;font-weight:600;}
 
@@ -226,13 +219,6 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .period-nav button{background:transparent;border:1px solid var(--line-strong);color:var(--paper);font-family:var(--font-mono);font-size:12px;padding:5px 10px;border-radius:5px;}
 .period-nav button:hover{border-color:var(--copper);}
 #period-label{font-family:var(--font-mono);font-size:12px;color:var(--copper-light);min-width:150px;text-align:center;text-transform:capitalize;}
-
-.hours-table{width:100%;border-collapse:collapse;font-size:12.5px;}
-.hours-table th,.hours-table td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;}
-.hours-table th{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;color:var(--brass);}
-.hours-table td.num{font-family:var(--font-mono);text-align:right;}
-.hours-table td.num.extra{color:var(--copper-light);font-weight:700;}
-.hours-table td.num.under{color:var(--brass);}
 
 /* Qui stavano la CONVERSAZIONE e le voci della BASE DI CONOSCENZA: 13 righe,
    andate dentro <cmd-chat> e <cmd-conoscenza>. */

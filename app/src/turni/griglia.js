@@ -351,21 +351,21 @@ export function weeklyExtraFromTurni(){
     return {id:s.id, name:s.name, totalHours, contracted, extra, under};
   });
 }
+let vistaOre = null;
+
 export function renderOreExtra(){
   const el = document.getElementById('ore-extra-table');
-  if(!state.staff.length){ el.innerHTML = `<div class="empty">Nessuna persona in brigata.</div>`; return; }
-  const rows = weeklyExtraFromTurni();
-  el.innerHTML = `
-    <table class="hours-table">
-      <thead><tr><th>Persona</th><th>Ore pianificate</th><th>Contrattuali</th><th>Extra</th></tr></thead>
-      <tbody>
-        ${rows.map(r=>`<tr>
-          <td>${esc(r.name)}</td>
-          <td class="num">${r.totalHours.toFixed(1)}h</td>
-          <td class="num">${r.contracted? r.contracted.toFixed(1)+'h':'—'}</td>
-          <td class="num ${r.extra>0?'extra':(r.under>0?'under':'')}">${r.extra>0? '+'+r.extra.toFixed(1)+'h' : (r.under>0? '−'+r.under.toFixed(1)+'h sotto':'in linea')}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-  `;
+  if(!el) return;
+  if(!vistaOre || !vistaOre.isConnected){
+    vistaOre = document.createElement('cmd-ore-extra');
+    el.replaceChildren(vistaOre);
+  }
+  vistaOre.righe = weeklyExtraFromTurni().map(r => ({
+    nome: r.name,
+    pianificate: r.totalHours.toFixed(1) + 'h',
+    contrattuali: r.contracted ? r.contracted.toFixed(1) + 'h' : '—',
+    scarto: r.extra > 0 ? '+' + r.extra.toFixed(1) + 'h'
+          : (r.under > 0 ? '−' + r.under.toFixed(1) + 'h sotto' : 'in linea'),
+    classe: r.extra > 0 ? 'extra' : (r.under > 0 ? 'under' : ''),
+  }));
 }

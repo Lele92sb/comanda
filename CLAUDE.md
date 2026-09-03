@@ -101,8 +101,10 @@ interfaccia pubblica:
 
 Le decisioni visive stanno tutte in `ds/tokens.css`: se stai per scrivere
 `#b06b34` o `12px` dentro un componente, o il token esiste già o va aggiunto lì.
-`styles.css` è sceso da 800 a 671 righe e continua a scendere: ogni schermata
-che diventa componente si porta via il proprio stile.
+`styles.css` è sceso da 800 a **454 righe**, e i punti che scrivono HTML come
+stringa da 89 a 8: ogni schermata che diventa componente si porta via il
+proprio stile. Gli otto rimasti sono messaggi brevi (la navigazione, la
+schermata «controlla la posta», il dettaglio del generatore).
 
 Una schermata si divide in due: un **componente** che disegna e manda eventi
 senza sapere cosa sia `state`, e un **collante** che traduce quegli eventi in

@@ -1,8 +1,9 @@
-import { esc, save, state, toast, uid } from '../core/state.js';
+import { save, state, toast, uid } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
 import { itemCost, itemLabel, subrecipeCost, subrecipeRawWeightKg } from './costi.js';
 import { montaRighe } from './righe.js';
 import './ricette-vista.ts';
+import './schede-ricetta-vista.ts';
 /* ============================= SUB-RICETTE ============================= */
 let elenco = null;
 
@@ -56,57 +57,73 @@ export function renderSubrecipes(){
   elenco.soloLettura = Cloud.enabled && !Cloud.canWrite();
 }
 
+let scheda = null;
+
+function chiudiScheda(){
+  const holder = document.getElementById('subr-form-holder');
+  if(holder) holder.replaceChildren();
+  scheda = null;
+}
+
 export function openSubForm(existing, prefill){
   const holder = document.getElementById('subr-form-holder');
+  if(!holder) return;
   const base = {id:uid(), name:'', items:[], yieldQty:'', yieldUnit:'kg', notes:''};
-  const sub = existing || Object.assign(base, prefill||{});
-  let items = JSON.parse(JSON.stringify(sub.items));
-  holder.innerHTML = `
-    <div class="panel">
-      <h3>${existing?'Modifica sub-ricetta':'Nuova sub-ricetta'}</h3>
-      ${prefill&&!existing? `<div class="ok-box">Campi precompilati dalla foto — controlla componenti e quantità, e imposta tu la resa finale (non deducibile dalla foto).</div>`:''}
-      <label>Nome (es. Ragù di carne, Fondo di vitello)</label>
-      <input type="text" id="sb-name" value="${esc(sub.name)}">
-      <label>Componenti</label>
-      <div id="sb-items"></div>
-      <div class="grid2 mt-3" >
-        <div><label>Resa finale (quantità ottenuta dopo cottura/lavorazione)</label><input type="number" step="0.001" id="sb-yieldqty" value="${sub.yieldQty}"></div>
-        <div><label>Unità resa</label><select id="sb-yieldunit"><option value="kg" ${sub.yieldUnit==='kg'?'selected':''}>kg</option><option value="l" ${sub.yieldUnit==='l'?'selected':''}>l</option><option value="pz" ${sub.yieldUnit==='pz'?'selected':''}>pz</option></select></div>
-      </div>
-      <label>Note (procedimento, calo peso previsto, ecc.)</label>
-      <textarea id="sb-notes">${esc(sub.notes)}</textarea>
-      <p class="small-note" id="sb-preview">—</p>
-      <div class="row gap-3 mt-3">
-        <button class="btn" id="sb-save">Salva sub-ricetta</button>
-        <button class="btn ghost" id="sb-cancel">Annulla</button>
-      </div>
-    </div>
-  `;
-  const itemsContainer = document.getElementById('sb-items');
-  // Le righe si tengono aggiornate da sole: `items` viene modificato sul posto
-  // e `alCambio` rifa' il conto. Prima bisognava ricordarsi di rileggere il DOM
-  // (readItemRows) prima di ogni calcolo e prima di salvare — ed era il passo
-  // che si poteva dimenticare.
-  montaRighe(itemsContainer, items, { escludiSubId: sub.id, alCambio: updateSbPreview });
-  function updateSbPreview(){
-    const totalCost = items.reduce((s,it)=>s+itemCost(it),0);
-    const yq = parseFloat(document.getElementById('sb-yieldqty').value)||0;
-    const cpu = yq>0? totalCost/yq : 0;
-    document.getElementById('sb-preview').textContent = `Costo totale componenti: € ${totalCost.toFixed(2)} · Costo per ${document.getElementById('sb-yieldunit').value}: € ${cpu.toFixed(2)}`;
-  }
-  document.getElementById('sb-yieldqty').addEventListener('input', updateSbPreview);
-  document.getElementById('sb-yieldunit').addEventListener('change', updateSbPreview);
-  updateSbPreview();
-  document.getElementById('sb-cancel').addEventListener('click', ()=> holder.innerHTML='');
-  document.getElementById('sb-save').addEventListener('click', ()=>{
-    const name = document.getElementById('sb-name').value.trim();
-    if(!name){ toast('Serve il nome della sub-ricetta'); return; }
-    const newSub = { id:sub.id, name, items: items.filter(it=> it.kind!=='custom' || it.name),
-      yieldQty:document.getElementById('sb-yieldqty').value, yieldUnit:document.getElementById('sb-yieldunit').value,
-      notes:document.getElementById('sb-notes').value.trim() };
-    const idx = state.subrecipes.findIndex(x=>x.id===sub.id);
-    if(idx>=0) state.subrecipes[idx]=newSub; else state.subrecipes.push(newSub);
-    save('subrecipes'); holder.innerHTML=''; renderSubrecipes(); toast('Sub-ricetta salvata');
+  const sub = existing || Object.assign(base, prefill || {});
+  // Si lavora su una COPIA dei componenti: chi annulla non cambia niente.
+  const items = JSON.parse(JSON.stringify(sub.items || []));
+
+  scheda = document.createElement('cmd-scheda-sub');
+  scheda.nuova = !existing;
+  scheda.daFoto = Boolean(prefill && !existing);
+  scheda.nome = sub.name || '';
+  scheda.resa = sub.yieldQty == null ? '' : String(sub.yieldQty);
+  scheda.unita = sub.yieldUnit || 'kg';
+  scheda.note = sub.notes || '';
+
+  // Le righe dei componenti stanno nel posto che il componente lascia libero.
+  const righe = document.createElement('div');
+  righe.slot = 'righe';
+  scheda.appendChild(righe);
+
+  const rifaiConto = ()=>{
+    const totale = items.reduce((n, it) => n + itemCost(it), 0);
+    const resa = parseFloat(scheda.resa) || 0;
+    scheda.conto = {
+      totale: '€ ' + totale.toFixed(2),
+      perUnita: resa > 0 ? '€ ' + (totale / resa).toFixed(2) : '',
+      // Il calo peso e' la ragione per cui il costo per chilo di una
+      // sub-ricetta non e' il costo dei suoi componenti diviso il loro peso.
+      spiega: resa > 0
+        ? ''
+        : 'Scrivi la resa: senza, non si sa quanto costa un ' + scheda.unita + ' di questa preparazione dentro un piatto.',
+    };
+  };
+
+  montaRighe(righe, items, { escludiSubId: sub.id, alCambio: rifaiConto });
+  rifaiConto();
+
+  scheda.addEventListener('sub-conto', rifaiConto);
+  scheda.addEventListener('sub-annulla', chiudiScheda);
+  scheda.addEventListener('sub-salva', e => {
+    const idx = state.subrecipes.findIndex(x => x.id === sub.id);
+    // Si parte da quella che c'era: i campi che questa scheda non governa non
+    // spariscono alla prima modifica.
+    const aggiornata = Object.assign({}, idx >= 0 ? state.subrecipes[idx] : {}, {
+      id: sub.id,
+      name: e.detail.nome,
+      // Una voce libera senza nome non e' una riga: e' una riga dimenticata.
+      items: items.filter(it => it.kind !== 'custom' || it.name),
+      yieldQty: e.detail.resa,
+      yieldUnit: e.detail.unita,
+      notes: e.detail.note,
+    });
+    if(idx >= 0) state.subrecipes[idx] = aggiornata; else state.subrecipes.push(aggiornata);
+    save('subrecipes'); chiudiScheda(); renderSubrecipes(); toast('Sub-ricetta salvata');
   });
+
+  holder.replaceChildren(scheda);
+  scheda.updateComplete.then(()=> scheda.renderRoot.querySelector('#s-nome')?.focus());
 }
+
 document.getElementById('btn-new-sub').addEventListener('click', ()=> openSubForm(null));
