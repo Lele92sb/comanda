@@ -1,7 +1,7 @@
 import { dataCorta, giornoMese, t } from '../core/lingua.ts';
 import { SERVICE_LABEL, conferma, esc, periodDates, refreshShiftConfig, save, setPeriodAnchor, setPeriodMode, shiftPeriod, state, toast } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
-import { DAYS, REST_CODE, codeAllowed, constraintFor, generaMigliore, parseISO, puoFareExtra, settimaneIntere } from '../lib/logic.js';
+import { DAYS, REST_CODE, bloccaGenerazione, codeAllowed, constraintFor, generaMigliore, parseISO, puoFareExtra, quoteStorte, settimaneIntere } from '../lib/logic.js';
 import { renderDashboard } from '../viste/dashboard.js';
 import { renderOreExtra, renderTurni } from './griglia.js';
 import { caricaRichieste, constraintsFromRequests } from './richieste.js';
@@ -43,8 +43,17 @@ async function generateRandomShifts(){
   // Le richieste approvate sono vincoli assoluti: vanno rilette adesso, non
   // usando quelle caricate chissà quando.
   await caricaRichieste();
-  const missingQuota = state.staff.filter(s=> !(s.weeklyQuota&&s.weeklyQuota.length));
-  if(missingQuota.length){ toast('Imposta prima le quote per: '+missingQuota.map(s=>s.name).join(', ')); return; }
+  // QUI SI FERMA. Prima si controllava solo che la quota ESISTESSE, e una
+  // quota che c'e' ma non fa sette passava: il motore la tagliava a sette da
+  // solo, in silenzio, e il prospetto usciva sbagliato senza che niente lo
+  // dicesse. Ora si guarda anche il totale, e non si parte.
+  const storte = quoteStorte(state.staff).filter(x => bloccaGenerazione(x.problemi));
+  if(storte.length){
+    renderBloccoQuote();
+    document.getElementById('quote-storte-box')
+      ?.scrollIntoView({ block:'nearest', behavior:'smooth' });
+    return;
+  }
   // Chi non ha stazioni non viene pianificato: lo dice il motore nel riepilogo
   // qui sotto (nonPianificabili), non un avviso che sparisce dopo due secondi.
 
@@ -313,6 +322,57 @@ async function generateRandomShifts(){
 
   toast(shortfalls.length ? 'Turni generati — alcune postazioni restano scoperte, vedi dettagli' : (extras.length ? 'Turni generati — con alcuni turni extra' : 'Turni generati — fabbisogno coperto'));
 }
+/* IL BLOCCO, SCRITTO DOVE SI PREME.
+
+   Un `toast` non basta per una cosa da riparare: dura due secondi e se ne va,
+   e chi torna dopo aver sistemato meta' delle quote non ha piu' l'elenco. Qui
+   resta finche' resta la ragione — che e' esattamente il mestiere di
+   <cmd-avviso>.
+
+   E il bottone si spegne. Un bottone che si puo' premere e non fa niente
+   insegna che l'app e' rotta; uno spento, con accanto scritto perche', insegna
+   cosa manca. */
+function frasiQuotaStorta(x){
+  return x.problemi.map(p =>
+    p.tipo === 'nessun_gruppo'
+      ? t('{chi}: nessun gruppo di turni', { chi: x.nome })
+    : p.tipo === 'totale'
+      ? t('{chi}: {n} turni invece di 7', { chi: x.nome, n: p.totale })
+    : p.tipo === 'gruppi_senza_codici'
+      ? t('{chi}: un gruppo senza nessuna sigla accesa', { chi: x.nome })
+      : null
+  ).filter(Boolean);
+}
+
+let vistaBlocco = null;
+
+export function renderBloccoQuote(){
+  const el = document.getElementById('quote-storte-box');
+  if(!el) return;
+  const storte = quoteStorte(state.staff).filter(x => bloccaGenerazione(x.problemi));
+  const bottone = document.getElementById('btn-generate-shifts');
+
+  if(!storte.length){
+    if(vistaBlocco){ vistaBlocco.remove(); vistaBlocco = null; }
+    if(bottone) bottone.disabled = false;
+    return;
+  }
+  if(bottone) bottone.disabled = true;
+
+  if(!vistaBlocco || !vistaBlocco.isConnected){
+    vistaBlocco = document.createElement('cmd-avviso');
+    vistaBlocco.setAttribute('tono', 'allarme');
+    el.replaceChildren(vistaBlocco);
+  }
+  const righe = storte.flatMap(frasiQuotaStorta);
+  vistaBlocco.textContent =
+    (storte.length === 1
+      ? t('Non posso generare: una quota non fa 7.')
+      : t('Non posso generare: {n} quote non fanno 7.', { n: storte.length })) + ' ' +
+    righe.join(' · ') + ' — ' +
+    t('Sette sono i giorni della settimana, riposi compresi. Chi ne dichiara meno lascia dei giorni vuoti; chi ne dichiara di più se ne vede sparire alcuni, e non sa quali. Si sistemano in Impostazioni cucina → Quote per persona.');
+}
+
 document.getElementById('btn-generate-shifts').addEventListener('click', generateRandomShifts);
 
 // SVUOTA. Cancella i turni del periodo mostrato, non tutti quelli che esistono:

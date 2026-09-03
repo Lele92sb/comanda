@@ -193,6 +193,26 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .btn.small{padding:6px 10px;font-size:var(--text-sm);}
 .btn.full{width:100%;}
 
+/* UN BOTTONE SPENTO DEVE VEDERSI SPENTO.
+   Non c'era nessuna regola per :disabled, in tutto il foglio: l'attributo
+   funzionava — il clic non partiva — ma il bottone restava di rame pieno,
+   identico a uno che funziona. Si preme, non succede niente, e a quel punto
+   l'app sembra rotta invece che in attesa di una correzione. Il cursore lo
+   dice pure col disegno: `not-allowed` e' l'unico segnale che arriva prima
+   del clic. */
+.btn:disabled,
+.btn:disabled:hover{
+  background:var(--bg-elev2);
+  color:var(--brass);
+  cursor:not-allowed;
+}
+.btn.ghost:disabled,
+.btn.ghost:disabled:hover{
+  background:transparent;
+  border-color:var(--line);
+  color:var(--brass);
+}
+
 .chip-toggle{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
 .chip-toggle button{border:1px solid var(--line-strong);background:transparent;color:var(--paper);font-family:var(--font-body);font-size:10.5px;padding:5px 9px;border-radius:20px;}
 .chip-toggle button.on{background:var(--copper);border-color:var(--copper);color:var(--ink);font-weight:700;}

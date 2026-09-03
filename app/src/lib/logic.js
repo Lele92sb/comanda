@@ -34,6 +34,90 @@ const SPECIAL_CODES = {
 };
 const REST_CODE = 'R';
 
+// ----------------------------------------------------------------------------
+// LE QUOTE DEVONO FARE SETTE, E QUESTO E' IL POSTO DOVE LO SI DECIDE.
+//
+// Sette sono i giorni della settimana. La quota di una persona dice quanti
+// turni di ciascun gruppo fa in una settimana, e il riposo E' un gruppo: percio'
+// la somma copre tutti e sette i giorni, sempre. Non e' una convenzione — e'
+// il calendario.
+//
+// QUELLO CHE SUCCEDEVA PRIMA, ed e' peggio di un errore a schermo. Il motore
+// taglia a 7 slot da solo (vedi `capienzaSettimanale` e `buildStaffPools`), e
+// il taglio e' MUTO:
+//
+//   dichiari 9 turni  ->  due spariscono, e non sai quali
+//   dichiari 5 turni  ->  due giorni restano vuoti, e sembra un buco del
+//                         generatore invece che una quota scritta male
+//
+// L'app mostrava «6/7» in rosso accanto al nome e salvava lo stesso. Un rosso
+// che non ferma niente insegna a ignorare il rosso.
+//
+// Sta in logic.js e non in una vista per la ragione di sempre: qui gira dentro
+// Node e ha dei test. Una regola sui dati che vive solo nell'interfaccia vale
+// finche' qualcuno non salva da un'altra strada.
+// ----------------------------------------------------------------------------
+const GIORNI_SETTIMANA = 7;
+
+/** Quanti turni dichiara in tutto la quota di una persona. */
+function totaleQuota(s){
+  return ((s && s.weeklyQuota) || []).reduce((n, g) => n + (parseInt(g.count, 10) || 0), 0);
+}
+
+/**
+ * Cosa non va nella quota di una persona. Lista vuota = va bene.
+ *
+ * Si restituiscono dei DATI e non delle frasi: le frasi vanno tradotte, e la
+ * traduzione sta nell'interfaccia. Qui si dice solo cosa e' storto.
+ *
+ * `nessun_gruppo` resta separato da `totale` anche se un totale di zero e' pure
+ * lui diverso da sette: chi non ha ancora nessun gruppo non ha SBAGLIATO, non
+ * ha ancora fatto. Sono due frasi diverse da leggere e due gesti diversi da
+ * fare, e dirle con la stessa parola manda a cercare l'errore che non c'e'.
+ */
+function problemiQuota(s){
+  const gruppi = (s && s.weeklyQuota) || [];
+  const problemi = [];
+  if(!gruppi.length){ problemi.push({ tipo:'nessun_gruppo' }); return problemi; }
+
+  const totale = totaleQuota(s);
+  if(totale !== GIORNI_SETTIMANA) problemi.push({ tipo:'totale', totale, atteso: GIORNI_SETTIMANA });
+
+  // Un gruppo senza nessun codice acceso non e' un gruppo: e' un numero senza
+  // significato. Il motore ci mette dentro il riposo di sua iniziativa
+  // (`capienzaSettimanale`), quindi «3 turni di niente» diventa in silenzio
+  // «3 riposi» — e chi l'ha scritto crede di aver messo tre turni di lavoro.
+  const vuoti = gruppi.reduce((n, g, i) => (g.codes && g.codes.length) ? n : n.concat(i), []);
+  if(vuoti.length) problemi.push({ tipo:'gruppi_senza_codici', indici: vuoti });
+
+  // Un conteggio a zero occupa una riga e non fa niente. Non rompe i conti,
+  // ma e' quasi sempre il resto di un ripensamento lasciato li'.
+  const zeri = gruppi.reduce((n, g, i) => (parseInt(g.count, 10) || 0) > 0 ? n : n.concat(i), []);
+  if(zeri.length) problemi.push({ tipo:'gruppi_a_zero', indici: zeri });
+
+  return problemi;
+}
+
+/**
+ * Le quote storte di tutta la brigata, con dentro quello che serve per dirlo.
+ * E' quello che guarda il generatore prima di partire, ed e' quello che la
+ * schermata delle quote mostra in cima.
+ */
+function quoteStorte(staffList){
+  return (staffList || [])
+    .map(s => ({ id: s.id, nome: s.name, totale: totaleQuota(s), problemi: problemiQuota(s) }))
+    .filter(x => x.problemi.length);
+}
+
+/** Vero se questa quota impedisce di generare i turni. */
+function bloccaGenerazione(problemi){
+  // Un gruppo a zero e' disordine, non un impedimento: il motore lo salta e
+  // il prospetto esce giusto lo stesso. Bloccare per quello sarebbe fastidio
+  // senza guadagno, e il fastidio senza guadagno e' cio' che fa spegnere i
+  // controlli.
+  return (problemi || []).some(p => p.tipo !== 'gruppi_a_zero');
+}
+
 // Configurazione di partenza per una cucina nuova, e per chi aveva i tre
 // servizi cablati nella versione precedente.
 const DEFAULT_SERVICES = [
@@ -2849,6 +2933,11 @@ export {
   DAYS,
   SPECIAL_CODES,
   REST_CODE,
+  GIORNI_SETTIMANA,
+  totaleQuota,
+  problemiQuota,
+  quoteStorte,
+  bloccaGenerazione,
   DEFAULT_SERVICES,
   DEFAULT_SHIFT_TYPES,
   buildShiftConfig,

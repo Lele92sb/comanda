@@ -1,5 +1,5 @@
 import { Cloud } from '../lib/cloud.js';
-import { renderPubblicazione } from '../turni/generatore.js';
+import { renderBloccoQuote, renderPubblicazione } from '../turni/generatore.js';
 import { frase, t } from '../core/lingua.ts';
 import { esc } from '../core/state.js';
 import { renderStoricoImportazioni } from '../ricettario/fatture.js';
@@ -53,7 +53,7 @@ const NAV = [
     {id:'fatture',     label:frase('Fatture'),     render:()=>renderStoricoImportazioni(), soloSeVedeCosti:true},
   ]},
   {id:'menu',       label:frase('Menu'), icona:'🍽',          soloChiModifica:true, render:()=>renderMenuList()},
-  {id:'turni',      label:frase('Turni'), icona:'📅',         render:()=>{ renderTurni(); renderOreExtra(); renderPubblicazione(); }},
+  {id:'turni',      label:frase('Turni'), icona:'📅',         render:()=>{ renderTurni(); renderOreExtra(); renderPubblicazione(); renderBloccoQuote(); }},
   {id:'richieste',  label:frase('Richieste'), icona:'✋',     render:()=>renderRichieste()},
   {id:'assistente', label:frase('Assistente AI'), icona:'💬', soloChiModifica:true, render:()=>{ renderKB(); renderChat(); }},
   {id:'benessere',  label:frase('Benessere'), icona:'🌱',     soloChiModifica:true, render:()=>renderBenessere()},

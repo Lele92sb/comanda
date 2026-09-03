@@ -20,6 +20,7 @@
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { t } from '../core/lingua.ts';
+import '../ds/avviso.ts';
 import '../ds/bottone.ts';
 import '../ds/chip.ts';
 import '../ds/riquadro.ts';
@@ -43,6 +44,16 @@ export interface QuotaPersona {
   /** Id delle partite che sa fare. */
   stazioni: string[];
   gruppi: GruppoQuota[];
+  /**
+   * Cosa non va in questa quota, gia' scritto in italiano da chi passa i dati.
+   * Il componente NON calcola la regola: sette e' una regola sui dati e vive in
+   * `lib/logic.js`, dove ha dei test e dove la vede anche il generatore. Una
+   * schermata che se la calcolasse da sola sarebbe una seconda verita', e la
+   * seconda verita' prima o poi litiga con la prima.
+   */
+  problemi?: string[];
+  /** Vero se questi problemi impediscono di generare i turni. */
+  blocca?: boolean;
 }
 
 export interface StazioneScelta { id: string; nome: string }
@@ -144,10 +155,15 @@ export class Quote extends LitElement {
 
   private scheda(p: QuotaPersona): TemplateResult {
     const totale = p.gruppi.reduce((s, g) => s + (g.conteggio || 0), 0);
-    const classe = totale === 7 ? 'giusto' : 'storto';
+    const problemi = p.problemi ?? [];
+    const classe = problemi.length ? 'storto' : 'giusto';
     return html`
       <cmd-riquadro titolo=${p.nome}>
         <span slot="azioni" class="totale ${classe}">${totale}/7</span>
+
+        ${problemi.length ? html`
+          <cmd-avviso tono=${p.blocca ? 'allarme' : 'nota'}>${problemi.join(' · ')}</cmd-avviso>`
+        : nothing}
 
         <span class="etichetta">${t('Partite che sa fare')}</span>
         ${this.stazioni.length ? html`
@@ -180,7 +196,18 @@ export class Quote extends LitElement {
                    spiega=${t('Le quote dicono quanti turni di ciascun tipo fa ogni persona in una settimana. Prima serve qualcuno in brigata.')}>
         </cmd-vuoto>`;
     }
-    return html`${repeat(this.persone, p => p.id, p => this.scheda(p))}`;
+    // IL RIASSUNTO IN CIMA non e' un doppione dell'avviso su ogni scheda: con
+    // trenta persone in brigata, quella che fa 6/7 sta a meta' schermata e non
+    // la trova nessuno scorrendo. Qui si legge subito quante sono; sotto, dove
+    // si ripara, c'e' scritto cosa.
+    const bloccanti = this.persone.filter(p => p.blocca);
+    return html`
+      ${bloccanti.length ? html`
+        <cmd-avviso tono="allarme">${bloccanti.length === 1
+          ? t('La quota di una persona non fa 7: finché resta così il generatore non parte.')
+          : t('Le quote di {n} persone non fanno 7: finché restano così il generatore non parte.',
+              { n: bloccanti.length })} ${bloccanti.map(p => p.nome).join(', ')}</cmd-avviso>` : nothing}
+      ${repeat(this.persone, p => p.id, p => this.scheda(p))}`;
   }
 }
 
