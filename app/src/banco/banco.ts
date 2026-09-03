@@ -76,6 +76,8 @@ import '../ds/dialogo.ts';
 import '../turni/foglio-turno-vista.ts';
 import '../turni/richieste-vista.ts';
 import type { RichiestaVista } from '../turni/richieste-vista.ts';
+import '../assistente/assistente-vista.ts';
+import type { MessaggioChat, NotaConoscenza } from '../assistente/assistente-vista.ts';
 
 interface Caso {
   id: string;
@@ -316,6 +318,16 @@ const RICHIESTE: RichiestaVista[] = [
     nota: 'visita medica', stato: 'approvata' },
   { id: 'r3', chi: 'Carlos', dettaglio: 'solo: Pranzo', periodo: '1 set → 7 set (7 giorni)',
     nota: '', stato: 'rifiutata' },
+];
+
+const NOTE: NotaConoscenza[] = [
+  { id: 'n1', titolo: 'Ragù della casa', misura: '24 righe' },
+  { id: 'n2', titolo: 'Nota senza titolo', misura: '2 righe' },
+];
+
+const CONVERSAZIONE: MessaggioChat[] = [
+  { id: 'c1', chi: 'user', testo: 'Ho seppie, limone e finocchietto. Proponimi un piatto per il menu estivo.' },
+  { id: 'c2', chi: 'assistant', testo: 'Seppia scottata, crema di finocchietto e olio al limone bruciato.\nLa seppia due minuti per lato, non di più: oltre diventa gomma.' },
 ];
 
 const GRUPPI: Gruppo[] = [
@@ -568,6 +580,32 @@ const GRUPPI: Gruppo[] = [
         id: 'piatti-vuoti',
         titolo: 'Prima che ce ne sia uno',
         contenuto: () => html`<cmd-piatti .piatti=${[]}></cmd-piatti>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-chat e cmd-conoscenza',
+    casi: [
+      {
+        id: 'chat-attesa',
+        titolo: 'Mentre la risposta è per strada',
+        nota: 'E’ l’unica schermata dell’app che ASPETTA, e ora lo dice: il pulsante si blocca (prima si poteva premere due volte e partivano due domande), e «sta scrivendo» sta dentro la conversazione, dove poi comparira’ la risposta.',
+        contenuto: () => html`
+          <cmd-chat .messaggi=${CONVERSAZIONE} ?inAttesa=${true}></cmd-chat>`,
+      },
+      {
+        id: 'chat-vuota',
+        titolo: 'Alla prima apertura',
+        contenuto: () => html`
+          <cmd-chat .messaggi=${[]}
+                    benvenuto="Ciao chef. Sono qui per pensare i piatti con te, rivedere un menu, o solo confrontarci su un'idea."></cmd-chat>`,
+      },
+      {
+        id: 'conoscenza',
+        titolo: 'La base di conoscenza, piena e vuota',
+        contenuto: () => html`
+          <cmd-conoscenza .note=${NOTE}></cmd-conoscenza>
+          <cmd-conoscenza .note=${[]}></cmd-conoscenza>`,
       },
     ],
   },

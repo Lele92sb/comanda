@@ -234,27 +234,13 @@
     <section class="view" id="view-assistente">
       <h2 class="section-title" data-t>Assistente AI</h2>
       <p class="section-sub" data-t>Il tuo sous-chef digitale — parla, chiedi consigli, valuta insieme</p>
-      <div class="panel">
-        <h3 data-t>Base di conoscenza</h3>
-        <p class="small-note mt-0"  data-t>Carica ricette, appunti o file .txt/.md: l'assistente li userà per darti consigli su misura sul tuo stile.</p>
-        <textarea id="kb-text" placeholder="Incolla qui una ricetta, una nota tecnica, un appunto..." data-t-placeholder></textarea>
-        <div class="grid2 mt-2" >
-          <input type="text" id="kb-title" placeholder="Titolo breve (es. Ragù della casa)" data-t-placeholder>
-          <input type="file" id="kb-file" accept=".txt,.md">
-        </div>
-        <button class="btn small mt-2" id="kb-add" data-t>Aggiungi alla base di conoscenza</button>
-        <div id="kb-list" class="mt-3"></div>
-      </div>
+      <!-- Base di conoscenza e conversazione stanno dentro <cmd-conoscenza> e
+           <cmd-chat>. La chat e' l'unica schermata dell'app che ASPETTA, e ora
+           lo dice: il pulsante si blocca mentre la risposta e' per strada. -->
+      <div id="kb-panel"></div>
       <div class="panel">
         <h3 data-t>Conversazione</h3>
-        <div class="chat-wrap">
-          <div class="chat-log" id="chat-log"></div>
-          <div class="typing invisible" id="chat-typing" data-t>sta scrivendo…</div>
-          <div class="chat-input-row">
-            <textarea id="chat-input" placeholder="Es. 'Ho seppie, limone e finocchietto, proponimi un piatto per il menu estivo'" data-t-placeholder></textarea>
-            <button class="btn" id="chat-send" data-t>Invia</button>
-          </div>
-        </div>
+        <div id="chat-panel"></div>
       </div>
     </section>
 
