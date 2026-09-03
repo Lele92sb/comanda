@@ -196,7 +196,11 @@ for (const f of FILE.filter(x => x.endsWith('.js'))) {
 const CONFINI = {
   ds:   { dentro: [],      pacchetti: ['lit'] },
   lib:  { dentro: [],      pacchetti: ['@supabase/supabase-js', 'node-forge', 'fast-xml-parser'] },
-  core: { dentro: ['lib'], pacchetti: null },
+  // core puo' scendere in lib/ (il motore) e in ds/ (i componenti). ds/ e' una
+  // foglia che non sa niente di Comanda: importarla e' scendere, non salire.
+  // Serve perche' le finestre di dialogo — conferma(), chiediTesto() — stanno
+  // in core/state.js e ora sono <cmd-dialogo>.
+  core: { dentro: ['lib', 'ds'], pacchetti: null },
 };
 
 // Debiti dichiarati: rotture note dei confini, con la ragione. Stare in questo

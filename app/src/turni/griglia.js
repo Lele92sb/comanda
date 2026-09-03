@@ -6,6 +6,7 @@ import { renderDashboard } from '../viste/dashboard.js';
 // l'altro mentre viene caricato — solo dentro funzioni, chiamate dopo. Stessa
 // coppia che griglia.js e dashboard.js formano da sempre due righe più su.
 import { renderCapienza } from './fabbisogno.js';
+import './foglio-turno-vista.ts';
 /* ============================= TURNI: griglia =============================
 
    UNA CELLA = UN SOLO BERSAGLIO.
@@ -226,14 +227,6 @@ function adattaTesti(tab){
 function apriSceltaTurno(staffId, day){
   const s = state.staff.find(x=> x.id === staffId);
   if(!s) return;
-  const back = document.createElement('div');
-  back.className = 'dialog-backdrop';
-  document.body.appendChild(back);
-
-  const chiudi = ()=>{ document.removeEventListener('keydown', tasti, true); back.remove(); };
-  const tasti = e => { if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); chiudi(); } };
-  document.addEventListener('keydown', tasti, true);
-  back.addEventListener('click', e=>{ if(e.target === back) chiudi(); });
 
   /* Una partita per tutti i servizi o una per ciascuno. È una scelta che si
      ricorda finché il foglio resta aperto, e parte da quello che la cella dice
@@ -242,63 +235,17 @@ function apriSceltaTurno(staffId, day){
      stessa stazione sarebbe una tassa su chi non fa spezzati misti. */
   let collegate = null;
 
-  disegnaFoglio();
+  const foglio = document.createElement('cmd-foglio-turno');
+  document.body.appendChild(foglio);
 
-  function disegnaFoglio(){
-    const cella = (state.shifts[staffId]||{})[day] || {code:'', stations:{}};
-    const lavora = WORKING_CODES().includes(cella.code);
-    const stazioni = stazioniPer(s);
-    const servizi = lavora ? (serviziDelCodice(cella.code, SHIFT_CONFIG()) || []) : [];
-    if(collegate === null){
-      collegate = servizi.every(sv=> stazioneDi(cella, sv) === stazioneDi(cella, servizi[0]));
-    }
-    // Un gruppo di scelte per servizio, o uno solo per tutta la giornata. Con un
-    // turno che copre un servizio solo l'aspetto è identico a prima.
-    const gruppi = (servizi.length > 1 && !collegate)
-      ? servizi.map(sv=> ({sv, etichetta: SERVICE_LABEL(sv), scelta: stazioneDi(cella, sv)}))
-      : [{sv:'*', etichetta:'Stazione', scelta: stazioneDi(cella, servizi[0])}];
-    const gruppoHtml = g => `
-      <label>${esc(g.etichetta)}</label>
-      <div class="chip-toggle" data-gruppo="stazione" data-servizio="${esc(g.sv)}">
-        <button type="button" data-station="" class="${!g.scelta?'on':''}">nessuna</button>
-        ${stazioni.map(st=>`<button type="button" data-station="${esc(st.id)}" class="${g.scelta===st.id?'on':''}">
-          <i class="ct-pallino" style="--pallino:${coloreStazione(st.id)}"></i>${esc(st.name)}</button>`).join('')}
-      </div>`;
-    back.innerHTML = `
-      <div class="dialog foglio-turno" role="dialog" aria-modal="true" aria-label="${esc(s.name+' — '+dataLunga(day))}">
-        <h3>${esc(s.name)}</h3>
-        <p class="contact m-0">${esc(dataLunga(day))}</p>
-        ${cella.extra ? `<p class="nota-foglio accento">Turno extra: assegnato oltre la quota di questa persona per coprire il fabbisogno.</p>` : ''}
-        ${senzaStazioni(s) ? `<p class="nota-foglio">Nessuna stazione assegnata: il generatore non le dà turni, perché un turno senza stazione non copre nessun servizio. Qui puoi assegnarglielo a mano.</p>` : ''}
-        <label>Turno</label>
-        <div class="chip-toggle" data-gruppo="turno">
-          ${Object.keys(TURNO_DEF()).map(code=>`
-            <button type="button" data-code="${esc(code)}" class="${cella.code===code?'on':''}">${esc(code ? CODE_LABEL(code) : SIGLA_VUOTA)}</button>`).join('')}
-        </div>
-        ${lavora ? (stazioni.length ? `
-          ${servizi.length > 1 ? `<div class="chip-toggle" data-gruppo="collega">
-            <button type="button" data-collega="1" class="${collegate?'on':''}">stessa partita tutto il giorno</button>
-            <button type="button" data-collega="0" class="${collegate?'':'on'}">una per servizio</button>
-          </div>` : ''}
-          ${gruppi.map(gruppoHtml).join('')}
-        ` : `<p class="nota-foglio">Nessuna stazione definita: si aggiungono nella scheda Stazioni.</p>`) : ''}
-        <div class="dialog-actions"><button class="btn ghost" data-chiudi>Chiudi</button></div>
-      </div>`;
+  const chiudi = ()=>{ foglio.remove(); };
+  foglio.addEventListener('foglio-chiudi', chiudi);
+  foglio.addEventListener('cmd-chiudi', chiudi);
 
-    back.querySelector('[data-chiudi]').addEventListener('click', chiudi);
-    back.querySelectorAll('[data-gruppo="turno"] button').forEach(b=>
-      b.addEventListener('click', ()=> scegliTurno(b.dataset.code)));
-    back.querySelectorAll('[data-gruppo="collega"] button').forEach(b=>
-      b.addEventListener('click', ()=>{ collegate = b.dataset.collega === '1'; disegnaFoglio(); }));
-    back.querySelectorAll('[data-gruppo="stazione"]').forEach(g=>
-      g.querySelectorAll('button').forEach(b=>
-        b.addEventListener('click', ()=> scegliStazione(g.dataset.servizio, b.dataset.station))));
-  }
-
-  function scegliTurno(code){
+  foglio.addEventListener('turno-scelto', e => {
     state.shifts[staffId] = state.shifts[staffId] || {};
     const cella = state.shifts[staffId][day] || {code:'', stations:{}, extra:false};
-    cella.code = code;
+    cella.code = e.detail.codice;
     // Cambiando il turno cambia cosa copre, e la normalizzazione fa il resto: i
     // servizi che il nuovo codice non copre perdono la chiave, quelli nuovi
     // ereditano la stazione già decisa — passando da P a SP il pranzo non si
@@ -306,16 +253,52 @@ function apriSceltaTurno(staffId, day){
     // senza stazione: sarebbe un dato che non vuol dire niente.
     state.shifts[staffId][day] = normalizzaCella(cella, SHIFT_CONFIG());
     save('shifts');
-    disegnaFoglio(); aggiornaTutto();
-  }
-  function scegliStazione(sv, stationId){
+    aggiorna(); aggiornaTutto();
+  });
+
+  foglio.addEventListener('stazione-scelta', e => {
     const giorni = state.shifts[staffId] = state.shifts[staffId] || {};
     const cella = giorni[day] = giorni[day] || {code:'', stations:{}};
-    const quali = (sv === '*') ? (serviziDelCodice(cella.code, SHIFT_CONFIG()) || []) : [sv];
-    quali.forEach(x=> assegnaStazione(cella, x, stationId, SHIFT_CONFIG()));
+    const quali = (e.detail.servizio === '*')
+      ? (serviziDelCodice(cella.code, SHIFT_CONFIG()) || [])
+      : [e.detail.servizio];
+    quali.forEach(x=> assegnaStazione(cella, x, e.detail.stazioneId, SHIFT_CONFIG()));
     save('shifts');
-    disegnaFoglio(); aggiornaTutto();
+    aggiorna(); aggiornaTutto();
+  });
+
+  foglio.addEventListener('collega', e => { collegate = e.detail.collegate; aggiorna(); });
+
+  function aggiorna(){
+    const cella = (state.shifts[staffId]||{})[day] || {code:'', stations:{}};
+    const lavora = WORKING_CODES().includes(cella.code);
+    const servizi = lavora ? (serviziDelCodice(cella.code, SHIFT_CONFIG()) || []) : [];
+    if(collegate === null){
+      collegate = servizi.every(sv=> stazioneDi(cella, sv) === stazioneDi(cella, servizi[0]));
+    }
+    // Un gruppo di scelte per servizio, o uno solo per tutta la giornata. Con un
+    // turno che copre un servizio solo l'aspetto è identico a prima.
+    const gruppi = (servizi.length > 1 && !collegate)
+      ? servizi.map(sv=> ({ servizio: sv, etichetta: SERVICE_LABEL(sv), scelta: stazioneDi(cella, sv) || '' }))
+      : [{ servizio: '*', etichetta: 'Partita', scelta: stazioneDi(cella, servizi[0]) || '' }];
+
+    foglio.persona = s.name;
+    foglio.quando = dataLunga(day);
+    foglio.turni = Object.keys(TURNO_DEF()).map(code => ({
+      codice: code, etichetta: code ? CODE_LABEL(code) : SIGLA_VUOTA,
+    }));
+    foglio.scelto = cella.code || '';
+    foglio.stazioni = stazioniPer(s).map(st => ({ id: st.id, nome: st.name, colore: coloreStazione(st.id) }));
+    foglio.gruppi = gruppi;
+    foglio.lavora = lavora;
+    foglio.mostraCollega = servizi.length > 1;
+    foglio.collegate = collegate;
+    foglio.extra = Boolean(cella.extra);
+    foglio.senzaStazioni = senzaStazioni(s);
+    foglio.aperto = true;
   }
+
+  aggiorna();
 }
 
 function aggiornaTutto(){ renderTurni(); renderOreExtra(); renderDashboard(); }

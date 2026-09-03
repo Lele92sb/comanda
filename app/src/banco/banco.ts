@@ -72,6 +72,8 @@ import '../viste/benessere-vista.ts';
 import type { OreSettimana } from '../viste/benessere-vista.ts';
 import '../ricettario/ricette-vista.ts';
 import type { PiattoVista, SubRicettaVista } from '../ricettario/ricette-vista.ts';
+import '../ds/dialogo.ts';
+import '../turni/foglio-turno-vista.ts';
 
 interface Caso {
   id: string;
@@ -555,6 +557,50 @@ const GRUPPI: Gruppo[] = [
         id: 'piatti-vuoti',
         titolo: 'Prima che ce ne sia uno',
         contenuto: () => html`<cmd-piatti .piatti=${[]}></cmd-piatti>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-dialogo e cmd-foglio-turno',
+    casi: [
+      {
+        id: 'dialogo',
+        titolo: 'La domanda che aspetta una risposta',
+        nota: 'Costruita sull’elemento <dialog> nativo: il fuoco resta dentro, il resto della pagina diventa inerte per i lettori di schermo, Esc chiude e il fuoco torna dov’era. Il riquadro fatto a mano di prima aveva solo Esc, scritto a mano.',
+        contenuto: () => html`
+          <cmd-bottone variante="pericolo"
+                       @click=${(e: Event) => {
+                         const d = (e.target as HTMLElement).nextElementSibling as HTMLElement & { aperto: boolean };
+                         d.aperto = true;
+                       }}>Prova: elimina una partita</cmd-bottone>
+          <cmd-dialogo titolo="Eliminare la partita «Lavaggio»?">
+            <p style="margin:0 0 12px;font-size:13.5px;line-height:1.55">Verrà tolta da 2 tipi di turno (SP, P).
+              Verranno perse 4 righe di fabbisogno. I turni già assegnati nella griglia restano come sono.</p>
+            <cmd-bottone slot="azioni" variante="fantasma"
+                         @click=${(e: Event) => { ((e.target as HTMLElement).closest('cmd-dialogo') as HTMLElement & { aperto: boolean }).aperto = false; }}>Annulla</cmd-bottone>
+            <cmd-bottone slot="azioni" variante="pericolo"
+                         @click=${(e: Event) => { ((e.target as HTMLElement).closest('cmd-dialogo') as HTMLElement & { aperto: boolean }).aperto = false; }}>Elimina</cmd-bottone>
+          </cmd-dialogo>`,
+      },
+      {
+        id: 'foglio-turno',
+        titolo: 'Il foglio che si apre toccando una cella',
+        nota: 'E’ il gesto piu’ frequente dell’app: correggere a mano un turno che il generatore ha messo. Nella cella ci stanno una sigla e un pallino; qui c’e’ la larghezza per spiegare le scelte per esteso.',
+        contenuto: () => html`
+          <cmd-bottone @click=${(e: Event) => {
+            const f = (e.target as HTMLElement).nextElementSibling as HTMLElement & { aperto: boolean };
+            f.aperto = true;
+          }}>Apri il foglio</cmd-bottone>
+          <cmd-foglio-turno
+            persona="Lorenc" quando="giovedì 3 settembre"
+            .turni=${[{ codice: '', etichetta: '—' }, { codice: 'P', etichetta: 'P · Pranzo' },
+                      { codice: 'SP', etichetta: 'SP · Spezzato' }, { codice: 'R', etichetta: 'R · Riposo' }]}
+            scelto="SP"
+            .stazioni=${PARTITE_VISTA.map(p => ({ id: p.id, nome: p.nome, colore: p.colore }))}
+            .gruppi=${[{ servizio: 'pranzo', etichetta: 'Pranzo', scelta: 'pass' },
+                       { servizio: 'cena', etichetta: 'Cena', scelta: 'primi' }]}
+            ?lavora=${true} ?mostraCollega=${true} ?collegate=${false} ?extra=${true}
+          ></cmd-foglio-turno>`,
       },
     ],
   },

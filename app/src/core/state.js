@@ -1,4 +1,7 @@
 import { Cloud, storageGet, storageSet } from '../lib/cloud.js';
+import '../ds/bottone.ts';
+import '../ds/campo.ts';
+import '../ds/dialogo.ts';
 import { DAYS, DEFAULT_SERVICES, DEFAULT_SHIFT_TYPES, buildShiftConfig, monthDates, normalizzaCella, parseISO, weekDates } from '../lib/logic.js';
 /* ============================= STATE ============================= */
 export const STORE_KEYS = ['ingredients','subrecipes','recipes','menus','staff','shifts','knowledge','chatHistory','wellbeing','suppliers','stations','staffingNeeds','services','shiftTypes','importedInvoices','invoiceHistory','publishedShifts','eccedenzaOre'];
@@ -175,37 +178,67 @@ export function migrateData(){
    ============================================================================ */
 function apriDialogo({titolo, testo, campo, valore, conferma, annulla, pericolo}){
   return new Promise(resolve=>{
-    const back = document.createElement('div');
-    back.className = 'dialog-backdrop';
-    back.innerHTML = `
-      <div class="dialog" role="dialog" aria-modal="true" aria-label="${esc(titolo)}">
-        <h3>${esc(titolo)}</h3>
-        ${testo ? `<p>${esc(testo)}</p>` : ''}
-        ${campo ? `<label>${esc(campo)}</label><input type="text" id="dlg-input" value="${esc(valore||'')}">` : ''}
-        <div class="dialog-actions">
-          <button class="btn ghost" data-no>${esc(annulla || 'Annulla')}</button>
-          <button class="btn" data-yes ${pericolo?'style="background:var(--alert);color:var(--paper);"':''}>${esc(conferma || 'Conferma')}</button>
-        </div>
-      </div>`;
-    document.body.appendChild(back);
-    const input = back.querySelector('#dlg-input');
-    if(input){ input.focus(); input.select(); }
-    else back.querySelector('[data-yes]').focus();
+    const dlg = document.createElement('cmd-dialogo');
+    dlg.titolo = titolo;
 
-    const chiudi = esito => { document.removeEventListener('keydown', tasti, true); back.remove(); resolve(esito); };
-    const conferma_ = () => chiudi(campo ? (input.value) : true);
-    // Esc annulla, Invio conferma: le stesse abitudini delle finestre di sistema.
+    if(testo){
+      const p = document.createElement('p');
+      p.textContent = testo;
+      p.style.cssText = 'margin:0 0 var(--space-3);font-size:var(--text-md);line-height:1.55;white-space:pre-line;';
+      dlg.appendChild(p);
+    }
+
+    let input = null;
+    if(campo){
+      const c = document.createElement('cmd-campo');
+      c.etichetta = campo;
+      input = document.createElement('input');
+      input.type = 'text';
+      input.value = valore || '';
+      c.appendChild(input);
+      dlg.appendChild(c);
+    }
+
+    const no = document.createElement('cmd-bottone');
+    no.slot = 'azioni'; no.variante = 'fantasma';
+    no.textContent = annulla || 'Annulla';
+
+    const si = document.createElement('cmd-bottone');
+    si.slot = 'azioni';
+    si.variante = pericolo ? 'pericolo' : 'principale';
+    si.textContent = conferma || 'Conferma';
+
+    dlg.append(no, si);
+    document.body.appendChild(dlg);
+
+    const chiudi = esito => {
+      document.removeEventListener('keydown', tasti, true);
+      dlg.remove();
+      resolve(esito);
+    };
+    const annullato = () => chiudi(campo ? null : false);
+    const confermato = () => chiudi(campo ? input.value : true);
+
+    // Invio conferma: e' l'abitudine delle finestre di sistema. Esc invece non
+    // serve piu' scriverlo — lo fa <dialog> da solo, ed emette cmd-chiudi.
     const tasti = e => {
-      if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); chiudi(campo ? null : false); }
-      if(e.key === 'Enter' && (campo || document.activeElement === back.querySelector('[data-yes]'))){
-        e.preventDefault(); e.stopPropagation(); conferma_();
-      }
+      if(e.key === 'Enter' && campo){ e.preventDefault(); e.stopPropagation(); confermato(); }
     };
     document.addEventListener('keydown', tasti, true);
-    back.querySelector('[data-yes]').addEventListener('click', conferma_);
-    back.querySelector('[data-no]').addEventListener('click', ()=> chiudi(campo ? null : false));
-    // Un clic fuori dal riquadro equivale ad annullare.
-    back.addEventListener('click', e=>{ if(e.target === back) chiudi(campo ? null : false); });
+
+    dlg.addEventListener('cmd-chiudi', annullato);
+    no.addEventListener('click', annullato);
+    si.addEventListener('click', confermato);
+
+    dlg.aperto = true;
+    // Il fuoco dopo l'apertura: nel campo se c'e', altrimenti sul pulsante che
+    // conferma. showModal() da' il fuoco al primo elemento utile, ma il primo
+    // in ordine di DOM e' «Annulla» — e proporre per primo di rinunciare e'
+    // il contrario di quello che serve.
+    dlg.updateComplete.then(()=>{
+      if(input){ input.focus(); input.select(); }
+      else si.focus();
+    });
   });
 }
 // Ritorna true/false. `pericolo` colora di rosso il pulsante che conferma.
