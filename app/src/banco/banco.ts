@@ -49,6 +49,10 @@ import '../viste/persona-vista.ts';
 import type { PartitaScelta, PersonaModifica } from '../viste/persona-vista.ts';
 import '../turni/quote-vista.ts';
 import type { CodiceTurno, QuotaPersona } from '../turni/quote-vista.ts';
+import '../turni/fabbisogno-vista.ts';
+import type { ServizioFabbisogno } from '../turni/fabbisogno-vista.ts';
+import '../turni/capienza-vista.ts';
+import type { Conto } from '../turni/capienza-vista.ts';
 
 interface Caso {
   id: string;
@@ -140,6 +144,31 @@ const QUOTE: QuotaPersona[] = [
   { id: 'q3', nome: 'Samad', stazioni: [],
     gruppi: [ { conteggio: 2, codici: ['R'] }, { conteggio: 7, codici: ['SP'] } ] },
 ];
+
+const SERVIZI: ServizioFabbisogno[] = [
+  { id: 'pranzo', nome: 'Pranzo', righe: [
+    { stazioneId: 'pass', conteggio: 1 }, { stazioneId: 'antipasti', conteggio: 1 },
+    { stazioneId: 'primi', conteggio: 1 }, { stazioneId: 'lavaggio', conteggio: 2 } ] },
+  { id: 'cena', nome: 'Cena', righe: [] },
+];
+
+/* Un conto che NON torna: due posti scoperti al lavaggio e una partita che
+   nessuno sa fare. E' lo stato che conta — un conto in pari non ha niente da
+   dire e non mette alla prova ne' i colori ne' le barre. */
+const CONTO: Conto = {
+  periodo: '1 – 7 set', giorni: 7, domanda: 98, coperti: 96, extra: 2,
+  senzaNessuno: ['Pasticceria'],
+  righe: [
+    { nome: 'Pass', colore: '#b8873f', domanda: 14, coperti: 14, mancanti: 0,
+      rimbalzo: 0, qualificati: 4, donatori: [], servizi: 'Pranzo 1 · Cena 1' },
+    { nome: 'Insalate', colore: '#a48ad6', domanda: 14, coperti: 14, mancanti: 0,
+      rimbalzo: 0, qualificati: 2, donatori: [], servizi: 'Pranzo 1 · Cena 1' },
+    { nome: 'Lavaggio', colore: '#d67fa8', domanda: 28, coperti: 26, mancanti: 2,
+      rimbalzo: 6, qualificati: 4, donatori: ['Insalate'], servizi: 'Pranzo 2 · Cena 2' },
+    { nome: 'Pasticceria', colore: '#7bb87f', domanda: 7, coperti: 0, mancanti: 7,
+      rimbalzo: 0, qualificati: 0, donatori: [], servizi: 'Cena 1' },
+  ],
+};
 
 const GRUPPI: Gruppo[] = [
   {
@@ -358,6 +387,42 @@ const GRUPPI: Gruppo[] = [
         contenuto: () => html`
           <cmd-scheda-persona .persona=${PERSONA_NUOVA} .stazioni=${[]}
                               .ruoli=${RUOLI} .membri=${[]} nuova></cmd-scheda-persona>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-capienza',
+    casi: [
+      {
+        id: 'capienza',
+        titolo: 'Il conto, chiuso e aperto',
+        nota: 'La barra non e’ decorazione: e’ l’unica cosa che si vede senza leggere. Il pieno verde e’ quello che le quote coprono, il fondo rosso e’ il buco. Al primo giro era il contrario, e si leggeva «rosso = tanto coperto».',
+        contenuto: () => html`
+          <cmd-capienza .conto=${CONTO}></cmd-capienza>
+          <cmd-capienza .conto=${CONTO} .aperto=${true}></cmd-capienza>`,
+      },
+      {
+        id: 'capienza-vuota',
+        titolo: 'Senza fabbisogno impostato: sparisce',
+        nota: 'Un riquadro di zeri occuperebbe lo schermo per dire «non hai ancora deciso niente».',
+        contenuto: () => html`<cmd-capienza .conto=${null}></cmd-capienza>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-fabbisogno — una schermata intera',
+    casi: [
+      {
+        id: 'fabbisogno',
+        titolo: 'Un servizio pieno e uno vuoto',
+        contenuto: () => html`
+          <cmd-fabbisogno .servizi=${SERVIZI} .stazioni=${STAZIONI_SCELTA}></cmd-fabbisogno>`,
+      },
+      {
+        id: 'fabbisogno-senza-partite',
+        titolo: 'Prima che esistano le partite',
+        contenuto: () => html`
+          <cmd-fabbisogno .servizi=${SERVIZI} .stazioni=${[]}></cmd-fabbisogno>`,
       },
     ],
   },
