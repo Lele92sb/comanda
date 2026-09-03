@@ -1,7 +1,7 @@
 import { ALLERGENS, esc, save, state, toast, uid } from '../core/state.js';
 import { dishTotalCost, itemCost, itemLabel } from './costi.js';
 import { resizeImageToDataUrl } from './foto-ricetta.js';
-import { readItemRows, renderItemRows } from './righe.js';
+import { montaRighe } from './righe.js';
 /* ============================= PIATTI (dishes) ============================= */
 export function renderDishes(){
   const el = document.getElementById('dish-list');
@@ -73,7 +73,6 @@ export function openDishForm(existing, prefill){
       <div class="chip-toggle" id="d-allergens">${ALLERGENS.map(a=>`<button type="button" data-a="${a}" class="${(d.allergens||[]).includes(a)?'on':''}">${a}</button>`).join('')}</div>
       <label>Componenti (ingredienti e/o sub-ricette — digita per cercare)</label>
       <div id="d-items"></div>
-      <button class="btn ghost small mt-1" id="d-add-item" type="button">+ Componente</button>
       <label>Prezzo di vendita effettivo (€)</label>
       <input type="number" step="0.01" id="d-price" value="${d.priceActual}">
       <p class="small-note" id="d-preview">—</p>
@@ -97,11 +96,11 @@ export function openDishForm(existing, prefill){
     document.getElementById('d-photo-preview').innerHTML = `<img src="${photoData}" class="thumb">`;
   });
   const itemsContainer = document.getElementById('d-items');
-  renderItemRows(itemsContainer, items, null);
-  document.getElementById('d-add-item').addEventListener('click', ()=>{ items.push({kind:'custom', name:'', qty:'', unit:'g', cost:''}); renderItemRows(itemsContainer, items, null); updateDPreview(); });
+  // Vedi la nota nelle sub-ricette: `items` si aggiorna sul posto, e non c'e'
+  // piu' nessun DOM da rileggere prima di salvare.
+  montaRighe(itemsContainer, items, { alCambio: updateDPreview });
   document.querySelectorAll('#d-allergens button').forEach(b=> b.addEventListener('click', ()=> b.classList.toggle('on')));
   function updateDPreview(){
-    readItemRows(itemsContainer, items);
     const cost = items.reduce((s,it)=>s+itemCost(it),0);
     const target = parseFloat(document.getElementById('d-target').value)||30;
     const sugg = target>0? cost/(target/100) : 0;
@@ -109,13 +108,10 @@ export function openDishForm(existing, prefill){
     const realFc = priceActual>0 ? (cost/priceActual*100) : null;
     document.getElementById('d-preview').textContent = `Costo materia prima: € ${cost.toFixed(2)} · Prezzo suggerito: € ${sugg.toFixed(2)}${realFc!==null?` · Food cost reale: ${realFc.toFixed(1)}%`:''}`;
   }
-  itemsContainer.addEventListener('input', updateDPreview);
-  itemsContainer.addEventListener('change', ()=> setTimeout(updateDPreview,0));
   ['d-target','d-price'].forEach(id=> document.getElementById(id).addEventListener('input', updateDPreview));
   updateDPreview();
   document.getElementById('d-cancel').addEventListener('click', ()=> holder.innerHTML='');
   document.getElementById('d-save').addEventListener('click', ()=>{
-    readItemRows(itemsContainer, items);
     const name = document.getElementById('d-name').value.trim();
     if(!name){ toast('Serve almeno il nome del piatto'); return; }
     const newDish = {

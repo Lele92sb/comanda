@@ -1,6 +1,6 @@
 import { esc, save, state, toast, uid } from '../core/state.js';
 import { itemCost, itemLabel, subrecipeCost, subrecipeRawWeightKg } from './costi.js';
-import { readItemRows, renderItemRows } from './righe.js';
+import { montaRighe } from './righe.js';
 /* ============================= SUB-RICETTE ============================= */
 export function renderSubrecipes(){
   const el = document.getElementById('subr-list');
@@ -46,7 +46,6 @@ export function openSubForm(existing, prefill){
       <input type="text" id="sb-name" value="${esc(sub.name)}">
       <label>Componenti</label>
       <div id="sb-items"></div>
-      <button class="btn ghost small mt-1" id="sb-add-item" type="button">+ Componente</button>
       <div class="grid2 mt-3" >
         <div><label>Resa finale (quantità ottenuta dopo cottura/lavorazione)</label><input type="number" step="0.001" id="sb-yieldqty" value="${sub.yieldQty}"></div>
         <div><label>Unità resa</label><select id="sb-yieldunit"><option value="kg" ${sub.yieldUnit==='kg'?'selected':''}>kg</option><option value="l" ${sub.yieldUnit==='l'?'selected':''}>l</option><option value="pz" ${sub.yieldUnit==='pz'?'selected':''}>pz</option></select></div>
@@ -61,23 +60,22 @@ export function openSubForm(existing, prefill){
     </div>
   `;
   const itemsContainer = document.getElementById('sb-items');
-  renderItemRows(itemsContainer, items, sub.id);
-  document.getElementById('sb-add-item').addEventListener('click', ()=>{ items.push({kind:'custom', name:'', qty:'', unit:'g', cost:''}); renderItemRows(itemsContainer, items, sub.id); updateSbPreview(); });
+  // Le righe si tengono aggiornate da sole: `items` viene modificato sul posto
+  // e `alCambio` rifa' il conto. Prima bisognava ricordarsi di rileggere il DOM
+  // (readItemRows) prima di ogni calcolo e prima di salvare — ed era il passo
+  // che si poteva dimenticare.
+  montaRighe(itemsContainer, items, { escludiSubId: sub.id, alCambio: updateSbPreview });
   function updateSbPreview(){
-    readItemRows(itemsContainer, items);
     const totalCost = items.reduce((s,it)=>s+itemCost(it),0);
     const yq = parseFloat(document.getElementById('sb-yieldqty').value)||0;
     const cpu = yq>0? totalCost/yq : 0;
     document.getElementById('sb-preview').textContent = `Costo totale componenti: € ${totalCost.toFixed(2)} · Costo per ${document.getElementById('sb-yieldunit').value}: € ${cpu.toFixed(2)}`;
   }
-  itemsContainer.addEventListener('input', updateSbPreview);
-  itemsContainer.addEventListener('change', ()=> setTimeout(updateSbPreview,0));
   document.getElementById('sb-yieldqty').addEventListener('input', updateSbPreview);
   document.getElementById('sb-yieldunit').addEventListener('change', updateSbPreview);
   updateSbPreview();
   document.getElementById('sb-cancel').addEventListener('click', ()=> holder.innerHTML='');
   document.getElementById('sb-save').addEventListener('click', ()=>{
-    readItemRows(itemsContainer, items);
     const name = document.getElementById('sb-name').value.trim();
     if(!name){ toast('Serve il nome della sub-ricetta'); return; }
     const newSub = { id:sub.id, name, items: items.filter(it=> it.kind!=='custom' || it.name),

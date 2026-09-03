@@ -61,6 +61,8 @@ import '../ricettario/ingredienti-vista.ts';
 import type { IngredienteVista } from '../ricettario/ingredienti-vista.ts';
 import '../ricettario/fornitori-vista.ts';
 import type { FornitoreVista } from '../ricettario/fornitori-vista.ts';
+import '../ricettario/righe-vista.ts';
+import type { RigaRicetta } from '../ricettario/righe-vista.ts';
 
 interface Caso {
   id: string;
@@ -221,6 +223,26 @@ const INGREDIENTI_SCELTA: Opzione[] = [
   'Cipolla rossa', 'Farina 00', 'Guanciale', 'Olio EVO', 'Parmigiano 36 mesi',
   'Pomodoro San Marzano', 'Riso Carnaroli', 'Sale di Cervia',
 ].map((n, i) => ({ valore: 'i' + i, etichetta: n }));
+
+/* Le tre forme che puo' avere una riga di ricetta, piu' quella sbagliata:
+   un ingrediente scelto, una sub-ricetta, una voce libera col suo prezzo, e
+   una riga a cui non e' stata data nessuna voce — che nel conto vale zero e
+   deve dirlo. */
+const RIGHE: RigaRicetta[] = [
+  { chiave: 'r1', tipo: 'ingredient', refId: 'i0', nome: '', qta: '500', unita: 'g',
+    costoUnitario: '', costoRiga: 7.66, unitaPossibili: ['g', 'kg'] },
+  { chiave: 'r2', tipo: 'sub', refId: 's1', nome: '', qta: '0.2', unita: 'l',
+    costoUnitario: '', costoRiga: 2.4, unitaPossibili: ['ml', 'l'] },
+  { chiave: 'r3', tipo: 'custom', nome: 'Erbe del giardino', refId: '', qta: '1', unita: 'pz',
+    costoUnitario: '0.80', costoRiga: 0.8, unitaPossibili: ['g','kg','ml','l','pz','cucchiaio'] },
+  { chiave: 'r4', tipo: 'ingredient', refId: '', nome: '', qta: '', unita: 'g',
+    costoUnitario: '', costoRiga: 0, unitaPossibili: ['g', 'kg'] },
+];
+
+const SOTTORICETTE_SCELTA: Opzione[] = [
+  { valore: 's1', etichetta: 'Fondo di vitello' },
+  { valore: 's2', etichetta: 'Salsa verde' },
+];
 
 const GRUPPI: Gruppo[] = [
   {
@@ -451,6 +473,26 @@ const GRUPPI: Gruppo[] = [
         contenuto: () => html`
           <cmd-scheda-persona .persona=${PERSONA_NUOVA} .stazioni=${[]}
                               .ruoli=${RUOLI} .membri=${[]} nuova></cmd-scheda-persona>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-righe-ricetta — il pezzo più riusato del ricettario',
+    casi: [
+      {
+        id: 'righe-ricetta',
+        titolo: 'Ingrediente, sub-ricetta, voce libera — e una riga senza voce',
+        nota: 'La riga senza voce lo dice: nel conto vale zero, e prima non c’era niente che lo segnalasse. Il selettore ora è una tendina cercabile invece del <datalist> nativo, quindi una riga che punta a niente si vede subito.',
+        contenuto: () => html`
+          <cmd-righe-ricetta .righe=${RIGHE} .ingredienti=${INGREDIENTI_SCELTA}
+                             .sottoricette=${SOTTORICETTE_SCELTA}></cmd-righe-ricetta>`,
+      },
+      {
+        id: 'righe-ricetta-vuota',
+        titolo: 'Una ricetta appena aperta',
+        contenuto: () => html`
+          <cmd-righe-ricetta .righe=${[]} .ingredienti=${INGREDIENTI_SCELTA}
+                             .sottoricette=${SOTTORICETTE_SCELTA}></cmd-righe-ricetta>`,
       },
     ],
   },
