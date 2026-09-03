@@ -47,6 +47,8 @@ import '../viste/brigata-vista.ts';
 import type { PersonaVista } from '../viste/brigata-vista.ts';
 import '../viste/persona-vista.ts';
 import type { PartitaScelta, PersonaModifica } from '../viste/persona-vista.ts';
+import '../turni/quote-vista.ts';
+import type { CodiceTurno, QuotaPersona } from '../turni/quote-vista.ts';
 
 interface Caso {
   id: string;
@@ -118,6 +120,26 @@ const PERSONA_NUOVA: PersonaModifica = {
   id: 'nuova', nome: '', ruolo: 'Cuoco', ore: '',
   telefono: '', email: '', partite: [], fuoriExtra: false, accountId: '',
 };
+
+const CODICI: CodiceTurno[] = [
+  { codice: 'P', etichetta: 'Pranzo' },
+  { codice: 'S', etichetta: 'Cena' },
+  { codice: 'SP', etichetta: 'Spezzato' },
+  { codice: 'P1', etichetta: 'Pranzo01' },
+  { codice: 'R', etichetta: 'Riposo' },
+];
+
+/* Tre quote: una giusta, una che non arriva a sette e una che sfora. Il totale
+   accanto al nome e' l'unico modo di accorgersene senza contare a mano. */
+const QUOTE: QuotaPersona[] = [
+  { id: 'q1', nome: 'Lorenc', stazioni: ['pass', 'primi'],
+    gruppi: [ { conteggio: 2, codici: ['R'] }, { conteggio: 3, codici: ['SP'] },
+              { conteggio: 2, codici: ['S', 'P'] } ] },
+  { id: 'q2', nome: 'Carlos', stazioni: ['pass'],
+    gruppi: [ { conteggio: 3, codici: ['R'] }, { conteggio: 2, codici: ['P1'] } ] },
+  { id: 'q3', nome: 'Samad', stazioni: [],
+    gruppi: [ { conteggio: 2, codici: ['R'] }, { conteggio: 7, codici: ['SP'] } ] },
+];
 
 const GRUPPI: Gruppo[] = [
   {
@@ -336,6 +358,23 @@ const GRUPPI: Gruppo[] = [
         contenuto: () => html`
           <cmd-scheda-persona .persona=${PERSONA_NUOVA} .stazioni=${[]}
                               .ruoli=${RUOLI} .membri=${[]} nuova></cmd-scheda-persona>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-quote — una schermata intera',
+    casi: [
+      {
+        id: 'quote-piene',
+        titolo: 'Una giusta, una corta, una che sfora',
+        nota: 'Il totale accanto al nome si accende: 7/7 verde, tutto il resto rosso. Prima bisognava sommare a mente tre riquadri per accorgersi di aver scritto 8.',
+        contenuto: () => html`
+          <cmd-quote .persone=${QUOTE} .stazioni=${STAZIONI_SCELTA} .codici=${CODICI}></cmd-quote>`,
+      },
+      {
+        id: 'quote-vuote',
+        titolo: 'Prima che ci sia una brigata',
+        contenuto: () => html`<cmd-quote .persone=${[]} .stazioni=${[]} .codici=${CODICI}></cmd-quote>`,
       },
     ],
   },

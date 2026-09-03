@@ -1,79 +1,86 @@
-import { CODE_LABEL, WORKING_CODES, esc, save, state } from '../core/state.js';
+import { CODE_LABEL, WORKING_CODES, save, state } from '../core/state.js';
+import { Cloud } from '../lib/cloud.js';
 import { REST_CODE } from '../lib/logic.js';
-/* ============================= TURNI: quote settimanali per persona ============================= */
+import './quote-vista.ts';
+/* ============================= TURNI: quote settimanali per persona =========
+
+   QUESTO FILE E' SOLO IL COLLANTE. Il disegno sta in quote-vista.ts.
+   ========================================================================== */
+
 // Codici selezionabili in una quota: i turni di lavoro configurati, più il Riposo.
 const QUOTA_CODES = () => WORKING_CODES().concat([REST_CODE]);
+
+function daDisegnare(){
+  return state.staff.map(s => ({
+    id: s.id,
+    nome: s.name,
+    stazioni: (s.stations || []).slice(),
+    gruppi: (s.weeklyQuota || []).map(g => ({
+      conteggio: parseInt(g.count, 10) || 0,
+      codici: (g.codes || []).slice(),
+    })),
+  }));
+}
+
+let vista = null;
+
 export function renderQuotas(){
   const el = document.getElementById('quota-panel');
-  if(!state.staff.length){ el.innerHTML = `<div class="empty">Aggiungi prima persone alla brigata.</div>`; return; }
-  el.innerHTML = state.staff.map(s=>{
-    const quota = s.weeklyQuota||[];
-    const total = quota.reduce((sum,g)=>sum+(parseInt(g.count)||0),0);
-    return `
-    <div class="panel">
-      <h3>${esc(s.name)} <span class="small-note inline" >— totale ${total}/7</span></h3>
-      <label>Stazioni qualificate</label>
-      <div class="chip-toggle staff-station-chips" data-staff="${s.id}">
-        ${state.stations.map(st=>`<button type="button" data-st="${st.id}" class="${(s.stations||[]).includes(st.id)?'on':''}">${esc(st.name)}</button>`).join('') || '<span class="small-note">Nessuna stazione creata</span>'}
-      </div>
-      <label>Gruppi di turni</label>
-      <div id="quota-groups-${s.id}">
-        ${quota.map((g,i)=>`
-          <div class="panel subpanel" >
-            <div class="grid2">
-              <input type="number" class="q-count" data-staff="${s.id}" data-i="${i}" value="${g.count}" min="0" placeholder="n. turni">
-              <button type="button" class="q-rm" data-staff="${s.id}" data-i="${i}">✕ Rimuovi gruppo</button>
-            </div>
-            <div class="chip-toggle q-codes" data-staff="${s.id}" data-i="${i}">
-              ${QUOTA_CODES().map(c=>`<button type="button" data-c="${esc(c)}" title="${esc(CODE_LABEL(c))}" class="${(g.codes||[]).includes(c)?'on':''}">${esc(c)}</button>`).join('')}
-            </div>
-            <p class="small-note mt-1" >Se selezioni più codici (es. P e S), ad ogni turno di questo gruppo verrà scelto casualmente uno dei due.</p>
-          </div>`).join('')}
-      </div>
-      <button class="btn ghost small mt-2" data-addgroup="${s.id}" type="button">+ Gruppo di turni</button>
-    </div>`;
-  }).join('');
+  if(!el) return;
+  if(!vista || !vista.isConnected){
+    vista = document.createElement('cmd-quote');
+    collega(vista);
+    el.replaceChildren(vista);
+  }
+  vista.persone = daDisegnare();
+  vista.stazioni = state.stations.map(st => ({ id: st.id, nome: st.name }));
+  vista.codici = QUOTA_CODES().map(c => ({ codice: c, etichetta: CODE_LABEL(c) }));
+  vista.soloLettura = Cloud.enabled && !Cloud.canWrite();
+}
 
-  el.querySelectorAll('.staff-station-chips button').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      const staffId = b.closest('.staff-station-chips').dataset.staff;
-      const s = state.staff.find(x=>x.id===staffId);
-      s.stations = s.stations||[];
-      const stId = b.dataset.st;
-      if(s.stations.includes(stId)) s.stations = s.stations.filter(x=>x!==stId); else s.stations.push(stId);
-      save('staff'); b.classList.toggle('on');
-    });
+function collega(v){
+  const persona = id => state.staff.find(x => x.id === id);
+
+  v.addEventListener('quota-stazione', e => {
+    const s = persona(e.detail.personaId);
+    if(!s) return;
+    const attuali = s.stations || [];
+    s.stations = e.detail.acceso
+      ? attuali.concat(e.detail.stazioneId).filter((x,i,a)=> a.indexOf(x)===i)
+      : attuali.filter(x => x !== e.detail.stazioneId);
+    save('staff'); renderQuotas();
   });
-  el.querySelectorAll('[data-addgroup]').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      const s = state.staff.find(x=>x.id===b.dataset.addgroup);
-      s.weeklyQuota = s.weeklyQuota||[]; s.weeklyQuota.push({count:1, codes:['R']});
-      save('staff'); renderQuotas();
-    });
+
+  v.addEventListener('quota-gruppo-aggiungi', e => {
+    const s = persona(e.detail.personaId);
+    if(!s) return;
+    s.weeklyQuota = (s.weeklyQuota || []).concat({ count: 1, codes: [REST_CODE] });
+    save('staff'); renderQuotas();
   });
-  el.querySelectorAll('.q-count').forEach(inp=>{
-    inp.addEventListener('input', ()=>{
-      const s = state.staff.find(x=>x.id===inp.dataset.staff);
-      s.weeklyQuota[inp.dataset.i].count = parseInt(inp.value)||0;
-      save('staff');
-    });
+
+  v.addEventListener('quota-gruppo-rimuovi', e => {
+    const s = persona(e.detail.personaId);
+    if(!s || !s.weeklyQuota) return;
+    s.weeklyQuota.splice(e.detail.indice, 1);
+    save('staff'); renderQuotas();
   });
-  el.querySelectorAll('.q-rm').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      const s = state.staff.find(x=>x.id===b.dataset.staff);
-      s.weeklyQuota.splice(parseInt(b.dataset.i),1);
-      save('staff'); renderQuotas();
-    });
+
+  v.addEventListener('quota-conteggio', e => {
+    const s = persona(e.detail.personaId);
+    const g = s && s.weeklyQuota && s.weeklyQuota[e.detail.indice];
+    if(!g) return;
+    g.count = e.detail.valore;
+    save('staff'); renderQuotas();
   });
-  el.querySelectorAll('.q-codes button').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      const group = b.closest('.q-codes');
-      const s = state.staff.find(x=>x.id===group.dataset.staff);
-      const g = s.weeklyQuota[group.dataset.i];
-      g.codes = g.codes||[];
-      const c = b.dataset.c;
-      if(g.codes.includes(c)) g.codes = g.codes.filter(x=>x!==c); else g.codes.push(c);
-      save('staff'); b.classList.toggle('on');
-    });
+
+  v.addEventListener('quota-codice', e => {
+    const s = persona(e.detail.personaId);
+    const g = s && s.weeklyQuota && s.weeklyQuota[e.detail.indice];
+    if(!g) return;
+    const attuali = g.codes || [];
+    g.codes = e.detail.acceso
+      ? attuali.concat(e.detail.codice).filter((x,i,a)=> a.indexOf(x)===i)
+      : attuali.filter(x => x !== e.detail.codice);
+    save('staff'); renderQuotas();
   });
 }
