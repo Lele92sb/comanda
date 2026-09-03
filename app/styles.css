@@ -411,7 +411,6 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
 
 .small-note{font-family:var(--font-mono);font-size:10.5px;color:var(--brass);margin-top:6px;line-height:1.6;}
-.staff-card{background:var(--bg-elev);border:1px solid var(--line);border-radius:6px;padding:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
 /* Riga di dettaglio sotto un nome (contatti, email, data d'ingresso). Non è
    legata a .staff-card: serve anche nell'elenco della squadra. */
 .contact{font-family:var(--font-mono);font-size:11px;color:var(--brass);margin-top:4px;line-height:1.6;}
@@ -541,20 +540,6 @@ body.readonly main label.btn{opacity:0.45;}
   margin-top:6px;
   font-weight:700;
 }
-
-/* La riga del riepilogo dopo la generazione. Sta su una riga sola e apre il
-   dettaglio solo se glielo si chiede: prima erano cinque riquadri uno sotto
-   l'altro e per arrivare ai turni bisognava scorrere mezza pagina. */
-.riassunto-riga{
-  display:flex; align-items:center; justify-content:space-between; gap:12px;
-  flex-wrap:wrap;
-  padding:10px 14px;
-  border:1px solid var(--line);
-  border-radius:6px;
-  background:var(--bg-elev);
-  font-size:13px;
-}
-.riassunto-riga .btn{flex-shrink:0;}
 
 /* (Qui stava il selettore di colore, insieme a .st-nome. Sono passati dentro
    <cmd-partite> e <cmd-tipi-turno>: nel markup dell'app non c'e' piu' nessun

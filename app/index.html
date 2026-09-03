@@ -158,25 +158,7 @@
         <!-- E' un'impostazione che si sceglie una volta e poi si dimentica:
              sta chiusa, con lo stato scritto sulla riga. Aperta occupava 186
              pixel sopra la griglia, ogni volta, per una cosa che non cambia. -->
-        <div class="panel" id="eccedenza-panel">
-          <div class="riassunto-riga" style="border:0;padding:0;background:none;">
-            <span class="wrap-anywhere"><b data-t>Le ore che avanzano</b>: <span id="ecc-stato"></span></span>
-            <button class="btn ghost small" id="btn-ecc-apri" data-t>Cambia</button>
-          </div>
-          <div id="ecc-corpo" class="hidden mt-3">
-          <p class="small-note mt-0" data-t>Quando il fabbisogno non chiede tutti i turni di una persona, quelle ore le paghi lo stesso. Qui decidi dove finiscono.</p>
-          <div class="chip-toggle" id="ecc-modo">
-            <button type="button" data-modo="auto" data-t>Le colloca l'app</button>
-            <button type="button" data-modo="giorni" data-t>Le scelgo io</button>
-            <button type="button" data-modo="lascia" data-t>Lasciale in tasca</button>
-          </div>
-          <div id="ecc-giorni-wrap" class="hidden">
-            <label data-t>In quest'ordine, finché ci stanno</label>
-            <div class="chip-toggle" id="ecc-giorni"></div>
-            <p class="small-note mt-1" data-t>Non è un divieto: un giorno non scelto resta l'ultima spiaggia, se i tuoi non bastano.</p>
-          </div>
-          </div>
-        </div>
+        <div id="eccedenza-panel"></div>
         <div class="row gap-3 mb-4">
           <button class="btn grow" id="btn-generate-shifts" data-t>🎲 Genera turni del periodo</button>
           <!-- Svuotare e' distruttivo e va chiesto: sta accanto al bottone che
@@ -189,25 +171,12 @@
              bisognava scorrere mezza pagina: le informazioni erano giuste, il
              posto no. Quello che conta davvero — un buco da coprire — resta
              visibile anche chiuso. -->
-        <div id="generate-riassunto" class="hidden mb-4"></div>
+        <div id="generate-riassunto"></div>
         <div id="generate-log" class="hidden mb-4"></div>
         <!-- Finché non si pubblica, la brigata non vede niente di questo
              periodo: si può generare, rifare e sistemare senza che nessuno
              legga una bozza. -->
-        <div class="panel row middle between wrap" id="pubblica-box">
-          <div class="wrap-anywhere">
-            <div class="bold" id="pubblica-stato"></div>
-            <div class="contact" id="pubblica-nota"></div>
-          </div>
-          <div class="row gap-3">
-            <!-- Revocare si puo' SEMPRE, non solo quando il periodo e'
-                 pubblicato per intero. Prima, con mezzo periodo pubblicato per
-                 sbaglio, il pulsante diceva solo «Pubblica» e non c'era modo di
-                 tornare indietro. -->
-            <button class="btn ghost small hidden" id="btn-revoca" data-t>Revoca</button>
-            <button class="btn small" id="btn-pubblica"></button>
-          </div>
-        </div>
+        <div id="pubblica-box"></div>
         <div class="panel" id="turni-panel"></div>
         <p class="small-note" id="turni-legend"></p>
         <div class="panel">

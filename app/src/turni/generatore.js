@@ -5,6 +5,7 @@ import { DAYS, REST_CODE, codeAllowed, constraintFor, generaMigliore, parseISO, 
 import { renderDashboard } from '../viste/dashboard.js';
 import { renderOreExtra, renderTurni } from './griglia.js';
 import { caricaRichieste, constraintsFromRequests } from './richieste.js';
+import './generatore-vista.ts';
 /* ============================= TURNI: generatore casuale (motore in logic.js, need-driven, testato) ============================= */
 
 /* Chi avrebbe potuto coprire questa postazione, ma non e' stato chiamato
@@ -283,31 +284,33 @@ async function generateRandomShifts(){
   // troppo".
   // Quello che non puo' aspettare — un buco da coprire — resta scritto anche
   // a riepilogo chiuso: e' l'unica cosa che chiede una decisione oggi.
-  const riass = document.getElementById('generate-riassunto');
+  // UNA RIGA, e il resto dietro un clic.
+  //
+  // Le informazioni erano giuste ma il posto no: cinque riquadri uno sotto
+  // l'altro, e per arrivare ai turni bisognava scorrere mezza pagina. Parole
+  // dello chef: "sono molto invadenti e per vedere i turni bisogna scorrere
+  // troppo".
+  // Quello che non puo' aspettare — un buco da coprire — resta scritto anche
+  // a riepilogo chiuso: e' l'unica cosa che chiede una decisione oggi, e per
+  // questo va davanti a tutto, col «!» che il componente legge come «rosso».
   logEl.innerHTML = html;
   logEl.classList.add('hidden');
+
   const nScoperti = shortfalls.reduce((n2,x)=> n2 + (x.missing||1), 0);
   const voci = [];
-  if(nScoperti) voci.push(`<b class="text-alert">${nScoperti} post${nScoperti>1?'i scoperti':'o scoperto'}</b>`);
+  if(nScoperti) voci.push(`!${nScoperti} post${nScoperti>1?'i scoperti':'o scoperto'}`);
   if(extras.length) voci.push(`${extras.length} extra`);
   if(eccedenzeCollocate && eccedenzeCollocate.length) voci.push(`${eccedenzeCollocate.length} or${eccedenzeCollocate.length>1?'e':'a'} collocat${eccedenzeCollocate.length>1?'e':'a'}`);
   if(nonPianificabili.length) voci.push(`${nonPianificabili.length} senza stazione`);
   if(quotaNonSpesa && quotaNonSpesa.length) voci.push(`${quotaNonSpesa.reduce((n2,q)=>n2+q.turni,0)} turni non assegnati`);
-  const esito = voci.length
-    ? voci.join(' · ')
-    : '<b>✓ Fabbisogno coperto, senza turni extra</b>';
-  riass.classList.toggle('hidden', !html);
-  riass.innerHTML = html
-    ? `<div class="riassunto-riga">
-         <span class="wrap-anywhere">${esito}</span>
-         <button class="btn ghost small" id="btn-dettagli">${t('Dettagli')}</button>
-       </div>`
-    : '';
-  const btnDett = document.getElementById('btn-dettagli');
-  if(btnDett) btnDett.addEventListener('click', ()=>{
-    const chiuso = logEl.classList.toggle('hidden');
-    btnDett.textContent = chiuso ? t('Dettagli') : t('Nascondi');
-  });
+
+  const riass = montaRiepilogo();
+  if(riass){
+    riass.voci = voci;
+    riass.conDettagli = Boolean(html);
+    riass.aperto = false;
+  }
+
   toast(shortfalls.length ? 'Turni generati — alcune postazioni restano scoperte, vedi dettagli' : (extras.length ? 'Turni generati — con alcuni turni extra' : 'Turni generati — fabbisogno coperto'));
 }
 document.getElementById('btn-generate-shifts').addEventListener('click', generateRandomShifts);
@@ -355,7 +358,7 @@ document.getElementById('btn-svuota-turni').addEventListener('click', async ()=>
 // — anche a periodo pubblicato solo a meta'. Prima il pulsante diventava
 // «Nascondi» unicamente quando il periodo era pubblicato per intero: con mezzo
 // periodo pubblicato per sbaglio non c'era modo di tornare indietro.
-document.getElementById('btn-revoca').addEventListener('click', async ()=>{
+async function revoca(){
   const dates = periodDates();
   const pubblicate = new Set(state.publishedShifts || []);
   const quanti = dates.filter(d=> pubblicate.has(d)).length;
@@ -371,17 +374,7 @@ document.getElementById('btn-revoca').addEventListener('click', async ()=>{
   if(!salvato) return;
   renderPubblicazione(); renderTurni();
   toast(t('Pubblicazione revocata'));
-});
-document.querySelectorAll('#ecc-modo button').forEach(b=> b.addEventListener('click', ()=>{
-  const cfg = state.eccedenzaOre || (state.eccedenzaOre = {modo:'auto', giorni:[]});
-  cfg.modo = b.dataset.modo;
-  save('eccedenzaOre'); document.getElementById('btn-ecc-apri').addEventListener('click', ()=>{
-  const corpo = document.getElementById('ecc-corpo');
-  const chiuso = corpo.classList.toggle('hidden');
-  document.getElementById('btn-ecc-apri').textContent = chiuso ? t('Cambia') : t('Chiudi');
-});
-renderEccedenza();
-}));
+}
 
 /* ---- Navigazione del periodo ---- */
 function aggiornaPeriodo(){ renderTurni(); renderOreExtra(); renderPubblicazione(); renderEccedenza(); }
@@ -404,62 +397,70 @@ document.getElementById('period-today').addEventListener('click', ()=>{ setPerio
 // e l'app scorre la lista dall'alto finché le ore ci stanno. Il numero accanto
 // al nome dice a che punto della fila sta quel giorno — senza, «Ven e Sab
 // accesi» non direbbe quale dei due viene prima quando ne avanza una sola.
+let vistaEccedenza = null;
+
 export function renderEccedenza(){
+  const el = document.getElementById('eccedenza-panel');
+  if(!el) return;
   const cfg = state.eccedenzaOre || (state.eccedenzaOre = {modo:'auto', giorni:[]});
-  document.querySelectorAll('#ecc-modo button').forEach(b=>
-    b.classList.toggle('on', b.dataset.modo === cfg.modo));
-  document.getElementById('ecc-giorni-wrap').classList.toggle('hidden', cfg.modo !== 'giorni');
-  // Lo stato in chiaro sulla riga chiusa: senza, il riquadro chiuso non dice
-  // cosa fara' l'app, e chiuderlo diventa nascondere invece che riassumere.
-  const stato = document.getElementById('ecc-stato');
-  if(stato) stato.textContent = cfg.modo === 'lascia' ? t('restano in tasca')
-    : cfg.modo === 'giorni'
-      ? ((cfg.giorni||[]).length ? t('sui giorni che hai scelto') + ' (' + cfg.giorni.join(', ') + ')'
-                                 : t('le scegli tu, ma non hai ancora scelto i giorni'))
-      : t('le colloca l’app');
-  const box = document.getElementById('ecc-giorni');
-  box.innerHTML = DAYS.map(g=>{
-    const i = (cfg.giorni||[]).indexOf(g);
-    return `<button type="button" data-g="${esc(g)}" class="${i>=0?'on':''}">${esc(g)}${i>=0?` <b>${i+1}</b>`:''}</button>`;
-  }).join('');
-  box.querySelectorAll('button').forEach(b=> b.addEventListener('click', ()=>{
-    const g = b.dataset.g;
-    cfg.giorni = cfg.giorni || [];
-    const i = cfg.giorni.indexOf(g);
-    if(i>=0) cfg.giorni.splice(i,1); else cfg.giorni.push(g);
-    save('eccedenzaOre'); renderEccedenza();
-  }));
+  if(!vistaEccedenza || !vistaEccedenza.isConnected){
+    vistaEccedenza = document.createElement('cmd-eccedenza');
+    vistaEccedenza.giorniPossibili = DAYS;
+    vistaEccedenza.addEventListener('eccedenza-modo', e => {
+      cfg.modo = e.detail.modo; save('eccedenzaOre'); renderEccedenza();
+    });
+    // Non e' un interruttore: i giorni si ACCODANO, e l'ordine e' il dato.
+    // Premendo un giorno gia' in fila lo si toglie; premendone uno nuovo va in
+    // fondo. L'app poi scorre la fila dall'alto finche' le ore ci stanno.
+    vistaEccedenza.addEventListener('eccedenza-giorno', e => {
+      cfg.giorni = cfg.giorni || [];
+      const i2 = cfg.giorni.indexOf(e.detail.giorno);
+      if(i2 >= 0) cfg.giorni.splice(i2, 1); else cfg.giorni.push(e.detail.giorno);
+      save('eccedenzaOre'); renderEccedenza();
+    });
+    el.replaceChildren(vistaEccedenza);
+  }
+  vistaEccedenza.modo = cfg.modo;
+  vistaEccedenza.giorni = (cfg.giorni || []).slice();
+  vistaEccedenza.soloLettura = Cloud.enabled && !Cloud.canWrite();
 }
+
+let vistaRiepilogo = null;
+
+function montaRiepilogo(){
+  const el = document.getElementById('generate-riassunto');
+  if(!el) return null;
+  if(!vistaRiepilogo || !vistaRiepilogo.isConnected){
+    vistaRiepilogo = document.createElement('cmd-riepilogo');
+    vistaRiepilogo.addEventListener('riepilogo-inverti', ()=>{
+      const log = document.getElementById('generate-log');
+      if(log) log.classList.toggle('hidden');
+    });
+    el.replaceChildren(vistaRiepilogo);
+  }
+  return vistaRiepilogo;
+}
+
+let vistaPubblicazione = null;
 
 export function renderPubblicazione(){
-  const box = document.getElementById('pubblica-box');
-  // Chi non può modificare non pubblica niente: per lui il riquadro non esiste.
-  box.classList.toggle('hidden', Cloud.enabled && !Cloud.canWrite());
-  if(Cloud.enabled && !Cloud.canWrite()) return;
-
+  const el = document.getElementById('pubblica-box');
+  if(!el) return;
+  if(!vistaPubblicazione || !vistaPubblicazione.isConnected){
+    vistaPubblicazione = document.createElement('cmd-pubblicazione');
+    vistaPubblicazione.addEventListener('pubblicazione-inverti', invertiPubblicazione);
+    vistaPubblicazione.addEventListener('pubblicazione-revoca', revoca);
+    el.replaceChildren(vistaPubblicazione);
+  }
   const dates = periodDates();
   const pubblicate = new Set(state.publishedShifts || []);
-  const quante = dates.filter(d=>pubblicate.has(d)).length;
-  const tutte = quante === dates.length;
-
-  document.getElementById('pubblica-stato').textContent = tutte
-    ? t('Periodo pubblicato')
-    : (quante ? t('Pubblicato in parte: {n} giorni su {tot}', {n: quante, tot: dates.length})
-              : t('Non ancora pubblicato'));
-  document.getElementById('pubblica-nota').textContent = tutte
-    ? t('La brigata vede questi turni.')
-    : t('La brigata non vede questi turni finché non li pubblichi.');
-
-  const btn = document.getElementById('btn-pubblica');
-  btn.textContent = tutte ? t('Nascondi') : t('Pubblica');
-  btn.classList.toggle('ghost', tutte);
-  // Revoca: compare appena c'e' anche un solo giorno pubblicato, e sparisce
-  // quando lo fa gia' il pulsante principale (a periodo intero «Nascondi» e
-  // «Revoca» sarebbero due bottoni per la stessa cosa).
-  document.getElementById('btn-revoca').classList.toggle('hidden', tutte || !quante);
+  vistaPubblicazione.giorniTotali = dates.length;
+  vistaPubblicazione.giorniPubblicati = dates.filter(d => pubblicate.has(d)).length;
+  // Chi non può modificare non pubblica niente: per lui il riquadro non esiste.
+  vistaPubblicazione.nascosta = Cloud.enabled && !Cloud.canWrite();
 }
 
-document.getElementById('btn-pubblica').addEventListener('click', async ()=>{
+async function invertiPubblicazione(){
   const dates = periodDates();
   const pubblicate = new Set(state.publishedShifts || []);
   const tutte = dates.every(d=>pubblicate.has(d));
@@ -479,4 +480,4 @@ document.getElementById('btn-pubblica').addEventListener('click', async ()=>{
   if(!salvato) return;
   renderPubblicazione();
   toast(tutte ? t('Turni nascosti') : t('Turni pubblicati — la brigata li vede'));
-});
+}
