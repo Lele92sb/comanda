@@ -18,6 +18,23 @@ import { conferma } from '../core/state.js';
    da lì escono i prezzi d'acquisto su cui si calcola il food cost.
    ============================================================================ */
 
+/* GLI INGREDIENTI CHE QUALCUNO STA USANDO.
+
+   Serve ad annullare un'importazione senza svuotare le ricette. Si guardano
+   sia i piatti sia le sub-ricette, perche' una riga puo' stare in tutti e due,
+   e si tiene solo `kind:'ingredient'`: una riga `sub` punta a una sub-ricetta,
+   una `custom` non punta a niente.
+
+   Sta qui e non dentro `annulla.ts` apposta: quel modulo non conosce il
+   ricettario, e non conoscerlo e' cio' che gli permette di girare dentro Node
+   e di avere dei test. */
+function ingredientiUsati(){
+  const righe = []
+    .concat(...(state.recipes || []).map(r => r.items || []))
+    .concat(...(state.subrecipes || []).map(r => r.items || []));
+  return righe.filter(it => it && it.kind === 'ingredient' && it.refId).map(it => it.refId);
+}
+
 /* Il riquadro dell'esito: uno solo, riusato. Si crea alla prima importazione e
    resta li' spento finche' non c'e' qualcosa da dire. */
 function esito(){
@@ -122,6 +139,7 @@ async function annulla(id){
   const risultato = annullaImportazione(imp, {
     fornitori: state.suppliers, ingredienti: state.ingredients,
     giaImportati: state.importedInvoices || [], storico: state.invoiceHistory || [],
+    usati: ingredientiUsati(),
   });
   state.suppliers = risultato.fornitori;
   state.ingredients = risultato.ingredienti;
@@ -169,9 +187,18 @@ async function estimateYieldsWithAI(ingredientsList){
       const textBlocks = (data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('\n');
       const clean = textBlocks.replace(/```json|```/g,'').trim();
       const estimates = JSON.parse(clean);
+      // UNA RESA E' UNA PERCENTUALE, e questa arriva da un modello che
+      // risponde in testo libero: puo' tornare 0, 150, «circa 80» o null. Una
+      // resa a zero manda `ingredientEffectiveCost` a restituire 0 e
+      // l'ingrediente diventa gratis; una sopra 100 dice che dalla pulizia
+      // esce piu' roba di quanta ne sia entrata. Nessuna delle due e' un
+      // numero da scrivere in anagrafica senza guardarlo.
       estimates.forEach(est=>{
         const ing = state.ingredients.find(i=>i.name===est.name);
-        if(ing && est.yieldPct){ ing.yieldPct = est.yieldPct; ing.yieldEstimated = true; }
+        if(!ing) return;
+        const resa = parseFloat(est.yieldPct);
+        if(!Number.isFinite(resa) || resa <= 0 || resa > 100) return;  // resta 100%
+        ing.yieldPct = resa; ing.yieldEstimated = true;
       });
     }catch(e){ /* stima non riuscita per questo lotto: resta resa 100%, nessun blocco */ }
   }

@@ -18,6 +18,13 @@ export interface DatiDaRipristinare {
   ingredienti: Ingrediente[];
   giaImportati: string[];
   storico: Importazione[];
+  /**
+   * Gli id degli ingredienti che una ricetta o una sub-ricetta sta usando.
+   * Chi chiama li calcola e li passa: questo modulo non conosce il ricettario,
+   * ed e' il motivo per cui gira dentro Node e ha dei test.
+   * Omesso = nessuno li usa, che e' anche il caso di ogni test scritto prima.
+   */
+  usati?: string[];
 }
 
 export interface EsitoAnnullamento extends DatiDaRipristinare {
@@ -40,9 +47,23 @@ export function annullaImportazione(
   // 1. Gli ingredienti nati da questa importazione si tolgono, ma solo se
   //    nessuno li ha ancora usati: se sono dentro una ricetta, toglierli
   //    svuoterebbe la ricetta senza dirlo.
+  //
+  //    QUESTA REGOLA ERA SCRITTA QUI SOPRA E BASTA. Il controllo non era mai
+  //    stato messo: il ciclo toglieva tutto, e la riga di ricetta restava con
+  //    un `refId` che non esisteva piu'. `itemCost` per un riferimento morto
+  //    restituisce 0 (costi.js), quindi il costo del piatto CALAVA, il food
+  //    cost migliorava e il menu si tingeva di verde. Chi annulla
+  //    un'importazione sta rimediando a uno sbaglio, e ne faceva uno peggiore
+  //    — che si scopre a fine mese, lontanissimo dal bottone premuto.
+  const usati = new Set(dati.usati || []);
   for (const id of imp.creati) {
     const ing = ingredienti.find(i => i.id === id);
     if (!ing) continue;   // già eliminato a mano: niente da fare
+    if (usati.has(id)) {
+      lasciateComeStavano.push(
+        `«${ing.name}» resta in anagrafica: è dentro una ricetta, e toglierlo la svuoterebbe.`);
+      continue;
+    }
     ingredienti = ingredienti.filter(i => i.id !== id);
     ingredientiRimossi++;
   }

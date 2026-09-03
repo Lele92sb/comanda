@@ -1,5 +1,7 @@
 import { save, state, toast, uid } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
+import { renderIngredients } from './ingredienti.js';
+import { t } from '../core/lingua.ts';
 import './fornitori-vista.ts';
 /* ============================= FORNITORI ====================================
 
@@ -77,8 +79,37 @@ function apriScheda(esistente){
       id: f.id, name: f.nome, piva: f.piva,
       phone: f.telefono, email: f.email, address: f.indirizzo,
     });
+    // GLI INGREDIENTI TENGONO IL NOME DEL FORNITORE COPIATO DENTRO, non il suo
+    // id (`supplier: fornitore.name`, in fatture/applica.ts). Rinominare qui e
+    // basta li lasciava attaccati a una ragione sociale che non esiste piu': la
+    // fattura dopo riconosceva il fornitore dalla partita IVA, ma cercava gli
+    // ingredienti per NOME NUOVO, non ne trovava nessuno, e li ricreava tutti
+    // da capo. Il catalogo raddoppiava — alla lettera il «duplicare mezzo
+    // magazzino» contro cui mette in guardia l'intestazione di applica.ts — e i
+    // doppioni non erano agganciati a nessuna ricetta, mentre le ricette
+    // continuavano a usare le copie vecchie, i cui prezzi da quel momento non
+    // si aggiornavano piu'.
+    //
+    // Ed e' il gesto che l'app INVITA a fare: l'import crea il fornitore con la
+    // denominazione dell'XML («ORTOFRUTTA ROSSI S.R.L.») e la prima cosa che
+    // viene da fare e' sistemarla.
+    const nomePrima = idx >= 0 ? state.suppliers[idx].name : null;
     if(idx >= 0) state.suppliers[idx] = aggiornato; else state.suppliers.push(aggiornato);
-    save('suppliers'); chiudiScheda(); renderSuppliers(); toast('Fornitore salvato');
+
+    let spostati = 0;
+    if(nomePrima && nomePrima !== aggiornato.name){
+      (state.ingredients || []).forEach(i => {
+        if(i.supplier === nomePrima){ i.supplier = aggiornato.name; spostati++; }
+      });
+    }
+
+    save('suppliers');
+    if(spostati) save('ingredients');
+    chiudiScheda(); renderSuppliers();
+    if(spostati) renderIngredients();
+    toast(spostati
+      ? t('Fornitore salvato, e {n} ingredienti sono venuti dietro', { n: spostati })
+      : t('Fornitore salvato'));
   });
 
   holder.replaceChildren(scheda);

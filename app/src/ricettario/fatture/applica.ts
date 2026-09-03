@@ -45,6 +45,10 @@ export interface Modifiche {
   saltatiPerchéGiàImportati: number;
   /** Righe riconosciute come servizio e non importate come merce. */
   righeDiServizio: number;
+  /** Righe con un prezzo a zero o negativo: non sono prezzi d'acquisto. */
+  righeSenzaPrezzo: number;
+  /** Righe in cui la fattura dava un'unita' diversa da quella in anagrafica. */
+  righeConUnitaDiversa: number;
 }
 
 /**
@@ -75,6 +79,7 @@ export function applicaFatture(
   const resoconto: string[] = [];
   let fornitoriNuovi = 0, ingredientiNuovi = 0, ingredientiAggiornati = 0;
   let scartati = 0, saltatiPerchéGiàImportati = 0, righeDiServizio = 0;
+  let righeSenzaPrezzo = 0, righeConUnitaDiversa = 0;
 
   for (const doc of documenti) {
     if (giaImportati.includes(doc.id)) {
@@ -123,7 +128,36 @@ export function applicaFatture(
         i.name.trim().toLowerCase() === riga.descrizione.trim().toLowerCase() &&
         i.supplier === fornitore!.name);
 
+      // UN PREZZO A ZERO O SOTTO NON E' UN PREZZO.
+      // Sulla carta di una fattura esiste — omaggi, sconti merce, righe di
+      // abbuono, un'intera nota di credito — ma come prezzo d'acquisto di un
+      // ingrediente non vuol dire niente. E `numero()` in leggi.ts torna 0
+      // anche quando il tag manca o e' illeggibile, quindi lo zero arriva pure
+      // per un errore di lettura. Scriverlo sopra a quello buono fa costare
+      // zero l'ingrediente: il food cost scende, la cifra si accende di verde,
+      // e chi rifa' la carta su quel numero vende sottocosto.
+      if (!(riga.prezzoUnitario > 0)) {
+        resoconto.push(`⚠ ${riga.descrizione}: prezzo ${riga.prezzoUnitario} — lasciato com'era`);
+        righeSenzaPrezzo++;
+        continue;
+      }
+
       if (esistente) {
+        // L'UNITA' NON SI CAMBIA SOTTO LE RICETTE CHE LA USANO.
+        // La riga di ricetta dice «200 g» e resta «200 g»: se qui l'ingrediente
+        // diventa `pz`, `toBaseQty(200,'g','pz')` non converte niente e
+        // restituisce 200 — duecento pezzi al prezzo del collo, 2.800 euro in
+        // un piatto solo. Nel verso opposto il numero resta plausibile e non lo
+        // vede nessuno. E l'unita' la si indovina da un campo FACOLTATIVO:
+        // `unitaDaFattura('')` da' `pz`, quindi basta un fornitore che smette
+        // di compilarlo. Cambiarla e' una decisione da prendere guardando,
+        // non un effetto di un'importazione.
+        if (esistente.unit !== unit) {
+          resoconto.push(
+            `⚠ ${esistente.name}: la fattura lo dà in ${unit}, in anagrafica è in ${esistente.unit} — non tocco né unità né prezzo`);
+          righeConUnitaDiversa++;
+          continue;
+        }
         const prezzoPrima = parseFloat(String(esistente.price)) || 0;
         traccia.aggiornati.push({
           id: esistente.id, prezzoPrima: esistente.price, unitaPrima: esistente.unit,
@@ -155,6 +189,6 @@ export function applicaFatture(
   return {
     fornitori, ingredienti, giaImportati, storico, creati, resoconto,
     fornitoriNuovi, ingredientiNuovi, ingredientiAggiornati,
-    scartati, saltatiPerchéGiàImportati, righeDiServizio,
+    scartati, saltatiPerchéGiàImportati, righeDiServizio, righeSenzaPrezzo, righeConUnitaDiversa,
   };
 }

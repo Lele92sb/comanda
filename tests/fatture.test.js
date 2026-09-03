@@ -327,3 +327,128 @@ test('i dati di partenza non vengono modificati dall\'annullamento', () => {
   assert.equal(dati.ingredienti.length, 1);
   assert.equal(dati.fornitori.length, 1);
 });
+
+/* ===================== QUELLO CHE UNA FATTURA NON PUÒ FARE =====================
+
+   Tre cose che l'importazione accettava e scriveva sopra ai dati buoni. Non
+   sono casi di laboratorio: escono da fatture vere — un omaggio a prezzo zero,
+   una nota di credito, un fornitore che smette di compilare <UnitaMisura>.
+
+   Il danno è sempre lo stesso e ha sempre la stessa forma: il costo di un
+   piatto cambia senza che nessuno abbia toccato la ricetta, il food cost si
+   muove, e chi rifà la carta su quel numero sbaglia il prezzo. Se ne accorge a
+   fine mese, lontanissimo dal bottone che ha premuto.
+   ============================================================================ */
+
+const rigaXML = (desc, qta, um, prezzo) =>
+  `<DettaglioLinee><Descrizione>${desc}</Descrizione><Quantita>${qta}</Quantita>` +
+  `<UnitaMisura>${um}</UnitaMisura><PrezzoUnitario>${prezzo}</PrezzoUnitario></DettaglioLinee>`;
+
+test('un prezzo a zero non sovrascrive quello buono', () => {
+  // Un omaggio, o un <PrezzoUnitario> illeggibile: `numero()` restituisce 0 in
+  // tutti e due i casi. Scriverlo sopra farebbe costare zero l'ingrediente, e
+  // il food cost del piatto migliorerebbe da solo.
+  const primo = applicaFatture([doc('f1', fattura())], vuoto(), nuovoId);
+  const prezzoBuono = primo.ingredienti[0].price;
+  assert.equal(prezzoBuono, 2.4);
+
+  const omaggio = fattura({ righe: rigaXML('Pomodoro San Marzano DOP', 12, 'KG', '0.00') });
+  const dopo = applicaFatture([doc('f2', omaggio)], {
+    fornitori: primo.fornitori, ingredienti: primo.ingredienti,
+    giaImportati: primo.giaImportati, storico: primo.storico,
+  }, nuovoId);
+
+  assert.equal(dopo.ingredienti[0].price, prezzoBuono, 'il prezzo buono deve restare');
+  assert.equal(dopo.righeSenzaPrezzo, 1);
+  assert.equal(dopo.ingredientiAggiornati, 0);
+  // E non sparisce in silenzio: se il rifiuto è sbagliato, si deve vedere.
+  assert.ok(dopo.resoconto.some(r => r.includes('Pomodoro') && r.includes('lasciato')));
+});
+
+test('un prezzo negativo non entra: è una nota di credito, non un acquisto', () => {
+  const primo = applicaFatture([doc('f1', fattura())], vuoto(), nuovoId);
+  const nota = fattura({ righe: rigaXML('Pomodoro San Marzano DOP', 12, 'KG', '-2.40') });
+  const dopo = applicaFatture([doc('f2', nota)], {
+    fornitori: primo.fornitori, ingredienti: primo.ingredienti,
+    giaImportati: primo.giaImportati, storico: primo.storico,
+  }, nuovoId);
+  assert.equal(dopo.ingredienti[0].price, 2.4);
+  assert.equal(dopo.righeSenzaPrezzo, 1);
+});
+
+test('un prezzo a zero non crea nemmeno un ingrediente nuovo', () => {
+  const m = applicaFatture([doc('f1', fattura({ righe: rigaXML('Prezzemolo omaggio', 1, 'KG', '0') }))],
+                           vuoto(), nuovoId);
+  assert.equal(m.ingredientiNuovi, 0, 'un ingrediente che costa zero non è un ingrediente');
+  assert.equal(m.righeSenzaPrezzo, 1);
+});
+
+test('la fattura NON cambia l\'unità di un ingrediente già in anagrafica', () => {
+  // È il caso peggiore di tutti perché il numero resta plausibile. La riga di
+  // ricetta dice «200 g» e resta «200 g»: se qui l'ingrediente passa a `pz`,
+  // `toBaseQty(200,'g','pz')` non converte niente e restituisce 200 — duecento
+  // pezzi al prezzo del collo. E <UnitaMisura> in FatturaPA è FACOLTATIVO:
+  // `unitaDaFattura('')` dà `pz`, quindi basta un fornitore che smette di
+  // compilarlo perché succeda da solo.
+  const primo = applicaFatture([doc('f1', fattura())], vuoto(), nuovoId);
+  assert.equal(primo.ingredienti[0].unit, 'kg');
+
+  const aCartoni = fattura({ righe: rigaXML('Pomodoro San Marzano DOP', 3, 'CT', '28.00') });
+  const dopo = applicaFatture([doc('f2', aCartoni)], {
+    fornitori: primo.fornitori, ingredienti: primo.ingredienti,
+    giaImportati: primo.giaImportati, storico: primo.storico,
+  }, nuovoId);
+
+  assert.equal(dopo.ingredienti[0].unit, 'kg', 'l\'unità non si cambia sotto le ricette');
+  assert.equal(dopo.ingredienti[0].price, 2.4, 'e nemmeno il prezzo: 28/collo non è 28/kg');
+  assert.equal(dopo.righeConUnitaDiversa, 1);
+  assert.ok(dopo.resoconto.some(r => r.includes('Pomodoro') && r.includes('anagrafica')));
+});
+
+test('se l\'unità coincide, il prezzo si aggiorna come sempre', () => {
+  // La guardia non deve rompere il caso normale, che è la ragione per cui
+  // tutto questo esiste.
+  const primo = applicaFatture([doc('f1', fattura())], vuoto(), nuovoId);
+  const rincaro = fattura({ righe: rigaXML('Pomodoro San Marzano DOP', 12, 'KG', '3.10') });
+  const dopo = applicaFatture([doc('f2', rincaro)], {
+    fornitori: primo.fornitori, ingredienti: primo.ingredienti,
+    giaImportati: primo.giaImportati, storico: primo.storico,
+  }, nuovoId);
+  assert.equal(dopo.ingredienti[0].price, 3.1);
+  assert.equal(dopo.ingredientiAggiornati, 1);
+  assert.equal(dopo.righeConUnitaDiversa, 0);
+  assert.equal(dopo.righeSenzaPrezzo, 0);
+});
+
+test('annullare NON toglie un ingrediente che sta dentro una ricetta', () => {
+  // La regola era scritta nel commento sopra al codice e il controllo non
+  // c'era. La riga di ricetta restava con un refId morto: `itemCost` per un
+  // riferimento che non esiste restituisce 0, quindi il costo del piatto
+  // CALAVA e il food cost migliorava da solo.
+  const m = applicaFatture([doc('f1', fattura())], vuoto(), nuovoId);
+  const idIngrediente = m.ingredienti[0].id;
+
+  const a = annullaImportazione(m.storico[0], {
+    fornitori: m.fornitori, ingredienti: m.ingredienti,
+    giaImportati: m.giaImportati, storico: m.storico,
+    usati: [idIngrediente],
+  });
+
+  assert.equal(a.ingredientiRimossi, 0);
+  assert.equal(a.ingredienti.length, 1, 'l\'ingrediente resta in anagrafica');
+  assert.ok(a.lasciateComeStavano.some(x => x.includes('ricetta')),
+            'e il motivo va detto, non lasciato indovinare');
+  // L'impronta si toglie lo stesso: la fattura si deve poter reimportare.
+  assert.equal(a.giaImportati.length, 0);
+});
+
+test('annullare toglie invece quelli che nessuno ha usato', () => {
+  const m = applicaFatture([doc('f1', fattura())], vuoto(), nuovoId);
+  const a = annullaImportazione(m.storico[0], {
+    fornitori: m.fornitori, ingredienti: m.ingredienti,
+    giaImportati: m.giaImportati, storico: m.storico,
+    usati: ['un-altro-id'],
+  });
+  assert.equal(a.ingredientiRimossi, 1);
+  assert.equal(a.ingredienti.length, 0);
+});
