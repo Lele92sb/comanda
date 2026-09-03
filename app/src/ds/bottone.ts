@@ -30,6 +30,13 @@ export type VarianteBottone = 'principale' | 'fantasma' | 'pericolo' | 'piano';
 export type MisuraBottone = 'normale' | 'piccolo';
 
 export class Bottone extends Elemento {
+  /* IL FUOCO ATTRAVERSA IL CONFINE. Senza questo, chiamare .focus() sul
+     componente non fa niente: il <button> vero sta dentro lo shadow DOM e da
+     fuori non lo si raggiunge. Serve a chi naviga da tastiera e a chi, dopo
+     aver riordinato un elenco, deve ritrovare il comando che ha appena premuto
+     — vedi l'elenco della brigata. */
+  static override shadowRootOptions = { ...Elemento.shadowRootOptions, delegatesFocus: true };
+
   static override properties = {
     variante: { type: String, reflect: true },
     misura: { type: String, reflect: true },

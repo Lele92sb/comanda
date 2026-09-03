@@ -42,6 +42,8 @@ import type { Opzione } from '../ds/scelta.ts';
 // avere una cucina vera per vederle.
 import '../turni/partite-vista.ts';
 import type { PartitaVista } from '../turni/partite-vista.ts';
+import '../viste/brigata-vista.ts';
+import type { PersonaVista } from '../viste/brigata-vista.ts';
 
 interface Caso {
   id: string;
@@ -74,6 +76,24 @@ const PARTITE_VISTA: PartitaVista[] = [
   { id: 'secondi',   nome: 'Secondi',   colore: '#6aa8d6', copre: [] },
   { id: 'insalate',  nome: 'Insalate',  colore: '#a48ad6', copre: ['lavaggio'] },
   { id: 'lavaggio',  nome: 'Lavaggio',  colore: '#d67fa8', copre: [] },
+];
+
+/* Quattro persone scelte per COPRIRE I CASI, non per riempire: due partite con
+   priorita', nessuna partita, fuori dagli extra, e una senza contatti. Un banco
+   di prova in cui vanno tutti bene non prova niente. */
+const BRIGATA_VISTA: PersonaVista[] = [
+  { id: '1', nome: 'Lorenc', ruolo: 'Chef de partie', ore: '49',
+    telefono: '333 1234567', email: 'lorenc@ristorante.it',
+    partite: ['Pass', 'Primi'], fuoriExtra: false },
+  { id: '2', nome: 'Chamo', ruolo: 'Sous Chef', ore: '40',
+    telefono: '', email: 'chamo@ristorante.it',
+    partite: [], fuoriExtra: false },
+  { id: '3', nome: 'Alessio', ruolo: 'Commis', ore: '28',
+    telefono: '347 7654321', email: '',
+    partite: ['Pass'], fuoriExtra: true },
+  { id: '4', nome: 'Rabby', ruolo: 'Plongeur', ore: '',
+    telefono: '', email: '',
+    partite: ['Lavaggio'], fuoriExtra: true },
 ];
 
 const GRUPPI: Gruppo[] = [
@@ -248,6 +268,27 @@ const GRUPPI: Gruppo[] = [
         titolo: 'Chi puo’ solo guardare',
         nota: 'I comandi spariscono invece di restare spenti: qui dentro non c’e’ niente da leggere in un bottone Elimina disattivato.',
         contenuto: () => html`<cmd-partite solo-lettura .partite=${PARTITE_VISTA}></cmd-partite>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-brigata — una schermata intera',
+    casi: [
+      {
+        id: 'brigata-piena',
+        titolo: 'Quattro persone, quattro casi diversi',
+        nota: 'La prima ha due partite e si legge quale conta di piu’. La seconda non ne ha nessuna: il generatore la salta, e la riga e’ rossa. La terza e’ fuori dai turni extra. La quarta non ha ne’ telefono ne’ email.',
+        contenuto: () => html`<cmd-brigata .persone=${BRIGATA_VISTA}></cmd-brigata>`,
+      },
+      {
+        id: 'brigata-vuota',
+        titolo: 'Prima che ci sia qualcuno',
+        contenuto: () => html`<cmd-brigata .persone=${[]}></cmd-brigata>`,
+      },
+      {
+        id: 'brigata-sola-lettura',
+        titolo: 'Chi puo’ solo guardare',
+        contenuto: () => html`<cmd-brigata solo-lettura .persone=${BRIGATA_VISTA}></cmd-brigata>`,
       },
     ],
   },
