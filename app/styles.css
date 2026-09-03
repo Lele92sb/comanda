@@ -288,6 +288,18 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 }
 .role-badge.viewer{border-color:var(--alert);color:var(--alert);}
 
+/* IL SEGNALE DEL SALVATAGGIO. Discreto apposta: compare, dice, si spegne.
+   Non ha un fondo e non ha un bordo perche' non e' un avviso — e' una
+   conferma, e una conferma che grida sarebbe rumore trecento volte al giorno.
+   Lo spazio se lo tiene anche da spento (`min-width`), cosi' il nome della
+   cucina accanto non balla a ogni salvataggio. */
+#salvataggio{
+  font-size:var(--text-xs);white-space:nowrap;min-width:6ch;
+  color:var(--brass);
+  transition:color var(--tempo-istante) var(--curva);
+}
+#salvataggio[data-stato="salvato"]{color:var(--sage);}
+
 /* UN SOLO comando nella barra: il proprio nome, che apre il profilo. La
    freccia dice che sotto c'e' dell'altro - senza, sembra un'etichetta. */
 #account-bar .ab-nome{

@@ -4,7 +4,7 @@ import '../ds/campo.ts';
 import '../ds/dialogo.ts';
 import { DAYS, DEFAULT_SERVICES, DEFAULT_SHIFT_TYPES, buildShiftConfig, monthDates, normalizzaCella, parseISO, weekDates } from '../lib/logic.js';
 import { VALUTA_PREDEFINITA, impostaValuta } from './valuta.ts';
-import { giornoMese, meseAnno } from './lingua.ts';
+import { giornoMese, meseAnno, t } from './lingua.ts';
 /* ============================= STATE ============================= */
 export const STORE_KEYS = ['ingredients','subrecipes','recipes','menus','staff','shifts','knowledge','chatHistory','wellbeing','suppliers','stations','staffingNeeds','services','shiftTypes','importedInvoices','invoiceHistory','publishedShifts','eccedenzaOre','impostazioni'];
 export let state = { ingredients:[], subrecipes:[], recipes:[], menus:[], staff:[], shifts:{}, knowledge:[], chatHistory:[], wellbeing:[], suppliers:[], stations:[], staffingNeeds:{}, services:[], shiftTypes:[], importedInvoices:[], invoiceHistory:[], publishedShifts:[],
@@ -90,8 +90,47 @@ export async function loadAll(){
 export function applicaImpostazioni(){
   impostaValuta(state.impostazioni?.valuta);
 }
+/* ============================================================================
+   SI DEVE VEDERE CHE HA SALVATO.
+
+   Segnalato provando l'app in cucina: «non c'e' il tasto salva, non so se ha
+   salvato». Il tasto c'e' dove si compila un modulo — piatti, ingredienti,
+   fornitori, persone — ma meta' dell'app salva da sola: le quote, le partite,
+   il fabbisogno, i servizi, le celle della griglia. E li' `save()` in caso di
+   RIUSCITA non diceva niente. Solo in caso di errore.
+
+   Il silenzio non e' neutro: chi non vede niente non pensa «e' andato bene»,
+   pensa «forse non ha preso». E allora riscrive, ricontrolla, o non si fida.
+
+   IL SEGNALE STA QUI E NON IN SESSANTAQUATTRO POSTI. `save()` e' l'unica porta
+   di uscita dei dati: metterlo qui vuol dire che ogni schermata dell'app —
+   comprese quelle che verranno — lo ha senza doverselo ricordare. Sessantaquattro
+   bottoni «Salva» sarebbero sessantaquattro occasioni di dimenticarne uno, e
+   sulla griglia dei turni, dove si toccano cento celle di fila, un bottone da
+   premere ogni volta sarebbe un peggioramento.
+
+   E' DISCRETO APPOSTA. Un toast a ogni cella cambiata sarebbe insopportabile:
+   qui e' una riga in alto che dice «salvo…» e poi «salvato», e si spegne da
+   sola. Gli errori restano toast, perche' un errore va letto.
+   ============================================================================ */
+let spegniSegnale = 0;
+
+function segnalaSalvataggio(stato){
+  const el = document.getElementById('salvataggio');
+  if(!el) return;
+  clearTimeout(spegniSegnale);
+  if(!stato){ el.textContent = ''; el.removeAttribute('data-stato'); return; }
+  el.dataset.stato = stato;
+  el.textContent = stato === 'salvo' ? t('salvo…') : t('salvato');
+  // «Salvato» non resta li' per sempre: quello che conta e' aver visto che e'
+  // successo, non tenerlo scritto.
+  if(stato === 'salvato') spegniSegnale = setTimeout(()=> segnalaSalvataggio(null), 2000);
+}
+
 export async function save(key){
+  segnalaSalvataggio('salvo');
   const ok = await storageSet(key, state[key]);
+  segnalaSalvataggio(ok ? 'salvato' : null);
   // Il conflitto si spiega da solo (vedi Cloud.onConflict): non coprirlo.
   if(!ok && Cloud.lastFailure !== 'conflict'){
     toast(Cloud.lastFailure === 'readonly'
