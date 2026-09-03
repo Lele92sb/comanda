@@ -101,7 +101,8 @@ export class Ingredienti extends LitElement {
     const prezzo = parseFloat(i.prezzo) || 0;
     const scarto = Math.max(0, 100 - i.resa);
     return html`
-      <cmd-scheda titolo=${i.nome}>
+      <cmd-scheda titolo=${i.nome} ?apribile=${!this.soloLettura}
+                  @cmd-scheda-apri=${() => this.manda('ingrediente-modifica', { id: i.id })}>
         ${!prezzo ? html`<cmd-etichetta slot="stato" tono="allarme">${t('prezzo mancante')}</cmd-etichetta>` : nothing}
         ${i.resaStimata ? html`<cmd-etichetta slot="stato" tono="ok">${t('resa stimata AI')}</cmd-etichetta>` : nothing}
 

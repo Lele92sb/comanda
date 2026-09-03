@@ -75,7 +75,8 @@ export class Fornitori extends LitElement {
       f.email ? '✉ ' + f.email : '',
     ].filter(Boolean).join(' · ');
     return html`
-      <cmd-scheda titolo=${f.nome}>
+      <cmd-scheda titolo=${f.nome} ?apribile=${!this.soloLettura}
+                  @cmd-scheda-apri=${() => this.manda('fornitore-modifica', { id: f.id })}>
         ${f.piva ? html`<div class="riga">P.IVA ${f.piva}</div>` : nothing}
         ${contatti ? html`<div class="riga">${contatti}</div>` : nothing}
         ${f.indirizzo ? html`<div class="riga">${f.indirizzo}</div>` : nothing}

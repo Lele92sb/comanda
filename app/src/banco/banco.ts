@@ -959,6 +959,25 @@ const GRUPPI: Gruppo[] = [
         contenuto: () => html`<cmd-ingredienti .ingredienti=${[]}></cmd-ingredienti>`,
       },
       {
+        id: 'scheda-apribile',
+        titolo: 'La riga che si apre',
+        nota: 'Il titolo e’ un BOTTONE vero, non un titolo con un clic appiccicato: un <div> con onclick non lo raggiunge il tabulatore, non compare fra i comandi di un lettore di schermo, e Invio non lo preme. Il bersaglio pero’ e’ tutta la riga — su un telefono un titolo di dodici pixel e’ un bersaglio da bambini. I comandi a destra NON aprono: «Elimina» che apre la scheda sarebbe il modo piu’ veloce di far cancellare la cosa sbagliata. Prova col dito e prova col tabulatore.',
+        contenuto: () => html`
+          <cmd-scheda titolo="Pomodoro San Marzano DOP" apribile
+                      @cmd-scheda-apri=${() => { eco = 'aperta: Pomodoro San Marzano DOP'; disegna(); }}>
+            <div style="font-size:var(--text-sm);color:var(--brass);margin-top:3px">
+              Ortofrutta Rossi · 2,400 €/kg acquisto · resa 90%</div>
+            <cmd-bottone slot="azioni" misura="piccolo" variante="fantasma"
+                         @click=${() => { eco = 'Modifica — la riga NON si e’ aperta due volte'; disegna(); }}>Modifica</cmd-bottone>
+            <cmd-bottone slot="azioni" misura="piccolo" variante="pericolo"
+                         @click=${() => { eco = 'Elimina — e la scheda NON si e’ aperta'; disegna(); }}>Elimina</cmd-bottone>
+          </cmd-scheda>
+          <cmd-scheda titolo="Non apribile: si guarda e basta">
+            <div style="font-size:var(--text-sm);color:var(--brass);margin-top:3px">
+              Nessun fondo che si scalda, nessun cursore a mano.</div>
+          </cmd-scheda>`,
+      },
+      {
         id: 'scheda-ingrediente',
         titolo: 'Il modulo, col costo reale che si vede mentre scrivi',
         nota: 'E’ l’unico numero che nessuno ha in testa, ed e’ quello per cui questa scheda esiste: senza, lo scarto si scopre dopo, dentro il costo di un piatto che non torna.',

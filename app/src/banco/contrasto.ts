@@ -147,14 +147,46 @@ export function contrastoDi(el: Element): { rapporto: number; soglia: number; ok
  * il colore.
  */
 function senzaMovimento<T>(quel: () => T): T {
+  const REGOLA = '*,*::before,*::after{transition:none !important;animation:none !important;}';
+
   const foglio = document.createElement('style');
-  foglio.textContent =
-    '*,*::before,*::after{transition:none !important;animation:none !important;}';
+  foglio.textContent = REGOLA;
   document.head.appendChild(foglio);
-  // Leggere una misura forza il ricalcolo: senza, la regola appena messa
-  // potrebbe non essere ancora applicata quando si misura.
+
+  // UN FOGLIO NEL <head> NON ENTRA NEGLI SHADOW DOM, e quasi tutto quello che
+  // si misura qui STA in uno shadow DOM. La prima versione spegneva le
+  // transizioni solo nel documento e si fidava: il primo componente con una
+  // transizione sul fondo — <cmd-scheda> quando e' diventata apribile — ha
+  // fatto comparire trenta difetti che non esistevano, testo del tema scuro
+  // su un fondo rimasto a quello chiaro. Bisogna entrare in ogni radice.
+  const adottati: ShadowRoot[] = [];
+  let stop: CSSStyleSheet | null = null;
+  try { stop = new CSSStyleSheet(); stop.replaceSync(REGOLA); } catch { /* browser senza: sotto c'e' il ripiego */ }
+  const messi: HTMLStyleElement[] = [];
+
+  const scendi = (dentro: ParentNode): void => {
+    for (const el of Array.from(dentro.querySelectorAll('*'))) {
+      if (!el.shadowRoot) continue;
+      const r = el.shadowRoot;
+      if (stop) { r.adoptedStyleSheets = [...r.adoptedStyleSheets, stop]; adottati.push(r); }
+      else { const f = document.createElement('style'); f.textContent = REGOLA; r.appendChild(f); messi.push(f); }
+      scendi(r);
+    }
+  };
+  scendi(document.body);
+
+  // Leggere una misura forza il ricalcolo: senza, le regole appena messe
+  // potrebbero non essere ancora applicate quando si misura.
   void document.body.offsetHeight;
-  try { return quel(); } finally { foglio.remove(); }
+
+  try { return quel(); }
+  finally {
+    foglio.remove();
+    messi.forEach(f => f.remove());
+    if (stop) {
+      for (const r of adottati) r.adoptedStyleSheets = r.adoptedStyleSheets.filter(x => x !== stop);
+    }
+  }
 }
 
 /**

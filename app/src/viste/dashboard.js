@@ -3,6 +3,7 @@ import { CODE_LABEL, SERVICE_LABEL, SHIFT_CONFIG, state } from '../core/state.js
 import { isoDate, parseISO, serviziDelCodice, stazioneDi, stazioniDi } from '../lib/logic.js';
 import { dishTotalCost } from '../ricettario/costi.js';
 import { weeklyExtraFromTurni } from '../turni/griglia.js';
+import { switchTab } from '../ui/tabs.js';
 import './dashboard-vista.ts';
 /* ============================= DASHBOARD ====================================
 
@@ -57,16 +58,20 @@ export function renderDashboard(){
   if(!el) return;
   if(!vista || !vista.isConnected){
     vista = document.createElement('cmd-dashboard');
+    // «0 piatti in ricettario» e' una domanda travestita da numero, e la
+    // risposta sta due schermate piu' in la'. Il componente dice solo dove
+    // vuole andare; come ci si va lo sa questo file.
+    vista.addEventListener('dashboard-vai', e => switchTab(e.detail.dove));
     el.replaceChildren(vista);
   }
 
   const oggi = isoDate(new Date());
   vista.avvisi = avvisi();
   vista.numeri = [
-    { numero: state.recipes.length,    etichetta: t('Piatti in ricettario') },
-    { numero: state.subrecipes.length, etichetta: t('Sub-ricette') },
-    { numero: state.staff.length,      etichetta: t('Persone in brigata') },
-    { numero: state.menus.length,      etichetta: t('Menu attivi') },
+    { numero: state.recipes.length,    etichetta: t('Piatti in ricettario'), dove: 'ricette/piatti' },
+    { numero: state.subrecipes.length, etichetta: t('Sub-ricette'),          dove: 'ricette/subricette' },
+    { numero: state.staff.length,      etichetta: t('Persone in brigata'),   dove: 'impostazioni/brigata' },
+    { numero: state.menus.length,      etichetta: t('Menu attivi'),          dove: 'menu' },
   ];
   vista.turniOggi = state.staff.map(s=>{
     const cell = (state.shifts[s.id] || {})[oggi];

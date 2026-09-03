@@ -19,6 +19,15 @@ import '../ds/vuoto.ts';
 export interface NumeroDashboard {
   numero: number;
   etichetta: string;
+  /**
+   * Dove porta, se porta da qualche parte. E' l'id di una scheda della
+   * navigazione, e semmai della sua sezione: 'ricette/piatti'.
+   *
+   * «0 piatti in ricettario» e' una domanda travestita da numero, e la risposta
+   * sta due schermate piu' in la'. Un numero che si guarda e non si tocca
+   * costringe a rifare a mano la strada che la dashboard aveva gia' indicato.
+   */
+  dove?: string;
 }
 
 export interface TurnoOggi {
@@ -59,6 +68,18 @@ export class Dashboard extends LitElement {
       background:var(--bg-elev);border:1px solid var(--line);
       border-radius:var(--radius-md);padding:14px;
     }
+    /* Quello che porta da qualche parte e' un bottone vero, non un riquadro
+       col clic appiccicato: cosi' lo raggiunge il tabulatore e lo annuncia un
+       lettore di schermo. La freccia dice dove va prima di premere. */
+    button.numero{
+      display:block;width:100%;text-align:left;cursor:pointer;
+      font-family:inherit;color:inherit;
+      transition:background-color var(--tempo-istante) var(--curva),
+                 border-color var(--tempo-istante) var(--curva);
+    }
+    button.numero:hover{background:var(--bg-elev2);border-color:var(--copper);}
+    button.numero:focus-visible{outline:var(--fuoco);outline-offset:var(--fuoco-stacco);}
+    button.numero .l::after{content:' →';opacity:0.55;}
     .numero .n{font-family:var(--font-display);font-size:28px;font-weight:700;
       color:var(--copper-light);line-height:1.1;}
     .numero .l{font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);
@@ -83,6 +104,13 @@ export class Dashboard extends LitElement {
     @media(min-width:1024px){ .riga{max-width:68ch;} }
   `;
 
+  /* Fin qui la dashboard non mandava NIENTE: era una vetrina, si guardava e
+     basta. Ora manda una cosa sola — «portami li'» — e chi la ascolta e' il
+     collante, che e' l'unico che sa come si cambia scheda. */
+  private manda<T>(nome: string, dettaglio: T): void {
+    this.dispatchEvent(new CustomEvent(nome, { detail: dettaglio, bubbles: true, composed: true }));
+  }
+
   override render(): TemplateResult {
     return html`
       ${this.avvisi.length
@@ -90,11 +118,18 @@ export class Dashboard extends LitElement {
         : html`<cmd-avviso tono="ok">${t('Nessun alert. Cucina in equilibrio.')}</cmd-avviso>`}
 
       <div class="numeri">
-        ${this.numeri.map(n => html`
-          <div class="numero">
-            <div class="n">${n.numero}</div>
-            <div class="l">${n.etichetta}</div>
-          </div>`)}
+        ${this.numeri.map(n => n.dove
+          ? html`
+            <button type="button" class="numero"
+                    @click=${() => this.manda('dashboard-vai', { dove: n.dove })}>
+              <div class="n">${n.numero}</div>
+              <div class="l">${n.etichetta}</div>
+            </button>`
+          : html`
+            <div class="numero">
+              <div class="n">${n.numero}</div>
+              <div class="l">${n.etichetta}</div>
+            </div>`)}
       </div>
 
       <div class="riquadro">

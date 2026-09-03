@@ -199,7 +199,14 @@ export function initTabs(){
   switchTab(visibili.some(v=>v.id==='dashboard') ? 'dashboard' : 'turni');
 }
 
+/* Cambia scheda, e volendo anche sotto-scheda: `switchTab('ricette/piatti')`.
+   Serve a chi manda da fuori — la dashboard che dice «portami ai piatti» —
+   perche' «ricettario» da solo lo lascerebbe sugli ingredienti, che e' la
+   sezione di partenza, e toccherebbe comunque un altro clic. Chi passa solo
+   l'id della scheda si comporta esattamente come prima. */
 export function switchTab(id){
+  const [idVoce, idSezione] = String(id).split('/');
+  id = idVoce;
   const voce = NAV.find(v=> v.id === id);
   if(!voce || !puoVedere(voce)) return;
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===id));
@@ -210,8 +217,19 @@ export function switchTab(id){
   // disegnarle tutte a ogni cambio di scheda si sentirebbe.
   const sezioni = sezioniVisibili(voce);
   if(sezioni.length){
+    const chiesta = idSezione && sezioni.find(x=> x.id === idSezione);
+    if(chiesta){
+      // La linguetta si accende e la sotto-vista si scopre: senza, si
+      // disegnerebbe la sezione giusta sotto una linguetta che ne indica
+      // un'altra, ed e' peggio di non essersi mossi.
+      const nav = document.getElementById(voce.id + '-subtabs');
+      nav?.querySelectorAll('button').forEach(b=>
+        b.classList.toggle('active', b.dataset.sub === idSezione));
+      document.querySelectorAll(`#view-${voce.id} .subview`).forEach(v=>
+        v.classList.toggle('active', v.id === voce.prefisso + idSezione));
+    }
     const attiva = document.querySelector(`#${voce.id}-subtabs button.active`);
-    const sz = sezioni.find(x=> x.id === (attiva && attiva.dataset.sub)) || sezioni[0];
+    const sz = chiesta || sezioni.find(x=> x.id === (attiva && attiva.dataset.sub)) || sezioni[0];
     if(sz.render) sz.render();
   }
 }
