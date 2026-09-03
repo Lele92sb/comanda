@@ -43,7 +43,9 @@ export class Scelta extends Elemento {
     segnaposto: { type: String },
     disabilitato: { type: Boolean, reflect: true },
     etichetta: { type: String },
+    cercabile: { type: Boolean, reflect: true },
     aperto: { type: Boolean, state: true },
+    filtro: { type: String, state: true },
     evidenziato: { type: Number, state: true },
   };
 
@@ -54,7 +56,10 @@ export class Scelta extends Elemento {
   declare disabilitato: boolean;
   /** Descrizione per i lettori di schermo, se non c'e' una <label> collegata. */
   declare etichetta: string;
+  /** Aggiunge un campo di ricerca in cima all'elenco. Per liste lunghe. */
+  declare cercabile: boolean;
   declare aperto: boolean;
+  declare filtro: string;
   declare evidenziato: number;
 
   private readonly idBase = 'scelta-' + (++progressivo);
@@ -68,7 +73,9 @@ export class Scelta extends Elemento {
     this.segnaposto = '—';
     this.disabilitato = false;
     this.etichetta = '';
+    this.cercabile = false;
     this.aperto = false;
+    this.filtro = '';
     this.evidenziato = -1;
   }
 
@@ -129,12 +136,45 @@ export class Scelta extends Elemento {
     [role="option"].evidenziata{background:var(--bg-elev2);}
     [role="option"][aria-selected="true"]{color:var(--copper-light);font-weight:600;}
     .segno{flex:0 0 auto;width:12px;font-size:11px;color:var(--copper-light);}
+
+    /* Il campo di ricerca resta fermo in cima mentre l'elenco scorre: con
+       trecento ingredienti, scorrendo si perderebbe di vista cosa si e'
+       scritto. */
+    .ricerca{
+      position:sticky;top:calc(var(--space-1) * -1);z-index:1;
+      background:var(--bg-elev);padding:var(--space-1) var(--space-1) var(--space-2);
+      margin:calc(var(--space-1) * -1) calc(var(--space-1) * -1) 0;
+    }
+    .ricerca input{
+      width:100%;
+      background:var(--bg-elev2);border:1px solid var(--line-strong);color:var(--paper);
+      padding:8px 10px;border-radius:var(--radius-sm);
+      font-family:var(--font-body);font-size:var(--text-md);
+    }
+    .ricerca input:focus{outline:var(--fuoco);outline-offset:var(--fuoco-stacco);border-color:var(--copper);}
+    .niente{
+      padding:10px;font-family:var(--font-mono);font-size:var(--text-xs);
+      color:var(--brass);text-align:center;
+    }
   `];
 
-  private get scelte(): Opzione[] { return this.opzioni ?? []; }
+  /* Le voci da mostrare adesso. Con la ricerca accesa sono quelle che
+     contengono quello che si sta scrivendo — CONTENGONO, non «cominciano per»:
+     cercando «asparagi» si vuole trovare anche «Punte di asparagi». */
+  private get scelte(): Opzione[] {
+    const tutte = this.opzioni ?? [];
+    if (!this.cercabile || !this.filtro.trim()) return tutte;
+    const q = this.filtro.trim().toLowerCase();
+    return tutte.filter(o => o.etichetta.toLowerCase().includes(q));
+  }
+
+  /* L'elenco completo. Serve a chi deve risalire alla voce scelta anche quando
+     il filtro l'ha nascosta: altrimenti scrivendo nella ricerca il comando
+     chiuso dimenticherebbe cosa c'era scritto dentro. */
+  private get tutte(): Opzione[] { return this.opzioni ?? []; }
 
   private get scelta(): Opzione | undefined {
-    return this.scelte.find(o => o.valore === this.valore);
+    return this.tutte.find(o => o.valore === this.valore);
   }
 
   private tendinaEl(): HTMLElement | null {
@@ -167,6 +207,10 @@ export class Scelta extends Elemento {
     void this.updateComplete.then(() => {
       this.tendinaEl()?.showPopover?.();
       this.posiziona();
+      // Con la ricerca il fuoco entra nel campo: chi apre una lista lunga sta
+      // gia' per scrivere, e un clic in piu' per arrivarci e' un clic sprecato.
+      const ricerca = this.renderRoot.querySelector<HTMLInputElement>('.ricerca input');
+      if (ricerca) ricerca.select();
       this.renderRoot.querySelector('.evidenziata')?.scrollIntoView({ block: 'nearest' });
     });
   }
@@ -174,6 +218,7 @@ export class Scelta extends Elemento {
   private chiudi(tornaAlComando = true): void {
     if (!this.aperto) return;
     this.aperto = false;
+    this.filtro = '';
     this.tendinaEl()?.hidePopover?.();
     if (tornaAlComando) {
       (this.renderRoot.querySelector('.comando') as HTMLElement | null)?.focus();
@@ -233,8 +278,13 @@ export class Scelta extends Elemento {
       case 'End':
         if (this.aperto) { e.preventDefault(); this.evidenziato = 0; this.muovi(-1); }
         return;
-      case 'Enter':
       case ' ':
+        // Nel campo di ricerca lo spazio e' una lettera, non una conferma.
+        if (this.cercabile && this.aperto) return;
+        e.preventDefault();
+        if (this.aperto) this.conferma(this.evidenziato); else this.apri();
+        return;
+      case 'Enter':
         e.preventDefault();
         if (this.aperto) this.conferma(this.evidenziato); else this.apri();
         return;
@@ -245,7 +295,11 @@ export class Scelta extends Elemento {
         this.chiudi(false);
         return;
       default:
-        if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) this.cerca(e.key);
+        // La ricerca a salto («digiti le prime lettere») serve SOLO quando non
+        // c'e' un campo di ricerca: con quello, le lettere devono finire li'.
+        if (!this.cercabile && e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          this.cerca(e.key);
+        }
     }
   }
 
@@ -290,7 +344,7 @@ export class Scelta extends Elemento {
         role="combobox"
         aria-haspopup="listbox"
         aria-expanded=${this.aperto ? 'true' : 'false'}
-        aria-controls="${this.idBase}-elenco"
+        aria-controls="${this.idBase}-voci"
         aria-activedescendant=${this.aperto && this.evidenziato >= 0
           ? this.idBase + '-o' + this.evidenziato : nothing}
         aria-label=${this.etichetta || nothing}
@@ -302,8 +356,27 @@ export class Scelta extends Elemento {
         <span class="punta" aria-hidden="true">▼</span>
       </button>
 
-      <div class="tendina" popover="manual" id="${this.idBase}-elenco" role="listbox"
+      <div class="tendina" popover="manual" id="${this.idBase}-elenco"
            aria-label=${this.etichetta || nothing}>
+        ${this.cercabile ? html`
+          <div class="ricerca">
+            <input type="text" .value=${this.filtro} placeholder="cerca…"
+                   role="combobox"
+                   aria-expanded="true"
+                   aria-label=${this.etichetta || nothing}
+                   aria-controls="${this.idBase}-voci"
+                   aria-activedescendant=${this.evidenziato >= 0
+                     ? this.idBase + '-o' + this.evidenziato : nothing}
+                   @input=${(e: Event) => {
+                     this.filtro = (e.target as HTMLInputElement).value;
+                     // Chi scrive si aspetta che Invio prenda la prima voce
+                     // rimasta, non quella che era evidenziata prima del filtro.
+                     this.evidenziato = 0;
+                   }}
+                   @keydown=${this.tasto}>
+          </div>` : nothing}
+        <div id="${this.idBase}-voci" role="listbox" aria-label=${this.etichetta || nothing}>
+        ${this.scelte.length === 0 ? html`<div class="niente">nessuna voce</div>` : nothing}
         ${this.scelte.map((o, i) => html`
           <div
             id="${this.idBase}-o${i}"
@@ -317,6 +390,7 @@ export class Scelta extends Elemento {
             <span class="segno" aria-hidden="true">${o.valore === this.valore ? '✓' : ''}</span>
             <span>${o.etichetta}</span>
           </div>`)}
+        </div>
       </div>`;
   }
 }

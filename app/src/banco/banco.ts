@@ -214,6 +214,14 @@ const FORNITORI: FornitoreVista[] = [
   { id: 's2', nome: 'Pescheria Blu', piva: '', telefono: '', email: '', indirizzo: '' },
 ];
 
+/* Una lista lunga abbastanza da avere senso: con sei voci la ricerca non
+   serve, con trecento ingredienti in anagrafica e' l'unica cosa che funziona. */
+const INGREDIENTI_SCELTA: Opzione[] = [
+  'Asparagi extra', 'Punte di asparagi', 'Branzino', 'Burro di malga',
+  'Cipolla rossa', 'Farina 00', 'Guanciale', 'Olio EVO', 'Parmigiano 36 mesi',
+  'Pomodoro San Marzano', 'Riso Carnaroli', 'Sale di Cervia',
+].map((n, i) => ({ valore: 'i' + i, etichetta: n }));
+
 const GRUPPI: Gruppo[] = [
   {
     nome: 'cmd-bottone',
@@ -270,6 +278,18 @@ const GRUPPI: Gruppo[] = [
             <cmd-scelta etichetta="Partita" .opzioni=${PARTITE} valore="primi"></cmd-scelta>
             <cmd-scelta etichetta="Partita" .opzioni=${PARTITE} segnaposto="Nessuna partita"></cmd-scelta>
             <cmd-scelta etichetta="Partita" .opzioni=${PARTITE} valore="pass" disabilitato></cmd-scelta>
+          </div>`,
+      },
+      {
+        id: 'scelta-cercabile',
+        titolo: 'Con la ricerca, per le liste lunghe',
+        nota: 'Sostituisce il <datalist> nativo del selettore di ingredienti, che oltre a essere disegnato dal sistema pretendeva la corrispondenza ESATTA: scrivendo «asparagi» rispondeva «nessuna corrispondenza» se in anagrafica c’era «Punte di asparagi». Qui il filtro cerca per contenuto.',
+        contenuto: () => html`
+          <div class="griglia">
+            <cmd-scelta cercabile etichetta="Ingrediente" .opzioni=${INGREDIENTI_SCELTA}
+                        segnaposto="cerca un ingrediente"></cmd-scelta>
+            <cmd-scelta cercabile etichetta="Ingrediente" .opzioni=${INGREDIENTI_SCELTA}
+                        valore="i3"></cmd-scelta>
           </div>`,
       },
       {
