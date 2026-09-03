@@ -114,29 +114,48 @@ button{font-family:inherit;cursor:pointer;}
 input,textarea,select{font-family:inherit;}
 ::selection{background:var(--copper-soft);}
 
-#app{max-width:900px;margin:0 auto;padding:0 0 90px;}
+#app{max-width:var(--colonna-lettura);margin:0 auto;padding:0 0 90px;}
 
+/* L'INTESTAZIONE NON E' PIU' APPICCICATA IN ALTO, e non e' una rinuncia: era
+   ROTTA. Stava incollata a top:0 con z-index 20, e la navigazione pure, a
+   top:0 con z-index 30. Due cose incollate alla stessa altezza si coprono a
+   vicenda: scorrendo, il nome dell'app spariva dietro le schede e da sotto
+   spuntava mezza riga «CUCINA · BRIGATA · MENU» tagliata, col riquadro
+   arancione dell'ambiente di prova. Si vedeva in ogni schermata.
+   Delle due, quella che deve restare a portata e' la navigazione. Il nome
+   della cucina lo si legge una volta entrando. */
 header.top{
   padding:22px 20px 14px;border-bottom:1px solid var(--line);
-  position:sticky;top:0;background:rgba(29,27,24,0.92);backdrop-filter:blur(8px);z-index:20;
+  background:rgba(29,27,24,0.92);
 }
 header.top .brand{font-family:var(--font-display);font-weight:700;font-size:26px;letter-spacing:0.3px;display:flex;align-items:baseline;gap:10px;}
 header.top .brand .mark{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--copper);transform:translateY(-2px);}
 header.top .sub{font-family:var(--font-mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--brass);margin-top:4px;}
 
-/* LA NAVIGAZIONE E' FISSA, e in due posti diversi a seconda di chi la usa.
-   Su un telefono in basso, dove arriva il pollice, come in ogni app che la
-   brigata ha gia' sul telefono. Su un computer in alto, appiccicata: NON in una
-   colonna a sinistra, e la ragione e' misurabile — una colonna ruba larghezza, e
-   la griglia dei turni e' la vista piu' affamata di larghezza dell'app, quella
-   che stiamo cercando di far entrare in sette giorni. Il tempo si compra in
-   verticale, che ce n'e', non in orizzontale, che manca. */
-nav.tabs{display:flex;gap:4px;overflow-x:auto;padding:14px 20px 0;border-bottom:1px solid var(--line);scrollbar-width:none;
+/* LA NAVIGAZIONE STA IN TRE POSTI, uno per ogni modo di usare l'app.
+   Sotto 768px: in basso, dove arriva il pollice, come in ogni app che la
+   brigata ha gia' sul telefono.
+   Fra 768 e 1024: in alto, appiccicata, e VA A CAPO invece di scorrere.
+   Sopra 1024: una colonna a sinistra — vedi piu' sotto.
+
+   La colonna a sinistra era stata scartata, e la ragione scritta qui era: «una
+   colonna ruba larghezza, e la griglia dei turni e' la vista piu' affamata di
+   larghezza dell'app». Era giusta FINCHE' la pagina era larga 900px: dentro
+   900, 216 di colonna sono un quarto. Ma la pagina larga arriva a 1400, e su
+   uno schermo da 1920 ne restano 1700 al contenuto contro i 900 di prima. La
+   colonna non ruba piu' niente: la larghezza la REGALA. Cambiato il vincolo,
+   cambia la risposta.
+
+   La riga che va a capo invece di scorrere e' lo stesso rimedio gia' applicato
+   alle sotto-schede, e per lo stesso difetto: a 833px il contenuto ne misurava
+   863 e «IMPOSTAZIONI CUCINA» era tagliato a meta', senza nessun segno che ci
+   fosse altro da vedere. */
+nav.tabs{display:flex;flex-wrap:wrap;gap:4px;padding:14px 20px 0;border-bottom:1px solid var(--line);
   position:sticky;top:0;z-index:30;background:var(--bg);}
-nav.tabs::-webkit-scrollbar{display:none;}
 nav.tabs button{background:none;border:none;color:var(--brass);font-family:var(--font-mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:9px 12px 12px;white-space:nowrap;border-bottom:2px solid transparent;transition:color .15s, border-color .15s;}
 nav.tabs button.active{color:var(--paper);border-bottom-color:var(--copper);}
 nav.tabs button:hover{color:var(--paper);}
+
 
 /* LE SOTTO-SCHEDE VANNO A CAPO, non scorrono.
    Segnalato dal proprietario: "ti sei dimenticata di mettere quote persona in
@@ -736,9 +755,8 @@ input[type=color]::-moz-color-swatch{border:0; border-radius:50%;}
      dei telefoni senza tasto: senza, l'ultima riga finisce sotto la barra e
      nessuno la vede — e' l'errore piu' comune di questa disposizione. */
   #app{padding-bottom:calc(66px + env(safe-area-inset-bottom, 0px));}
-  /* L'intestazione col nome della cucina non serve incollata: su uno schermo
-     alto 812px ogni pixel fisso in alto e' un pixel in meno di griglia. */
-  header.top{position:static;}
+  /* (L'intestazione qui era rimessa a `static`. Ora non e' incollata da
+     nessuna parte, a nessuna larghezza, quindi la regola non serve piu'.) */
 }
 
 /* Il foglio di via per «Altro»: la voce che raccoglie quelle che non entrano. */
@@ -755,3 +773,68 @@ input[type=color]::-moz-color-swatch{border:0; border-radius:50%;}
   padding:13px 4px; border-bottom:1px solid var(--line);
 }
 .tab-altro-sheet button:last-child{border-bottom:0;}
+
+/* ============================================================================
+   L'IMPIANTO LARGO — sopra i 1024px.
+
+   «Il cuoco usera' l'app del telefono, chi gestisce usera' il PC.» Chi gestisce
+   e' quello che ci passa le ore: costruisce i turni, controlla i costi, guarda
+   il fabbisogno. E fino a ieri, su un monitor da 1920, guardava una colonna da
+   900 con 1020 pixel di nero intorno — due terzi di schermo buttati.
+
+   Tre cose cambiano insieme:
+   1. la navigazione diventa una colonna a sinistra. Una lista verticale non
+      finisce mai lo spazio: la voce tagliata a meta' non puo' piu' succedere,
+      e le voci hanno il posto per l'icona E la parola.
+   2. la pagina arriva a --pagina-larga (1400px), centrata. Non "tutto lo
+      schermo": oltre i 1400 una tabella diventa un campo da tennis e l'occhio
+      perde la riga.
+   3. i testi discorsivi restano stretti. Larghezza e leggibilita' non sono la
+      stessa cosa: una tabella vuole spazio, un paragrafo no. Oltre le 78
+      lettere per riga si perde il segno tornando a capo.
+   ============================================================================ */
+@media(min-width:1024px){
+  nav.tabs{
+    position:fixed;left:0;top:0;bottom:0;width:216px;
+    flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:2px;
+    padding:20px 12px;overflow-y:auto;
+    border-bottom:0;border-right:1px solid var(--line);
+    background:var(--bg-elev);
+  }
+  nav.tabs button{
+    display:flex;align-items:center;gap:10px;
+    min-height:40px;padding:10px 12px;
+    border-bottom:0;border-radius:var(--radius-sm);
+    text-align:left;white-space:normal;line-height:1.35;
+    transition:background-color var(--tempo-istante) var(--curva),
+               color var(--tempo-istante) var(--curva);
+  }
+  nav.tabs button::before{
+    content:attr(data-icona);font-size:15px;line-height:1;flex:0 0 18px;
+    font-family:'Apple Color Emoji','Segoe UI Emoji',sans-serif;
+  }
+  nav.tabs button:hover{background:var(--bg-elev2);color:var(--paper);}
+  nav.tabs button.active,
+  nav.tabs button.active:hover{
+    background:var(--copper-soft);color:var(--copper-light);font-weight:700;
+    border-bottom-color:transparent;
+  }
+
+  #app{margin:0 0 0 216px;max-width:none;padding-bottom:40px;}
+  header.top,main{max-width:var(--pagina-larga);margin-inline:auto;}
+  main{padding:26px 32px;}
+
+  /* La riga di lettura resta stretta anche quando la pagina e' larga. */
+  .prose,p.small-note,p.section-sub{max-width:78ch;}
+
+  /* Anche le righe «etichetta a sinistra, valore a destra» si fermano: a 1200px
+     il nome e il turno finiscono ai due capi opposti dello schermo e per
+     leggerli insieme si muove la testa. «Alessio ... S1 · Sera01 · Pass» non e'
+     una riga, sono due cose lontane. */
+  .list-row{max-width:68ch;}
+
+  /* Con lo spazio che c'e', i numeri della dashboard stanno in fila invece che
+     a due a due: si leggono tutti in un colpo d'occhio, che e' il mestiere di
+     quel riquadro. */
+  .stat-grid{grid-template-columns:repeat(4,1fr);}
+}
