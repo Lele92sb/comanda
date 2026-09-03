@@ -53,6 +53,8 @@ import '../turni/fabbisogno-vista.ts';
 import type { ServizioFabbisogno } from '../turni/fabbisogno-vista.ts';
 import '../turni/capienza-vista.ts';
 import type { Conto } from '../turni/capienza-vista.ts';
+import '../turni/servizi-vista.ts';
+import type { ServizioVista, TipoTurnoVista } from '../turni/servizi-vista.ts';
 
 interface Caso {
   id: string;
@@ -169,6 +171,23 @@ const CONTO: Conto = {
       rimbalzo: 0, qualificati: 0, donatori: [], servizi: 'Cena 1' },
   ],
 };
+
+/* Due servizi e un terzo che NESSUN turno copre: e' lo stato che va visto,
+   perche' e' l'unico che dice qualcosa a chi sta configurando. */
+const SERVIZI_VISTA: ServizioVista[] = [
+  { id: 'pranzo', nome: 'Pranzo', copertoDa: ['P', 'SP', 'P1'] },
+  { id: 'cena', nome: 'Cena', copertoDa: ['S', 'SP'] },
+  { id: 'aperitivo', nome: 'Aperitivo', copertoDa: [] },
+];
+
+const TIPI_TURNO: TipoTurnoVista[] = [
+  { id: 't1', sigla: 'P', orario: '9:00–17:00', ore: 8, colore: '#b06b34', servizi: ['pranzo'] },
+  { id: 't2', sigla: 'SP', orario: '10:00–15:00 · 19:00–24:00', ore: 11, colore: '#6b8064',
+    servizi: ['pranzo', 'cena'] },
+  { id: 't3', sigla: 'T1', orario: 'da compilare', ore: 8, colore: '#b8873f', servizi: [] },
+  { id: 't4', sigla: 'R', orario: '', ore: 0, colore: '#2e2a25', servizi: ['pranzo'],
+    errore: '«R» è riservata (R · Riposo)' },
+];
 
 const GRUPPI: Gruppo[] = [
   {
@@ -387,6 +406,30 @@ const GRUPPI: Gruppo[] = [
         contenuto: () => html`
           <cmd-scheda-persona .persona=${PERSONA_NUOVA} .stazioni=${[]}
                               .ruoli=${RUOLI} .membri=${[]} nuova></cmd-scheda-persona>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-servizi e cmd-tipi-turno — una schermata intera',
+    casi: [
+      {
+        id: 'servizi',
+        titolo: 'Tre servizi, e uno che nessun turno copre',
+        nota: 'Le frecce: il primo scende soltanto, l’ultimo sale soltanto, quello in mezzo fa tutte e due. Con due soli servizi ne comparivano DUE in su e nessuna che scendesse — segnalato dal proprietario.',
+        contenuto: () => html`<cmd-servizi .servizi=${SERVIZI_VISTA}></cmd-servizi>`,
+      },
+      {
+        id: 'tipi-turno',
+        titolo: 'Uno normale, uno spezzato, uno vuoto, uno rifiutato',
+        nota: 'La sigla rifiutata mostra il perché SOTTO il campo. Prima lo diceva un avviso in fondo allo schermo, che spariva mentre stavi ancora guardando il campo.',
+        contenuto: () => html`
+          <cmd-tipi-turno .tipi=${TIPI_TURNO} .servizi=${SERVIZI_VISTA}></cmd-tipi-turno>`,
+      },
+      {
+        id: 'tipi-turno-senza-servizi',
+        titolo: 'Prima che esistano i servizi',
+        contenuto: () => html`
+          <cmd-tipi-turno .tipi=${TIPI_TURNO.slice(0, 1)} .servizi=${[]}></cmd-tipi-turno>`,
       },
     ],
   },

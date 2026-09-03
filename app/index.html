@@ -317,10 +317,8 @@
         <div class="panel">
           <h3 data-t>I servizi della giornata</h3>
           <p class="small-note mt-0"  data-t>I momenti in cui la cucina lavora. Colazione, pranzo e cena sono solo un punto di partenza: aggiungi aperitivo, brunch, lunch o quello che serve nel tuo locale.</p>
-          <div class="grid2 mb-3" >
-            <input type="text" id="service-name-input" placeholder="Nome servizio, es. Aperitivo" data-t-placeholder>
-            <button class="btn" id="service-add-btn" data-t>+ Aggiungi servizio</button>
-          </div>
+          <!-- Il modulo per aggiungere sta dentro <cmd-servizi>: era qui fuori
+               e nel componente ce ne sarebbe stato un secondo. -->
           <div id="service-list"></div>
         </div>
         <div class="panel hidden" id="copia-config-panel">
@@ -335,7 +333,6 @@
           <h3 data-t>I tipi di turno</h3>
           <p class="small-note mt-0" >Ogni turno ha una sigla (quella che vedrai nella griglia), un orario, le ore che vale, e i servizi che copre. Un turno che copre <b>due servizi</b> è lo spezzato: una persona sola ne chiude due.</p>
           <div id="shifttype-list"></div>
-          <button class="btn ghost small full mt-3" id="shifttype-add-btn" data-t>+ Aggiungi tipo di turno</button>
         </div>
       </div>
 

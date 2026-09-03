@@ -615,19 +615,9 @@ body.readonly main label.btn{opacity:0.45;}
 }
 .riassunto-riga .btn{flex-shrink:0;}
 
-/* Selettore di colore. Il controllo nativo del browser è un rettangolo grigio
-   con bordi di sistema che stona con tutto il resto: si riduce a un pallino
-   della stessa forma di quello che poi comparirà nella griglia, così quello che
-   scegli e quello che vedi sono la stessa cosa. */
-input[type=color]{
-  width:30px; height:30px; flex-shrink:0;
-  padding:0; border:1px solid var(--line-strong); border-radius:50%;
-  background:none; cursor:pointer;
-}
-input[type=color]::-webkit-color-swatch-wrapper{padding:2px;}
-input[type=color]::-webkit-color-swatch{border:0; border-radius:50%;}
-input[type=color]::-moz-color-swatch{border:0; border-radius:50%;}
-.st-nome{flex:1; min-width:0;}
+/* (Qui stava il selettore di colore, insieme a .st-nome. Sono passati dentro
+   <cmd-partite> e <cmd-tipi-turno>: nel markup dell'app non c'e' piu' nessun
+   input[type=color], quindi la regola qui non poteva colpire piu' niente.) */
 
 
 /* ---------------------------------------------------------------------------
