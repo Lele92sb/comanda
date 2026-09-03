@@ -78,6 +78,10 @@ import '../turni/richieste-vista.ts';
 import type { RichiestaVista } from '../turni/richieste-vista.ts';
 import '../assistente/assistente-vista.ts';
 import type { MessaggioChat, NotaConoscenza } from '../assistente/assistente-vista.ts';
+import '../account/accesso-vista.ts';
+import type { CucinaVista } from '../account/accesso-vista.ts';
+import '../account/squadra-vista.ts';
+import type { InvitoVista, MembroVista } from '../account/squadra-vista.ts';
 
 interface Caso {
   id: string;
@@ -330,6 +334,33 @@ const CONVERSAZIONE: MessaggioChat[] = [
   { id: 'c2', chi: 'assistant', testo: 'Seppia scottata, crema di finocchietto e olio al limone bruciato.\nLa seppia due minuti per lato, non di più: oltre diventa gomma.' },
 ];
 
+const CUCINE: CucinaVista[] = [
+  { id: 'k1', nome: 'Trattoria del Porto', ruolo: 'titolare', soloLettura: false },
+  { id: 'k2', nome: 'Osteria di Mare', ruolo: 'può modificare', soloLettura: false },
+  { id: 'k3', nome: 'Bistrot 900', ruolo: 'sola lettura', soloLettura: true },
+];
+
+const MEMBRI_SQUADRA: MembroVista[] = [
+  { id: 'u0', nome: 'Emanuele', email: 'emanuele@ristorante.it', quando: 'sei tu',
+    io: true, ruolo: 'titolare' },
+  { id: 'u1', nome: 'Valerio', email: 'valerio@ristorante.it', quando: 'dal 12/03/2026',
+    io: false, ruolo: 'editor' },
+  /* Chi non ha ancora scelto un nome: nell'elenco compare l'email, e il campo
+     sotto e' vuoto invece di ripeterla — altrimenti sembra gia' compilato. */
+  { id: 'u2', nome: 'Senza nome', email: 'nuovo@ristorante.it', quando: 'dal 30/08/2026',
+    io: false, ruolo: 'viewer' },
+];
+
+const INVITI: InvitoVista[] = [
+  { codice: 'ABCD2345', ruolo: 'editor', scadenza: 'scade tra 13 giorni' },
+  { codice: 'WXYZ7788', ruolo: 'viewer', scadenza: 'senza scadenza' },
+];
+
+const DURATE = [
+  { valore: '1', etichetta: '1 giorno' }, { valore: '7', etichetta: '7 giorni' },
+  { valore: '14', etichetta: '14 giorni' }, { valore: 'mai', etichetta: 'senza scadenza' },
+];
+
 const GRUPPI: Gruppo[] = [
   {
     nome: 'cmd-bottone',
@@ -580,6 +611,36 @@ const GRUPPI: Gruppo[] = [
         id: 'piatti-vuoti',
         titolo: 'Prima che ce ne sia uno',
         contenuto: () => html`<cmd-piatti .piatti=${[]}></cmd-piatti>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-accesso, cmd-cucine, cmd-squadra — prima e intorno all’app',
+    casi: [
+      {
+        id: 'accesso',
+        titolo: 'Entra, crea un account, e mentre aspetta',
+        nota: 'Entrare e’ una chiamata di rete che su una connessione di cucina prende secondi. Prima il pulsante si limitava a riscriversi «Un attimo…» dentro: adesso si blocca e gira, e i campi si spengono con lui.',
+        contenuto: () => html`
+          <div class="griglia">
+            <cmd-accesso></cmd-accesso>
+            <cmd-accesso ?nuovo=${true}></cmd-accesso>
+            <cmd-accesso ?inCorso=${true}></cmd-accesso>
+            <cmd-accesso errore="Email o password non corretti."></cmd-accesso>
+          </div>`,
+      },
+      {
+        id: 'cucine',
+        titolo: 'Tre cucine, tre permessi',
+        contenuto: () => html`<cmd-cucine .cucine=${CUCINE}></cmd-cucine>`,
+      },
+      {
+        id: 'squadra',
+        titolo: 'Chi ha accesso, cosa vede, e i codici d’invito',
+        nota: 'La riservatezza non e’ un riquadro nascosto: spegnendo «prezzi e food cost» il database SMETTE DI MANDARLI. Questo componente disegna un interruttore; la serratura sta nel database.',
+        contenuto: () => html`
+          <cmd-squadra .membri=${MEMBRI_SQUADRA} .inviti=${INVITI} .durate=${DURATE}
+                       ?vedeCosti=${true} codiceNuovo="QRST9012"></cmd-squadra>`,
       },
     ],
   },

@@ -66,10 +66,6 @@
    COMPONENTI — regole normali, scavalcabili come tutte le altre.
    ============================================================================ */
 
-/* Riquadro annidato dentro un altro riquadro (gruppo di quote, tipo di turno,
-   scheda persona): stessa resa ovunque invece di sette varianti a mano. */
-.subpanel{background:var(--bg-elev2);padding:var(--space-3);border-radius:var(--radius-md);margin-bottom:var(--space-2);}
-
 /* Campo file nascosto: la scelta file passa da <label for>, non da JavaScript,
    perché su iOS Safari l'apertura via script non funziona. */
 .file-hidden{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;}
@@ -89,9 +85,6 @@
    ricetta e i quattro riquadri della dashboard sono componenti, e si portano
    dietro il proprio stile. Le regole della disposizione larga che le
    riguardavano sono sparite con loro. */
-
-/* Codice da leggere o dettare a voce (invito, sigla). */
-.code-inline{font-family:var(--font-mono);font-size:15px;letter-spacing:2px;color:var(--copper-light);}
 
 /* Miniatura di un'immagine caricata. */
 .thumb{max-width:140px;border-radius:var(--radius-md);margin-top:var(--space-2);display:block;}
@@ -411,11 +404,6 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
 
 .small-note{font-family:var(--font-mono);font-size:10.5px;color:var(--brass);margin-top:6px;line-height:1.6;}
-/* Riga di dettaglio sotto un nome (contatti, email, data d'ingresso). Non è
-   legata a .staff-card: serve anche nell'elenco della squadra. */
-.contact{font-family:var(--font-mono);font-size:11px;color:var(--brass);margin-top:4px;line-height:1.6;}
-
-
 /* Qui stavano le regole della CAPIENZA, delle PARTITE IN ORDINE DI PRIORITA'
    e delle FRECCE CHE RIORDINANO — 47 righe, tolte perche' quelle schermate
    sono diventate componenti e si portano dietro il proprio stile dentro lo
@@ -435,9 +423,6 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .overlay .lead{font-family:var(--font-mono);font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--brass);margin:0 0 24px;}
 .gate-error{background:var(--alert-soft);border:1px solid rgba(168,65,47,0.4);border-radius:6px;padding:10px 12px;font-size:12.5px;margin-bottom:12px;}
 .gate-switch{background:none;border:none;color:var(--copper-light);font-family:var(--font-mono);font-size:11px;text-decoration:underline;padding:6px 0;}
-.role-badge{font-family:var(--font-mono);font-size:9.5px;letter-spacing:0.8px;text-transform:uppercase;padding:3px 7px;border-radius:20px;background:var(--copper-soft);color:var(--copper-light);white-space:nowrap;}
-.role-badge.viewer{background:rgba(140,122,78,0.2);color:var(--brass);}
-.invite-code{font-family:var(--font-mono);font-size:17px;letter-spacing:3px;background:var(--bg-elev2);border:1px dashed var(--copper);border-radius:6px;padding:12px;text-align:center;color:var(--copper-light);margin:8px 0;}
 
 #account-bar{display:none;justify-content:space-between;align-items:center;gap:var(--space-3);margin-top:var(--space-2);flex-wrap:wrap;}
 #account-bar .who{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--brass);display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;min-width:0;}
@@ -509,16 +494,6 @@ body.readonly main input:not(#chat-input),
 body.readonly main select,
 body.readonly main textarea:not(#chat-input),
 body.readonly main label.btn{opacity:0.45;}
-
-/* Riga con casella di scelta e spiegazione sotto: le impostazioni che cambiano
-   cosa vedono gli altri meritano una frase, non solo un'etichetta. */
-.riga-scelta{display:flex;gap:var(--space-3);align-items:flex-start;
-  padding:var(--space-3) 0;border-bottom:1px solid var(--line);
-  text-transform:none;letter-spacing:0;color:var(--paper);font-family:var(--font-body);
-  font-size:var(--text-md);margin:0;cursor:pointer;}
-.riga-scelta:last-child{border-bottom:none;}
-.riga-scelta input[type=checkbox]{width:18px;height:18px;margin-top:2px;flex-shrink:0;accent-color:var(--copper);}
-.riga-scelta .contact{margin-top:2px;display:block;}
 
 /* Avviso "ambiente di prova". Compare in due posti: nell'intestazione dell'app
    e dentro la schermata d'accesso. Il secondo non e' un doppione: la schermata

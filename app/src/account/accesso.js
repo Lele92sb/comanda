@@ -3,6 +3,7 @@ import { chiediTesto, conferma, esc, toast } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
 import { startApp } from '../main.js';
 import './accesso-vista.ts';
+import './squadra-vista.ts';
 /* ============================= ACCESSO, CUCINA, RUOLI ============================= */
 export const gateEl  = document.getElementById('gate');
 const gateErr = document.getElementById('gate-error');
@@ -220,14 +221,6 @@ const DURATE_INVITO = [
   {v:'14', l:'14 giorni'}, {v:'30', l:'30 giorni'}, {v:'90', l:'90 giorni'},
   {v:'mai', l:'senza scadenza'},
 ];
-function DURATA_OPTIONS(scelta){
-  return DURATE_INVITO.map(d=>
-    `<option value="${d.v}" ${String(scelta)===d.v?'selected':''}>${d.l}</option>`).join('');
-}
-function ROLE_OPTIONS(scelto){
-  return [['editor','può modificare'],['viewer','sola lettura']].map(([v,l])=>
-    `<option value="${v}" ${scelto===v?'selected':''}>${l}</option>`).join('');
-}
 // Quanto resta, detto come lo direbbe una persona.
 function scadenzaTesto(iso){
   if(!iso) return 'senza scadenza';
@@ -240,149 +233,117 @@ function scadenzaTesto(iso){
   return 'scade tra meno di un\'ora';
 }
 
+let vistaSquadra = null;
+
 async function openTeam(){
   teamEl.classList.add('show');
   document.getElementById('team-kitchen').textContent = Cloud.kitchen.name;
   document.getElementById('team-error').classList.add('hidden');
-  document.getElementById('team-body').innerHTML = '<div class="empty">Carico…</div>';
+
+  const corpo = document.getElementById('team-body');
+  if(!vistaSquadra || !vistaSquadra.isConnected){
+    vistaSquadra = document.createElement('cmd-squadra');
+    vistaSquadra.durate = DURATE_INVITO.map(d => ({ valore: d.v, etichetta: d.l }));
+    collegaSquadra(vistaSquadra);
+    corpo.replaceChildren(vistaSquadra);
+  }
+  vistaSquadra.errore = '';
+  vistaSquadra.codiceNuovo = '';
+
   try{
-    const [members, invites] = await Promise.all([Cloud.listMembers(), Cloud.listInvites()]);
-    const pending = invites.filter(Cloud.inviteIsPending);
-    document.getElementById('team-body').innerHTML = `
-      <div class="panel">
-        <h3>Chi ha accesso all'app</h3>
-        <p class="small-note mt-0">Sono gli account che possono aprire Comanda su questa cucina. Chi ci lavora davvero si gestisce in Brigata: le due cose non coincidono — puoi avere accesso senza mai essere sui turni, ed essere sui turni senza avere un account.</p>
-        ${members.map(m=>{
-          const io = m.user_id === Cloud.user.id;
-          const nome = m.display_name || m.email || 'Senza nome';
-          return `
-          <div class="panel subpanel" >
-            <div class="row top between gap-3">
-              <div class="wrap-anywhere">
-                <div class="bold wrap-anywhere">${esc(nome)}</div>
-                <div class="contact wrap-anywhere" >${esc(m.email||'')}${
-                  io ? ' · sei tu' : ' · dal ' + new Date(m.created_at).toLocaleDateString('it-IT')}</div>
-              </div>
-              ${io
-                ? `<span class="role-badge">${m.role==='owner'?'titolare':(m.role==='editor'?'può modificare':'sola lettura')}</span>`
-                : `<select class="tm-role" data-u="${esc(m.user_id)}" style="width:auto;flex-shrink:0;">
-                     <option value="editor" ${m.role==='editor'?'selected':''}>può modificare</option>
-                     <option value="viewer" ${m.role==='viewer'?'selected':''}>sola lettura</option>
-                     <option value="owner"  ${m.role==='owner'?'selected':''}>titolare</option>
-                   </select>`}
-            </div>
-            <div class="grid2 mt-2" >
-              <input type="text" class="tm-name" data-u="${esc(m.user_id)}"
-                     value="${esc(m.display_name||'')}" placeholder="nome nell'app, es. Marco secondo">
-              ${io ? '' : `<button class="btn ghost small tm-rm text-alert" data-u="${esc(m.user_id)}"
-                           data-n="${esc(nome)}">Rimuovi dalla cucina</button>`}
-            </div>
-          </div>`;}).join('')}
-      </div>
-      <div class="panel">
-        <h3>Cosa vede chi può modificare</h3>
-        <p class="small-note mt-0">Chi ha solo lettura vede i turni pubblicati, le ricette senza numeri e le proprie richieste — e nient'altro, comunque. Qui decidi quanto mostrare al tuo secondo.</p>
-        <label class="riga-scelta">
-          <input type="checkbox" id="ris-costi" ${Cloud.kitchen.editor_vede_costi ? 'checked' : ''}>
-          <span><b>Prezzi e food cost</b><br><span class="contact">Prezzi d'acquisto, food cost, margini, fornitori e fatture. Senza, non può comporre un menu né valutare un piatto.</span></span>
-        </label>
-        <label class="riga-scelta">
-          <input type="checkbox" id="ris-personali" ${Cloud.kitchen.editor_vede_personali ? 'checked' : ''}>
-          <span><b>Dati personali della brigata</b><br><span class="contact">Telefono, email e ore contrattuali. Senza, vede nomi, stazioni e quote: quanto basta per fare i turni.</span></span>
-        </label>
-      </div>
-      <div class="panel">
-        <h3>Invita qualcuno</h3>
-        <p class="small-note mt-0" >Genera un codice e daglielo: lo inserisce al primo accesso ed entra con il permesso che scegli tu. Vale per una persona sola. Permesso e durata restano modificabili anche dopo averlo consegnato.</p>
-        <div class="grid2">
-          <div>
-            <label>Permesso</label>
-            <select id="inv-role">${ROLE_OPTIONS('editor')}</select>
-          </div>
-          <div>
-            <label>Validità</label>
-            <select id="inv-days">${DURATA_OPTIONS(14)}</select>
-          </div>
-        </div>
-        <button class="btn small full mt-3" id="inv-create">Genera codice</button>
-        <div id="team-new-code"></div>
-
-        ${pending.length ? `<label class="mt-4">Codici ancora validi</label>` + pending.map(i=>`
-          <div class="panel subpanel" >
-            <div class="row middle between">
-              <span class="code-inline">${esc(i.code)}</span>
-              <span class="row middle">
-                <span class="small-note m-0" >${esc(scadenzaTesto(i.expires_at))}</span>
-                <button class="rm tm-revoke" data-c="${esc(i.code)}" title="Annulla il codice">✕</button>
-              </span>
-            </div>
-            <div class="grid2 mt-2" >
-              <select class="inv-edit-role" data-c="${esc(i.code)}">${ROLE_OPTIONS(i.role)}</select>
-              <select class="inv-edit-days" data-c="${esc(i.code)}">
-                <option value="">— cambia validità —</option>${DURATA_OPTIONS()}
-              </select>
-            </div>
-          </div>`).join('') : ''}
-      </div>`;
-
-    const cambiaRiservatezza = async (campo, valore, elemento)=>{
-      try{ await Cloud.setRiservatezza({[campo]: valore}); toast(t('Impostazione salvata')); }
-      catch(e){ elemento.checked = !valore; teamError(e); }
-    };
-    document.getElementById('ris-costi').addEventListener('change', e=>
-      cambiaRiservatezza('costi', e.target.checked, e.target));
-    document.getElementById('ris-personali').addEventListener('change', e=>
-      cambiaRiservatezza('personali', e.target.checked, e.target));
-
-    document.getElementById('inv-create').addEventListener('click', async ()=>{
-      try{
-        const giorni = document.getElementById('inv-days').value;
-        const code = await Cloud.createInvite(
-          document.getElementById('inv-role').value,
-          giorni === 'mai' ? null : giorni
-        );
-        document.getElementById('team-new-code').innerHTML =
-          `<div class="invite-code">${esc(code)}</div><p class="small-note mt-0" >Annotalo ora: lo trovi anche nell'elenco qui sotto, ma è più comodo dettarlo subito.</p>`;
-      }catch(e){ teamError(e); }
-    });
-    teamEl.querySelectorAll('.inv-edit-role').forEach(sel=>sel.addEventListener('change', async ()=>{
-      try{ await Cloud.updateInvite(sel.dataset.c, {role: sel.value}); toast('Permesso del codice aggiornato'); }
-      catch(e){ teamError(e); }
+    const [membri, inviti] = await Promise.all([Cloud.listMembers(), Cloud.listInvites()]);
+    const nomeRuolo = r => r === 'owner' ? 'titolare'
+                         : r === 'editor' ? 'può modificare' : 'sola lettura';
+    vistaSquadra.membri = membri.map(m => ({
+      id: m.user_id,
+      nome: m.display_name || m.email || 'Senza nome',
+      email: m.email || '',
+      // «sei tu» al posto della data: chi guarda l'elenco cerca prima di tutto
+      // se stesso, per capire cosa può e cosa non può.
+      quando: m.user_id === Cloud.user.id
+        ? 'sei tu'
+        : 'dal ' + new Date(m.created_at).toLocaleDateString('it-IT'),
+      io: m.user_id === Cloud.user.id,
+      ruolo: m.user_id === Cloud.user.id ? nomeRuolo(m.role) : m.role,
     }));
-    teamEl.querySelectorAll('.inv-edit-days').forEach(sel=>sel.addEventListener('change', async ()=>{
-      if(!sel.value) return;
-      try{
-        await Cloud.updateInvite(sel.dataset.c, {giorni: sel.value === 'mai' ? null : sel.value});
-        openTeam(); toast('Validità aggiornata');
-      }catch(e){ teamError(e); }
+    vistaSquadra.inviti = inviti.filter(Cloud.inviteIsPending).map(i => ({
+      codice: i.code,
+      ruolo: i.role,
+      scadenza: scadenzaTesto(i.expires_at),
     }));
-    teamEl.querySelectorAll('.tm-role').forEach(sel=>sel.addEventListener('change', async ()=>{
-      try{ await Cloud.setMemberRole(sel.dataset.u, sel.value); toast('Ruolo aggiornato'); }
-      catch(e){ teamError(e); }
-    }));
-    teamEl.querySelectorAll('.tm-name').forEach(inp=>inp.addEventListener('change', async ()=>{
-      try{
-        await Cloud.setMemberName(inp.dataset.u, inp.value);
-        if(inp.dataset.u === Cloud.user.id){ Cloud.myDisplayName = inp.value.trim() || null; renderAccountBar(); }
-        toast('Nome aggiornato');
-      }catch(e){ teamError(e); }
-    }));
-    teamEl.querySelectorAll('.tm-rm').forEach(b=>b.addEventListener('click', async ()=>{
-      // Rimuovere qualcuno gli toglie l'accesso subito: meglio una conferma con
-      // il nome davanti agli occhi, viste le righe una sotto l'altra.
-      const ok = await conferma(`Togliere a ${b.dataset.n} l'accesso a ${Cloud.kitchen.name}?`,
-        'Perde solo l\'accesso all\'app. Se è anche in brigata ci resta, con i suoi turni già assegnati: quella è un\'altra cosa e si toglie da Brigata. Potrai riammetterla con un nuovo codice d\'invito.',
-        {conferma:'Rimuovi', pericolo:true});
-      if(!ok) return;
-      try{ await Cloud.removeMember(b.dataset.u); openTeam(); toast('Persona rimossa'); }
-      catch(e){ teamError(e); }
-    }));
-    teamEl.querySelectorAll('.tm-revoke').forEach(b=>b.addEventListener('click', async ()=>{
-      try{ await Cloud.revokeInvite(b.dataset.c); openTeam(); }
-      catch(e){ teamError(e); }
-    }));
+    vistaSquadra.vedeCosti = Boolean(Cloud.kitchen.editor_vede_costi);
+    vistaSquadra.vedePersonali = Boolean(Cloud.kitchen.editor_vede_personali);
   }catch(e){ teamError(e); }
 }
+
+function collegaSquadra(v){
+  const dopo = async (fn, msg) => {
+    try{ await fn(); if(msg) toast(msg); }
+    catch(e){ teamError(e); }
+  };
+
+  v.addEventListener('membro-ruolo', e =>
+    dopo(()=> Cloud.setMemberRole(e.detail.id, e.detail.ruolo), 'Ruolo aggiornato'));
+
+  v.addEventListener('membro-nome', e => dopo(async ()=>{
+    await Cloud.setMemberName(e.detail.id, e.detail.nome);
+    if(e.detail.id === Cloud.user.id){
+      Cloud.myDisplayName = e.detail.nome.trim() || null;
+      renderAccountBar();
+    }
+  }, 'Nome aggiornato'));
+
+  v.addEventListener('membro-rimuovi', async e => {
+    // Rimuovere qualcuno gli toglie l'accesso subito: meglio una conferma con
+    // il nome davanti agli occhi, viste le righe una sotto l'altra.
+    const ok = await conferma(`Togliere a ${e.detail.nome} l'accesso a ${Cloud.kitchen.name}?`,
+      "Perde solo l'accesso all'app. Se è anche in brigata ci resta, con i suoi turni già assegnati: quella è un'altra cosa e si toglie da Brigata. Potrai riammetterla con un nuovo codice d'invito.",
+      {conferma:'Rimuovi', pericolo:true});
+    if(!ok) return;
+    await dopo(()=> Cloud.removeMember(e.detail.id), 'Persona rimossa');
+    openTeam();
+  });
+
+  /* La riservatezza NON e' un riquadro nascosto: spegnendo «prezzi e food cost»
+     il database smette di mandarli (leggi_sezione). Se il salvataggio fallisce
+     l'interruttore va rimesso com'era, altrimenti direbbe una cosa falsa. */
+  v.addEventListener('riservatezza', async e => {
+    try{
+      await Cloud.setRiservatezza({[e.detail.campo]: e.detail.valore});
+      toast(t('Impostazione salvata'));
+    }catch(err){
+      if(e.detail.campo === 'costi') v.vedeCosti = !e.detail.valore;
+      else v.vedePersonali = !e.detail.valore;
+      teamError(err);
+    }
+  });
+
+  v.addEventListener('invito-crea', async e => {
+    try{
+      const codice = await Cloud.createInvite(
+        e.detail.ruolo,
+        e.detail.giorni === 'mai' ? null : e.detail.giorni);
+      await openTeam();
+      v.codiceNuovo = codice;
+    }catch(err){ teamError(err); }
+  });
+
+  v.addEventListener('invito-ruolo', e =>
+    dopo(()=> Cloud.updateInvite(e.detail.codice, {role: e.detail.ruolo}), 'Permesso del codice aggiornato'));
+
+  v.addEventListener('invito-giorni', async e => {
+    if(!e.detail.giorni) return;
+    await dopo(()=> Cloud.updateInvite(e.detail.codice,
+      {giorni: e.detail.giorni === 'mai' ? null : e.detail.giorni}), 'Validità aggiornata');
+    openTeam();
+  });
+
+  v.addEventListener('invito-revoca', async e => {
+    await dopo(()=> Cloud.revokeInvite(e.detail.codice), 'Codice annullato');
+    openTeam();
+  });
+}
+
 function teamError(e){
   const el = document.getElementById('team-error');
   el.textContent = humanError(e); el.classList.remove('hidden');
