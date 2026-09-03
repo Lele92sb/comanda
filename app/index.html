@@ -224,29 +224,11 @@
     <section class="view" id="view-richieste">
       <h2 class="section-title" data-t>Richieste</h2>
       <p class="section-sub" data-t>Ferie, giorni di riposo e servizi preferiti</p>
-      <div class="panel">
-        <h3 id="req-form-title" data-t>Nuova richiesta</h3>
-        <p class="small-note mt-0"  id="req-form-note"></p>
-        <div id="req-who"></div>
-        <div class="grid2">
-          <div><label data-t>Dal giorno</label><input type="date" id="req-dal"></div>
-          <div><label data-t>Al giorno</label><input type="date" id="req-al"></div>
-        </div>
-        <label data-t>Tipo di richiesta</label>
-        <select id="req-tipo">
-          <option value="riposo" data-t>Giorno di riposo</option>
-          <option value="ferie" data-t>Ferie</option>
-          <option value="servizio" data-t>Solo certi servizi</option>
-        </select>
-        <div id="req-servizi-wrap" class="hidden">
-          <label data-t>Servizi che posso fare in questi giorni</label>
-          <div class="chip-toggle" id="req-servizi"></div>
-        </div>
-        <label data-t>Nota (facoltativa)</label>
-        <input type="text" id="req-nota" placeholder="es. visita medica, matrimonio..." data-t-placeholder>
-        <button class="btn full mt-3" id="req-add" data-t>Invia richiesta</button>
-      </div>
-      <div class="panel"><h3 id="req-list-title" data-t>Richieste</h3><div id="req-list"></div></div>
+      <!-- Modulo ed elenco stanno dentro <cmd-richieste>: la schermata cambia
+           forma a seconda di chi guarda (titolare, brigata collegata, brigata
+           non collegata), e tenere quelle tre forme in un markup fisso voleva
+           dire riscriverlo a pezzi da JavaScript. -->
+      <div id="req-panel"></div>
     </section>
 
     <section class="view" id="view-assistente">

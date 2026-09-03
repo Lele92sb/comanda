@@ -74,6 +74,8 @@ import '../ricettario/ricette-vista.ts';
 import type { PiattoVista, SubRicettaVista } from '../ricettario/ricette-vista.ts';
 import '../ds/dialogo.ts';
 import '../turni/foglio-turno-vista.ts';
+import '../turni/richieste-vista.ts';
+import type { RichiestaVista } from '../turni/richieste-vista.ts';
 
 interface Caso {
   id: string;
@@ -305,6 +307,15 @@ const PIATTI: PiattoVista[] = [
                 { etichetta: 'Food cost reale', valore: '43.1%', tono: 'storto' },
                 { etichetta: 'Margine effettivo', valore: '€ 14.80', tono: 'buono' } ],
     allergeni: ['Pesce'], procedimento: '', note: '' },
+];
+
+const RICHIESTE: RichiestaVista[] = [
+  { id: 'r1', chi: 'Alessio', dettaglio: 'Ferie', periodo: '10 ago → 24 ago (15 giorni)',
+    nota: '', stato: 'in_attesa' },
+  { id: 'r2', chi: 'Uddin', dettaglio: 'Riposo', periodo: 'gio 3 settembre',
+    nota: 'visita medica', stato: 'approvata' },
+  { id: 'r3', chi: 'Carlos', dettaglio: 'solo: Pranzo', periodo: '1 set → 7 set (7 giorni)',
+    nota: '', stato: 'rifiutata' },
 ];
 
 const GRUPPI: Gruppo[] = [
@@ -557,6 +568,36 @@ const GRUPPI: Gruppo[] = [
         id: 'piatti-vuoti',
         titolo: 'Prima che ce ne sia uno',
         contenuto: () => html`<cmd-piatti .piatti=${[]}></cmd-piatti>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-richieste — una schermata che cambia forma',
+    casi: [
+      {
+        id: 'richieste-titolare',
+        titolo: 'Come la vede il titolare',
+        nota: 'Registra per chiunque, e quello che scrive lui vale subito: e’ lui che approva.',
+        contenuto: () => html`
+          <cmd-richieste ?sonoTitolare=${true} ?collegato=${true}
+                         .persone=${[{ valore: 'a', etichetta: 'Lorenc' }, { valore: 'b', etichetta: 'Uddin' }]}
+                         .servizi=${[{ valore: 'pranzo', etichetta: 'Pranzo' }, { valore: 'cena', etichetta: 'Cena' }]}
+                         .richieste=${RICHIESTE}></cmd-richieste>`,
+      },
+      {
+        id: 'richieste-brigata',
+        titolo: 'Come la vede chi è in brigata',
+        contenuto: () => html`
+          <cmd-richieste ?collegato=${true} mioNome="Uddin"
+                         .servizi=${[{ valore: 'pranzo', etichetta: 'Pranzo' }, { valore: 'cena', etichetta: 'Cena' }]}
+                         .richieste=${RICHIESTE.slice(1, 2)}></cmd-richieste>`,
+      },
+      {
+        id: 'richieste-scollegato',
+        titolo: 'Chi ha un account ma non è collegato a nessuno',
+        nota: 'E’ il caso che si dimentica sempre. Non puo’ mandare niente, e la schermata deve dirgli perche’ e a chi chiedere — invece di mostrargli un modulo che non funziona.',
+        contenuto: () => html`
+          <cmd-richieste .servizi=${[]} .richieste=${[]}></cmd-richieste>`,
       },
     ],
   },

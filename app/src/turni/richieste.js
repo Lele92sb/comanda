@@ -1,7 +1,8 @@
 import { humanError } from '../account/accesso.js';
-import { SERVICE_LABEL, conferma, esc, state, toast } from '../core/state.js';
+import { SERVICE_LABEL, conferma, state, toast } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
 import { isoDate, parseISO } from '../lib/logic.js';
+import './richieste-vista.ts';
 /* ============================= RICHIESTE DEL PERSONALE ============================= */
 let RICHIESTE = [];
 
@@ -45,111 +46,84 @@ export async function caricaRichieste(){
   catch(e){ console.error('richieste non caricate', e); RICHIESTE = []; }
 }
 
-export async function renderRichieste(){
-  await caricaRichieste();
-  const sonoTitolare = !Cloud.enabled || Cloud.isOwner();
-  const mia = miaSchedaBrigata();
+let vista = null;
 
-  // --- form ---
-  document.getElementById('req-form-title').textContent = sonoTitolare ? 'Registra una richiesta' : 'Nuova richiesta';
-  document.getElementById('req-form-note').textContent = sonoTitolare
-    ? 'Le richieste che registri tu sono già approvate: valgono subito per il generatore. Quelle inviate dalla brigata restano in attesa finché non decidi.'
-    : 'La richiesta arriva a chi gestisce la cucina. Diventa vincolante per i turni solo quando viene approvata.';
-
-  const whoEl = document.getElementById('req-who');
-  if(sonoTitolare){
-    whoEl.innerHTML = `<label>Per chi</label><select id="req-staff">${
-      state.staff.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')
-      || '<option value="">Nessuno in brigata</option>'}</select>`;
-  } else if(mia){
-    whoEl.innerHTML = `<p class="small-note mt-0" >Richiesta a nome di <b>${esc(mia.name)}</b>.</p>`;
-  } else {
-    whoEl.innerHTML = `<div class="alert-box">Non risulti collegato a nessuna persona della brigata: chiedi a chi gestisce la cucina di collegarti, così potrai inviare le tue richieste.</div>`;
+/* Il periodo scritto come lo si legge. Un giorno solo si dice per esteso —
+   «giovedì 3 settembre» — perche' e' quello che si va a cercare nel calendario;
+   un intervallo si accorcia e si dice quanti giorni sono, che e' la cosa che
+   interessa a chi deve coprirli. */
+function periodoScritto(dal, al){
+  if(dal === al){
+    return parseISO(dal).toLocaleDateString('it-IT', {weekday:'short', day:'numeric', month:'long'});
   }
-  document.getElementById('req-add').disabled = !sonoTitolare && !mia;
+  const breve = iso => parseISO(iso).toLocaleDateString('it-IT', {day:'numeric', month:'short'});
+  return breve(dal) + ' → ' + breve(al) + ' (' + elencoDate(dal, al).length + ' giorni)';
+}
 
-  document.getElementById('req-servizi').innerHTML = state.services.map(sv=>
-    `<button type="button" data-sv="${esc(sv.id)}">${esc(sv.name)}</button>`).join('');
-
-  // --- elenco ---
-  const visibili = sonoTitolare ? RICHIESTE
-    : RICHIESTE.filter(r=> mia && r.staff_id === mia.id);
-  document.getElementById('req-list-title').textContent = sonoTitolare ? 'Tutte le richieste' : 'Le mie richieste';
-
-  const el = document.getElementById('req-list');
-  if(!visibili.length){ el.innerHTML = `<div class="empty">Nessuna richiesta.</div>`; return; }
-
-  const inAttesa = visibili.filter(r=>r.stato==='in_attesa');
-  const decise   = visibili.filter(r=>r.stato!=='in_attesa');
-  const riga = r=>{
-    const giorni = elencoDate(r.dal, r.al).length;
-    const periodo = r.dal===r.al
-      ? parseISO(r.dal).toLocaleDateString('it-IT',{weekday:'short', day:'numeric', month:'long'})
-      : `${parseISO(r.dal).toLocaleDateString('it-IT',{day:'numeric',month:'short'})} → ${parseISO(r.al).toLocaleDateString('it-IT',{day:'numeric',month:'short'})} (${giorni} giorni)`;
-    const dettaglio = r.tipo==='servizio'
-      ? 'solo: ' + (r.servizi||[]).map(SERVICE_LABEL).join(', ')
-      : TIPO_LABEL[r.tipo];
-    const badge = r.stato==='approvata' ? '<span class="role-badge">approvata</span>'
-                : r.stato==='rifiutata' ? '<span class="role-badge viewer">rifiutata</span>'
-                : '<span class="role-badge viewer">in attesa</span>';
-    return `
-      <div class="staff-card">
-        <div class="wrap-anywhere">
-          <div class="bold">${esc(nomeBrigata(r.staff_id))} — ${esc(dettaglio)}</div>
-          <div class="contact">${esc(periodo)}${r.nota? ' · '+esc(r.nota):''}</div>
-        </div>
-        <div class="col end">
-          ${badge}
-          ${sonoTitolare && r.stato==='in_attesa' ? `
-            <button class="btn small req-ok" data-id="${esc(r.id)}">Approva</button>
-            <button class="btn ghost small req-no" data-id="${esc(r.id)}">Rifiuta</button>` : ''}
-          <button class="btn ghost small req-del text-alert" data-id="${esc(r.id)}">Elimina</button>
-        </div>
-      </div>`;
-  };
-
-  el.innerHTML =
-    (inAttesa.length ? `<label>Da decidere (${inAttesa.length})</label>` + inAttesa.map(riga).join('') : '') +
-    (decise.length   ? `<label>Già decise</label>` + decise.map(riga).join('') : '');
-
-  const dopo = async (fn, msg)=>{ try{ await fn(); toast(msg); renderRichieste(); }catch(e){ toast(humanError(e)); } };
-  el.querySelectorAll('.req-ok').forEach(b=>b.addEventListener('click', ()=>
-    dopo(()=>Cloud.decideRequest(b.dataset.id,'approvata'), 'Approvata — vincola i prossimi turni generati')));
-  el.querySelectorAll('.req-no').forEach(b=>b.addEventListener('click', ()=>
-    dopo(()=>Cloud.decideRequest(b.dataset.id,'rifiutata'), 'Rifiutata')));
-  el.querySelectorAll('.req-del').forEach(b=>b.addEventListener('click', async ()=>{
-    if(!await conferma('Eliminare questa richiesta?', null, {conferma:'Elimina', pericolo:true})) return;
-    dopo(()=>Cloud.deleteRequest(b.dataset.id), 'Richiesta eliminata');
+function daDisegnare(visibili){
+  return visibili.map(r => ({
+    id: r.id,
+    chi: nomeBrigata(r.staff_id),
+    dettaglio: r.tipo === 'servizio'
+      ? 'solo: ' + (r.servizi || []).map(SERVICE_LABEL).join(', ')
+      : TIPO_LABEL[r.tipo],
+    periodo: periodoScritto(r.dal, r.al),
+    nota: r.nota || '',
+    stato: r.stato,
   }));
 }
 
-document.getElementById('req-tipo').addEventListener('change', e=>{
-  document.getElementById('req-servizi-wrap').classList.toggle('hidden', e.target.value!=='servizio');
-});
-document.getElementById('req-servizi').addEventListener('click', e=>{
-  if(e.target.dataset.sv) e.target.classList.toggle('on');
-});
-document.getElementById('req-add').addEventListener('click', async ()=>{
-  const dal = document.getElementById('req-dal').value;
-  const al  = document.getElementById('req-al').value || dal;
-  const tipo = document.getElementById('req-tipo').value;
-  if(!dal){ toast('Indica almeno il giorno di inizio'); return; }
-  if(parseISO(al) < parseISO(dal)){ toast('La data finale è prima di quella iniziale'); return; }
+export async function renderRichieste(){
+  const el = document.getElementById('req-panel');
+  if(!el) return;
+  await caricaRichieste();
 
-  const sel = document.getElementById('req-staff');
+  const sonoTitolare = !Cloud.enabled || Cloud.isOwner();
   const mia = miaSchedaBrigata();
-  const staffId = sel ? sel.value : (mia && mia.id);
-  if(!staffId){ toast('Manca la persona a cui riferire la richiesta'); return; }
+  // Chi non e' titolare vede solo le proprie: e' il database a non mandargli
+  // le altre (policy requests_select). Questo filtro non protegge niente, evita
+  // solo di mostrare un elenco che sarebbe comunque vuoto.
+  const visibili = sonoTitolare ? RICHIESTE : RICHIESTE.filter(r => mia && r.staff_id === mia.id);
 
-  const servizi = Array.from(document.querySelectorAll('#req-servizi button.on')).map(b=>b.dataset.sv);
-  if(tipo==='servizio' && !servizi.length){ toast('Scegli almeno un servizio'); return; }
+  if(!vista || !vista.isConnected){
+    vista = document.createElement('cmd-richieste');
+    collega(vista);
+    el.replaceChildren(vista);
+  }
+  vista.sonoTitolare = sonoTitolare;
+  vista.mioNome = mia ? mia.name : '';
+  vista.collegato = Boolean(mia);
+  vista.persone = state.staff.map(s => ({ valore: s.id, etichetta: s.name }));
+  vista.servizi = state.services.map(sv => ({ valore: sv.id, etichetta: sv.name }));
+  vista.richieste = daDisegnare(visibili);
+}
 
-  try{
-    await Cloud.createRequest({ staff_id: staffId, dal, al, tipo, servizi,
-                                nota: document.getElementById('req-nota').value.trim() });
-    document.getElementById('req-nota').value = '';
-    document.querySelectorAll('#req-servizi button.on').forEach(b=>b.classList.remove('on'));
-    toast(Cloud.enabled && !Cloud.isOwner() ? 'Richiesta inviata — in attesa di approvazione' : 'Richiesta registrata');
-    renderRichieste();
-  }catch(e){ toast(humanError(e)); }
-});
+function collega(v){
+  const dopo = async (fn, msg) => {
+    try{ await fn(); toast(msg); renderRichieste(); }
+    catch(e){ toast(humanError(e)); }
+  };
+
+  v.addEventListener('richiesta-crea', e => {
+    const d = e.detail;
+    const staffId = d.staffId || (miaSchedaBrigata() || {}).id;
+    if(!staffId){ toast('Manca la persona a cui riferire la richiesta'); return; }
+    dopo(()=> Cloud.createRequest({
+      staff_id: staffId, dal: d.dal, al: d.al, tipo: d.tipo,
+      servizi: d.servizi, nota: d.nota,
+    }), Cloud.enabled && !Cloud.isOwner()
+        ? 'Richiesta inviata — in attesa di approvazione'
+        : 'Richiesta registrata');
+  });
+
+  v.addEventListener('richiesta-decidi', e => dopo(
+    ()=> Cloud.decideRequest(e.detail.id, e.detail.esito),
+    e.detail.esito === 'approvata'
+      ? 'Approvata — vincola i prossimi turni generati'
+      : 'Rifiutata'));
+
+  v.addEventListener('richiesta-elimina', async e => {
+    if(!await conferma('Eliminare questa richiesta?', null, {conferma:'Elimina', pericolo:true})) return;
+    dopo(()=> Cloud.deleteRequest(e.detail.id), 'Richiesta eliminata');
+  });
+}
