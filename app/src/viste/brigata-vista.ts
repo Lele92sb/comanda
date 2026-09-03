@@ -23,6 +23,8 @@ import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { t } from '../core/lingua.ts';
 import '../ds/bottone.ts';
+import { SOGLIA_RICERCA, filtra } from '../core/cerca.ts';
+import '../ds/ricerca.ts';
 import '../ds/vuoto.ts';
 
 export interface PersonaVista {
@@ -40,10 +42,15 @@ export interface PersonaVista {
 
 export class Brigata extends LitElement {
   static override properties = {
+    /* Lo stato del campo di ricerca. `state:true` e non una proprieta'
+       pubblica: e' roba della schermata, non un dato che il collante
+       debba conoscere o salvare. */
+    filtro: { state: true },
     persone: { type: Array },
     soloLettura: { type: Boolean, reflect: true, attribute: 'solo-lettura' },
   };
 
+  declare filtro: string;
   declare persone: PersonaVista[];
   declare soloLettura: boolean;
 
@@ -52,6 +59,7 @@ export class Brigata extends LitElement {
 
   constructor() {
     super();
+    this.filtro = '';
     this.persone = [];
     this.soloLettura = false;
   }
@@ -79,6 +87,15 @@ export class Brigata extends LitElement {
        cima»: si vede, invece di non esserci. */
     .frecce cmd-bottone::part(bottone){width:36px;padding-left:0;padding-right:0;}
     @media(max-width:560px){ .frecce cmd-bottone::part(bottone){width:40px;} }
+  
+    /* Quando la ricerca non trova niente. Non e' <cmd-vuoto>: quello dice «non
+       c'e' ancora niente, comincia» ed e' il primo passo. Questo dice «c'e'
+       roba, ma non questa», ed e' un vicolo cieco temporaneo — due messaggi
+       diversi, e scambiarli manda a creare una cosa che esiste gia'. */
+    .niente-trovato{
+      font-family:var(--font-body);font-size:var(--text-md);color:var(--brass);
+      padding:var(--space-4) 0;text-align:center;
+    }
   `;
 
   private manda<T>(nome: string, dettaglio: T): void {
@@ -165,7 +182,16 @@ export class Brigata extends LitElement {
                          @click=${() => this.manda('persona-nuova', {})}>${t('Aggiungi la prima persona')}</cmd-bottone>`}
         </cmd-vuoto>`;
     }
-    return html`${repeat(this.persone, p => p.id, (p, i) => this.scheda(p, i))}`;
+    const visti = filtra(this.persone, this.filtro, p => [p.nome, p.ruolo, ...p.partite]);
+    return html`
+      ${this.persone.length >= SOGLIA_RICERCA ? html`
+        <cmd-ricerca .valore=${this.filtro} segnaposto=${t('Cerca per nome, ruolo o partita')}
+                     quante=${visti.length} totale=${this.persone.length}
+                     @cmd-ricerca=${(e: CustomEvent<{ valore: string }>) =>
+                       { this.filtro = e.detail.valore; }}></cmd-ricerca>` : nothing}
+      ${visti.length === 0
+        ? html`<p class="niente-trovato">${t('Niente che corrisponda a «{cosa}».', { cosa: this.filtro })}</p>`
+        : repeat(visti, p => p.id, (p, i) => this.scheda(p, i))}`;
   }
 }
 

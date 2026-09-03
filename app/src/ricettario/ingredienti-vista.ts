@@ -23,6 +23,8 @@ import '../ds/etichetta.ts';
 import '../ds/scelta.ts';
 import '../ds/scheda.ts';
 import '../ds/vuoto.ts';
+import { SOGLIA_RICERCA, filtra } from '../core/cerca.ts';
+import '../ds/ricerca.ts';
 import type { Opzione } from '../ds/scelta.ts';
 
 export interface IngredienteVista {
@@ -55,15 +57,21 @@ const NUOVO_FORNITORE = '__nuovo__';
 
 export class Ingredienti extends LitElement {
   static override properties = {
+    /* Lo stato del campo di ricerca. `state:true` e non una proprieta'
+       pubblica: e' roba della schermata, non un dato che il collante
+       debba conoscere o salvare. */
+    filtro: { state: true },
     ingredienti: { type: Array },
     soloLettura: { type: Boolean, reflect: true, attribute: 'solo-lettura' },
   };
 
+  declare filtro: string;
   declare ingredienti: IngredienteVista[];
   declare soloLettura: boolean;
 
   constructor() {
     super();
+    this.filtro = '';
     this.ingredienti = [];
     this.soloLettura = false;
   }
@@ -74,6 +82,15 @@ export class Ingredienti extends LitElement {
     .riga{font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       line-height:1.6;margin-top:3px;overflow-wrap:anywhere;}
     .riga.costo{color:var(--copper-light);}
+  
+    /* Quando la ricerca non trova niente. Non e' <cmd-vuoto>: quello dice «non
+       c'e' ancora niente, comincia» ed e' il primo passo. Questo dice «c'e'
+       roba, ma non questa», ed e' un vicolo cieco temporaneo — due messaggi
+       diversi, e scambiarli manda a creare una cosa che esiste gia'. */
+    .niente-trovato{
+      font-family:var(--font-body);font-size:var(--text-md);color:var(--brass);
+      padding:var(--space-4) 0;text-align:center;
+    }
   `;
 
   private manda<T>(nome: string, dettaglio: T): void {
@@ -110,7 +127,16 @@ export class Ingredienti extends LitElement {
                          @click=${() => this.manda('ingrediente-nuovo', {})}>${t('Aggiungi il primo')}</cmd-bottone>`}
         </cmd-vuoto>`;
     }
-    return html`${repeat(this.ingredienti, i => i.id, i => this.scheda(i))}`;
+    const visti = filtra(this.ingredienti, this.filtro, i => [i.nome, i.fornitore, i.unita]);
+    return html`
+      ${this.ingredienti.length >= SOGLIA_RICERCA ? html`
+        <cmd-ricerca .valore=${this.filtro} segnaposto=${t('Cerca per nome o fornitore')}
+                     quante=${visti.length} totale=${this.ingredienti.length}
+                     @cmd-ricerca=${(e: CustomEvent<{ valore: string }>) =>
+                       { this.filtro = e.detail.valore; }}></cmd-ricerca>` : nothing}
+      ${visti.length === 0
+        ? html`<p class="niente-trovato">${t('Niente che corrisponda a «{cosa}».', { cosa: this.filtro })}</p>`
+        : repeat(visti, i => i.id, i => this.scheda(i))}`;
   }
 }
 

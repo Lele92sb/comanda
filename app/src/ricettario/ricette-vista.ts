@@ -22,6 +22,8 @@ import { t } from '../core/lingua.ts';
 import '../ds/bottone.ts';
 import '../ds/comanda.ts';
 import '../ds/etichetta.ts';
+import { SOGLIA_RICERCA, filtra } from '../core/cerca.ts';
+import '../ds/ricerca.ts';
 import '../ds/vuoto.ts';
 
 export interface Metrica {
@@ -83,7 +85,16 @@ const stile = css`
   .procedimento{font-size:var(--text-md);line-height:1.55;margin-top:8px;white-space:pre-wrap;}
   .procedimento.note{color:var(--copper);font-style:italic;}
   .allergeni{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;}
-`;
+
+    /* Quando la ricerca non trova niente. Non e' <cmd-vuoto>: quello dice «non
+       c'e' ancora niente, comincia» ed e' il primo passo. Questo dice «c'e'
+       roba, ma non questa», ed e' un vicolo cieco temporaneo — due messaggi
+       diversi, e scambiarli manda a creare una cosa che esiste gia'. */
+    .niente-trovato{
+      font-family:var(--font-body);font-size:var(--text-md);color:var(--brass);
+      padding:var(--space-4) 0;text-align:center;
+    }
+  `;
 
 function metriche(elenco: Metrica[]): TemplateResult {
   return html`
@@ -105,15 +116,21 @@ function voci(elenco: VoceRicetta[]): TemplateResult {
 
 export class SubRicette extends LitElement {
   static override properties = {
+    /* Lo stato del campo di ricerca. `state:true` e non una proprieta'
+       pubblica: e' roba della schermata, non un dato che il collante
+       debba conoscere o salvare. */
+    filtro: { state: true },
     sottoricette: { type: Array },
     soloLettura: { type: Boolean, reflect: true, attribute: 'solo-lettura' },
   };
 
+  declare filtro: string;
   declare sottoricette: SubRicettaVista[];
   declare soloLettura: boolean;
 
   constructor() {
     super();
+    this.filtro = '';
     this.sottoricette = [];
     this.soloLettura = false;
   }
@@ -134,7 +151,16 @@ export class SubRicette extends LitElement {
                          @click=${() => this.manda('sub-nuova', {})}>${t('Crea la prima')}</cmd-bottone>`}
         </cmd-vuoto>`;
     }
-    return html`${repeat(this.sottoricette, s => s.id, s => html`
+    const visti = filtra(this.sottoricette, this.filtro, s => [s.nome, s.numero, ...s.voci.map(v => v.nome)]);
+    return html`
+      ${this.sottoricette.length >= SOGLIA_RICERCA ? html`
+        <cmd-ricerca .valore=${this.filtro} segnaposto=${t('Cerca per nome o componente')}
+                     quante=${visti.length} totale=${this.sottoricette.length}
+                     @cmd-ricerca=${(e: CustomEvent<{ valore: string }>) =>
+                       { this.filtro = e.detail.valore; }}></cmd-ricerca>` : nothing}
+      ${visti.length === 0
+        ? html`<p class="niente-trovato">${t('Niente che corrisponda a «{cosa}».', { cosa: this.filtro })}</p>`
+        : repeat(visti, s => s.id, s => html`
       <cmd-comanda titolo=${s.nome} categoria=${s.resa} numero=${s.numero}>
         ${voci(s.voci)}
         ${metriche(s.metriche)}
@@ -154,15 +180,21 @@ customElements.define('cmd-sub-ricette', SubRicette);
 
 export class Piatti extends LitElement {
   static override properties = {
+    /* Lo stato del campo di ricerca. `state:true` e non una proprieta'
+       pubblica: e' roba della schermata, non un dato che il collante
+       debba conoscere o salvare. */
+    filtro: { state: true },
     piatti: { type: Array },
     soloLettura: { type: Boolean, reflect: true, attribute: 'solo-lettura' },
   };
 
+  declare filtro: string;
   declare piatti: PiattoVista[];
   declare soloLettura: boolean;
 
   constructor() {
     super();
+    this.filtro = '';
     this.piatti = [];
     this.soloLettura = false;
   }
@@ -183,7 +215,16 @@ export class Piatti extends LitElement {
                          @click=${() => this.manda('piatto-nuovo', {})}>${t('Crea la prima scheda')}</cmd-bottone>`}
         </cmd-vuoto>`;
     }
-    return html`${repeat(this.piatti, p => p.id, p => html`
+    const visti = filtra(this.piatti, this.filtro, p => [p.nome, p.categoria, p.numero, ...p.voci.map(v => v.nome), ...p.allergeni]);
+    return html`
+      ${this.piatti.length >= SOGLIA_RICERCA ? html`
+        <cmd-ricerca .valore=${this.filtro} segnaposto=${t('Cerca per nome, categoria o ingrediente')}
+                     quante=${visti.length} totale=${this.piatti.length}
+                     @cmd-ricerca=${(e: CustomEvent<{ valore: string }>) =>
+                       { this.filtro = e.detail.valore; }}></cmd-ricerca>` : nothing}
+      ${visti.length === 0
+        ? html`<p class="niente-trovato">${t('Niente che corrisponda a «{cosa}».', { cosa: this.filtro })}</p>`
+        : repeat(visti, p => p.id, p => html`
       <cmd-comanda titolo=${p.nome} categoria=${p.categoria} numero=${p.numero}>
         ${p.foto ? html`<img src=${p.foto} alt=${t('Foto di {nome}', { nome: p.nome })}>` : nothing}
         ${metriche(p.metriche)}

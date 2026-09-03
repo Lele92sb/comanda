@@ -82,6 +82,7 @@ import '../account/accesso-vista.ts';
 import type { CucinaVista } from '../account/accesso-vista.ts';
 import '../account/squadra-vista.ts';
 import { controllaContrasto } from './contrasto.ts';
+import '../ds/ricerca.ts';
 import type { InvitoVista, MembroVista } from '../account/squadra-vista.ts';
 
 interface Caso {
@@ -698,6 +699,30 @@ const GRUPPI: Gruppo[] = [
         nota: 'E’ il caso che si dimentica sempre. Non puo’ mandare niente, e la schermata deve dirgli perche’ e a chi chiedere — invece di mostrargli un modulo che non funziona.',
         contenuto: () => html`
           <cmd-richieste .servizi=${[]} .richieste=${[]}></cmd-richieste>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-ricerca',
+    casi: [
+      {
+        id: 'ricerca-stati',
+        titolo: 'Vuota, con testo, e senza risultati',
+        nota: 'Uno solo per sei elenchi: ingredienti, piatti, sub-ricette, fornitori, brigata, menu. Se ognuno avesse il suo, fra sei mesi cercherebbero in sei modi diversi. La X compare solo quando c’e’ qualcosa da cancellare — con l’elenco filtrato a due righe su trecento, cancellare a mano sarebbe cinque tocchi. Il conteggio risponde alla domanda che viene subito dopo aver scritto: ho trovato poco perche’ c’e’ poco, o perche’ ho scritto male?',
+        contenuto: () => html`
+          <cmd-ricerca segnaposto="Cerca per nome o fornitore"></cmd-ricerca>
+          <cmd-ricerca valore="pom san" segnaposto="Cerca per nome o fornitore"
+                       quante=${1} totale=${128}></cmd-ricerca>
+          <cmd-ricerca valore="zzz" segnaposto="Cerca per nome o fornitore"
+                       quante=${0} totale=${128}></cmd-ricerca>`,
+      },
+      {
+        id: 'ricerca-stretta',
+        titolo: 'Sul telefono, col conteggio a quattro cifre',
+        nota: 'A 375px il campo e il conteggio stanno sulla stessa riga: il conteggio non va a capo (`white-space:nowrap`) e il campo si stringe. Con 1.240 ingredienti — il numero di una cucina vera dopo un anno di fatture — e’ il caso in cui lo spazio e’ piu’ stretto.',
+        contenuto: () => html`
+          <cmd-ricerca valore="pomodoro" segnaposto="Cerca per nome o fornitore"
+                       quante=${12} totale=${1240}></cmd-ricerca>`,
       },
     ],
   },

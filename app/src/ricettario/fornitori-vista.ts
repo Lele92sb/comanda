@@ -13,6 +13,8 @@ import { t } from '../core/lingua.ts';
 import '../ds/bottone.ts';
 import '../ds/campo.ts';
 import '../ds/scheda.ts';
+import { SOGLIA_RICERCA, filtra } from '../core/cerca.ts';
+import '../ds/ricerca.ts';
 import '../ds/vuoto.ts';
 
 export interface FornitoreVista {
@@ -28,15 +30,21 @@ export interface FornitoreVista {
 
 export class Fornitori extends LitElement {
   static override properties = {
+    /* Lo stato del campo di ricerca. `state:true` e non una proprieta'
+       pubblica: e' roba della schermata, non un dato che il collante
+       debba conoscere o salvare. */
+    filtro: { state: true },
     fornitori: { type: Array },
     soloLettura: { type: Boolean, reflect: true, attribute: 'solo-lettura' },
   };
 
+  declare filtro: string;
   declare fornitori: FornitoreVista[];
   declare soloLettura: boolean;
 
   constructor() {
     super();
+    this.filtro = '';
     this.fornitori = [];
     this.soloLettura = false;
   }
@@ -46,6 +54,15 @@ export class Fornitori extends LitElement {
     *,*::before,*::after{box-sizing:border-box;}
     .riga{font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       line-height:1.6;margin-top:3px;overflow-wrap:anywhere;}
+  
+    /* Quando la ricerca non trova niente. Non e' <cmd-vuoto>: quello dice «non
+       c'e' ancora niente, comincia» ed e' il primo passo. Questo dice «c'e'
+       roba, ma non questa», ed e' un vicolo cieco temporaneo — due messaggi
+       diversi, e scambiarli manda a creare una cosa che esiste gia'. */
+    .niente-trovato{
+      font-family:var(--font-body);font-size:var(--text-md);color:var(--brass);
+      padding:var(--space-4) 0;text-align:center;
+    }
   `;
 
   private manda<T>(nome: string, dettaglio: T): void {
@@ -80,7 +97,16 @@ export class Fornitori extends LitElement {
                          @click=${() => this.manda('fornitore-nuovo', {})}>${t('Aggiungi a mano')}</cmd-bottone>`}
         </cmd-vuoto>`;
     }
-    return html`${repeat(this.fornitori, f => f.id, f => this.scheda(f))}`;
+    const visti = filtra(this.fornitori, this.filtro, f => [f.nome, f.piva, f.email, f.indirizzo]);
+    return html`
+      ${this.fornitori.length >= SOGLIA_RICERCA ? html`
+        <cmd-ricerca .valore=${this.filtro} segnaposto=${t('Cerca per nome o partita IVA')}
+                     quante=${visti.length} totale=${this.fornitori.length}
+                     @cmd-ricerca=${(e: CustomEvent<{ valore: string }>) =>
+                       { this.filtro = e.detail.valore; }}></cmd-ricerca>` : nothing}
+      ${visti.length === 0
+        ? html`<p class="niente-trovato">${t('Niente che corrisponda a «{cosa}».', { cosa: this.filtro })}</p>`
+        : repeat(visti, f => f.id, f => this.scheda(f))}`;
   }
 }
 
