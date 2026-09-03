@@ -55,6 +55,12 @@ import '../turni/capienza-vista.ts';
 import type { Conto } from '../turni/capienza-vista.ts';
 import '../turni/servizi-vista.ts';
 import type { ServizioVista, TipoTurnoVista } from '../turni/servizi-vista.ts';
+import '../ds/etichetta.ts';
+import '../ds/scheda.ts';
+import '../ricettario/ingredienti-vista.ts';
+import type { IngredienteVista } from '../ricettario/ingredienti-vista.ts';
+import '../ricettario/fornitori-vista.ts';
+import type { FornitoreVista } from '../ricettario/fornitori-vista.ts';
 
 interface Caso {
   id: string;
@@ -187,6 +193,25 @@ const TIPI_TURNO: TipoTurnoVista[] = [
   { id: 't3', sigla: 'T1', orario: 'da compilare', ore: 8, colore: '#b8873f', servizi: [] },
   { id: 't4', sigla: 'R', orario: '', ore: 0, colore: '#2e2a25', servizi: ['pranzo'],
     errore: '«R» è riservata (R · Riposo)' },
+];
+
+/* Tre ingredienti che coprono i tre casi del food cost: uno con scarto vero
+   (un chilo di asparagi ne rende 620 grammi, quindi il chilo nel piatto costa
+   la meta' in piu' della fattura), uno senza scarto, e uno senza prezzo — che
+   e' il caso che rende sbagliato il costo di ogni piatto che lo contiene. */
+const INGREDIENTI: IngredienteVista[] = [
+  { id: 'i1', nome: 'Asparagi extra', fornitore: 'Ortofrutta Rossi', unita: 'kg',
+    prezzo: '9.500', resa: 62, costoEffettivo: 15.323, resaStimata: false },
+  { id: 'i2', nome: 'Olio EVO', fornitore: 'Ortofrutta Rossi', unita: 'l',
+    prezzo: '8.200', resa: 100, costoEffettivo: 8.2, resaStimata: false },
+  { id: 'i3', nome: 'Branzino', fornitore: '', unita: 'kg',
+    prezzo: '', resa: 55, costoEffettivo: 0, resaStimata: true },
+];
+
+const FORNITORI: FornitoreVista[] = [
+  { id: 's1', nome: 'Ortofrutta Rossi', piva: '01234567890', telefono: '051 123456',
+    email: 'ordini@rossi.it', indirizzo: 'Via Emilia 12, Bologna' },
+  { id: 's2', nome: 'Pescheria Blu', piva: '', telefono: '', email: '', indirizzo: '' },
 ];
 
 const GRUPPI: Gruppo[] = [
@@ -406,6 +431,70 @@ const GRUPPI: Gruppo[] = [
         contenuto: () => html`
           <cmd-scheda-persona .persona=${PERSONA_NUOVA} .stazioni=${[]}
                               .ruoli=${RUOLI} .membri=${[]} nuova></cmd-scheda-persona>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-scheda e cmd-etichetta',
+    casi: [
+      {
+        id: 'scheda',
+        titolo: 'La riga di elenco, con e senza dettagli',
+        nota: 'E’ lo schema piu’ ripetuto dell’app — brigata, ingredienti, fornitori, piatti, sub-ricette, menu — e i sei si erano gia’ allontanati fra loro: in tre i comandi stanno in colonna, negli altri in riga, e nessuno aveva mai deciso che dovessero essere diversi.',
+        contenuto: () => html`
+          <cmd-scheda titolo="Asparagi extra">
+            <cmd-etichetta slot="stato" tono="allarme">prezzo mancante</cmd-etichetta>
+            <cmd-etichetta slot="stato" tono="ok">resa stimata AI</cmd-etichetta>
+            <div style="font-family:var(--font-mono);font-size:11px;color:var(--brass);margin-top:3px">
+              Ortofrutta Rossi · € 9.500/kg acquisto · resa 62%</div>
+            <cmd-bottone slot="azioni" misura="piccolo" variante="fantasma">Modifica</cmd-bottone>
+            <cmd-bottone slot="azioni" misura="piccolo" variante="pericolo">Elimina</cmd-bottone>
+          </cmd-scheda>
+          <cmd-scheda titolo="Pescheria Blu">
+            <cmd-bottone slot="azioni" misura="piccolo" variante="fantasma">Modifica</cmd-bottone>
+          </cmd-scheda>`,
+      },
+      {
+        id: 'etichetta',
+        titolo: 'I tre toni, e sono tre significati',
+        nota: 'Neutro = un fatto. Allarme = manca qualcosa. Ok = e’ a posto. Non ce n’e’ un quarto perche’ non c’e’ un quarto significato.',
+        contenuto: () => html`
+          <div class="fila">
+            <cmd-etichetta>glutine</cmd-etichetta>
+            <cmd-etichetta tono="allarme">prezzo mancante</cmd-etichetta>
+            <cmd-etichetta tono="ok">pubblicato</cmd-etichetta>
+          </div>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-ingredienti e cmd-fornitori — due schermate intere',
+    casi: [
+      {
+        id: 'ingredienti',
+        titolo: 'Con scarto, senza scarto, senza prezzo',
+        contenuto: () => html`<cmd-ingredienti .ingredienti=${INGREDIENTI}></cmd-ingredienti>`,
+      },
+      {
+        id: 'ingredienti-vuoti',
+        titolo: 'Prima che ce ne sia uno',
+        contenuto: () => html`<cmd-ingredienti .ingredienti=${[]}></cmd-ingredienti>`,
+      },
+      {
+        id: 'scheda-ingrediente',
+        titolo: 'Il modulo, col costo reale che si vede mentre scrivi',
+        nota: 'E’ l’unico numero che nessuno ha in testa, ed e’ quello per cui questa scheda esiste: senza, lo scarto si scopre dopo, dentro il costo di un piatto che non torna.',
+        contenuto: () => html`
+          <cmd-scheda-ingrediente
+            .ingrediente=${{ id: 'i1', nome: 'Asparagi extra', fornitore: 'Ortofrutta Rossi',
+                             unita: 'kg', prezzo: '9.500', resa: '62' }}
+            .fornitori=${['Ortofrutta Rossi', 'Pescheria Blu']}
+            ?nuovo=${false}></cmd-scheda-ingrediente>`,
+      },
+      {
+        id: 'fornitori',
+        titolo: 'Uno completo e uno appena creato da una fattura',
+        contenuto: () => html`<cmd-fornitori .fornitori=${FORNITORI}></cmd-fornitori>`,
       },
     ],
   },
