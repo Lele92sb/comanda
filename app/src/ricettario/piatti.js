@@ -1,56 +1,80 @@
 import { ALLERGENS, esc, save, state, toast, uid } from '../core/state.js';
+import { Cloud } from '../lib/cloud.js';
 import { dishTotalCost, itemCost, itemLabel } from './costi.js';
 import { resizeImageToDataUrl } from './foto-ricetta.js';
 import { montaRighe } from './righe.js';
+import './ricette-vista.ts';
 /* ============================= PIATTI (dishes) ============================= */
-export function renderDishes(){
-  const el = document.getElementById('dish-list');
-  if(!state.recipes.length){ el.innerHTML = `<div class="empty">Ancora nessun piatto. Crea la prima scheda tecnica.</div>`; return; }
-  el.innerHTML = state.recipes.map((d,idx)=>{
-    const cost = dishTotalCost(d);
-    const target = parseFloat(d.foodCostTargetPct)||30;
-    const suggPrice = target>0 ? cost/(target/100) : 0;
-    const priceActual = parseFloat(d.priceActual)||0;
-    const realFc = priceActual>0 ? (cost/priceActual*100) : null;
-    const marginActual = priceActual - cost;
-    return `
-    <div class="comanda">
-      <div class="comanda-head">
-        <div><div class="comanda-title">${esc(d.name)}</div><div class="comanda-cat">${esc(d.category||'—')}${d.portionG?` · ${d.portionG}g/ml porzione`:''}${d.prepMin?` · ${d.prepMin} min`:''}</div></div>
-        <div class="comanda-num">P${String(idx+1).padStart(3,'0')}</div>
-      </div>
-      ${d.photo? `<img src="${d.photo}" style="max-width:100%;border-radius:6px;margin-bottom:10px;">`:''}
-      <div class="metric-row">
-        <div class="metric">Costo materia prima<b>€ ${cost.toFixed(2)}</b></div>
-        <div class="metric">Prezzo suggerito (target ${target}%)<b>€ ${suggPrice.toFixed(2)}</b></div>
-        <div class="metric">Prezzo effettivo<b>€ ${priceActual.toFixed(2)}</b></div>
-        <div class="metric ${realFc!==null && realFc>35?'neg':'pos'}">Food cost reale<b>${realFc!==null?realFc.toFixed(1)+'%':'—'}</b></div>
-        <div class="metric ${marginActual<0?'neg':'pos'}">Margine effettivo<b>€ ${marginActual.toFixed(2)}</b></div>
-      </div>
-      <div>${(d.allergens||[]).map(a=>`<span class="tag allergen">${esc(a)}</span>`).join('')}</div>
-      <ul class="ing-list">${(d.items||[]).map(it=>`<li><span class="n">${esc(itemLabel(it))}</span><span class="q">${it.qty}${esc(it.unit)} · €${itemCost(it).toFixed(2)}</span></li>`).join('')}</ul>
-      ${d.steps? `<div class="steps">${esc(d.steps)}</div>`:''}
-      ${d.notes? `<div class="steps" style="color:var(--copper);font-style:italic;">${esc(d.notes)}</div>`:''}
-      <div class="card-actions">
-        <button data-act="edit" data-id="${d.id}">Modifica</button>
-        <button data-act="dup" data-id="${d.id}">Duplica</button>
-        <button class="danger" data-act="del" data-id="${d.id}">Elimina</button>
-      </div>
-    </div>`;
-  }).join('');
-  el.querySelectorAll('button[data-act]').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      const id = b.dataset.id, act = b.dataset.act;
-      if(act==='del'){ state.recipes = state.recipes.filter(r=>r.id!==id); save('recipes'); renderDishes(); toast('Piatto eliminato'); }
-      if(act==='edit'){ openDishForm(state.recipes.find(r=>r.id===id)); }
-      if(act==='dup'){
-        const orig = state.recipes.find(r=>r.id===id);
-        const copy = JSON.parse(JSON.stringify(orig)); copy.id = uid(); copy.name = orig.name+' (copia)';
-        state.recipes.push(copy); save('recipes'); renderDishes(); toast('Piatto duplicato');
-      }
-    });
+// Sopra questa soglia il food cost e' fuori linea. E' la stessa della dashboard
+// e del menu: una regola sola, in tre posti che la leggono, non tre soglie che
+// col tempo si allontanano.
+const SOGLIA_FOOD_COST = 35;
+
+let elenco = null;
+
+function daDisegnare(){
+  return state.recipes.map((d, i) => {
+    const costo = dishTotalCost(d);
+    const target = parseFloat(d.foodCostTargetPct) || 30;
+    const suggerito = target > 0 ? costo / (target / 100) : 0;
+    const prezzo = parseFloat(d.priceActual) || 0;
+    const foodCost = prezzo > 0 ? (costo / prezzo * 100) : null;
+    const margine = prezzo - costo;
+    return {
+      id: d.id,
+      nome: d.name,
+      numero: 'P' + String(i + 1).padStart(3, '0'),
+      categoria: [d.category || '—',
+                  d.portionG ? d.portionG + 'g/ml porzione' : '',
+                  d.prepMin ? d.prepMin + ' min' : ''].filter(Boolean).join(' · '),
+      foto: d.photo || '',
+      metriche: [
+        { etichetta: 'Costo materia prima', valore: '€ ' + costo.toFixed(2) },
+        { etichetta: 'Prezzo suggerito (target ' + target + '%)', valore: '€ ' + suggerito.toFixed(2) },
+        { etichetta: 'Prezzo effettivo', valore: '€ ' + prezzo.toFixed(2) },
+        { etichetta: 'Food cost reale',
+          valore: foodCost !== null ? foodCost.toFixed(1) + '%' : '—',
+          tono: foodCost !== null && foodCost > SOGLIA_FOOD_COST ? 'storto' : 'buono' },
+        { etichetta: 'Margine effettivo', valore: '€ ' + margine.toFixed(2),
+          tono: margine < 0 ? 'storto' : 'buono' },
+      ],
+      allergeni: (d.allergens || []).slice(),
+      voci: (d.items || []).map(it => ({
+        nome: itemLabel(it),
+        quantita: it.qty + it.unit + ' · €' + itemCost(it).toFixed(2),
+      })),
+      procedimento: d.steps || '',
+      note: d.notes || '',
+    };
   });
 }
+
+export function renderDishes(){
+  const el = document.getElementById('dish-list');
+  if(!el) return;
+  if(!elenco || !elenco.isConnected){
+    elenco = document.createElement('cmd-piatti');
+    elenco.addEventListener('piatto-nuovo', ()=> openDishForm(null));
+    elenco.addEventListener('piatto-modifica', e =>
+      openDishForm(state.recipes.find(r => r.id === e.detail.id)));
+    elenco.addEventListener('piatto-elimina', e => {
+      state.recipes = state.recipes.filter(r => r.id !== e.detail.id);
+      save('recipes'); renderDishes(); toast('Piatto eliminato');
+    });
+    elenco.addEventListener('piatto-duplica', e => {
+      const originale = state.recipes.find(r => r.id === e.detail.id);
+      if(!originale) return;
+      const copia = JSON.parse(JSON.stringify(originale));
+      copia.id = uid();
+      copia.name = originale.name + ' (copia)';
+      state.recipes.push(copia); save('recipes'); renderDishes(); toast('Piatto duplicato');
+    });
+    el.replaceChildren(elenco);
+  }
+  elenco.piatti = daDisegnare();
+  elenco.soloLettura = Cloud.enabled && !Cloud.canWrite();
+}
+
 export function openDishForm(existing, prefill){
   const holder = document.getElementById('dish-form-holder');
   const base = {id:uid(), name:'', category:'', items:[], portionG:'', foodCostTargetPct:30, priceActual:'', allergens:[], steps:'', prepMin:'', notes:'', photo:''};

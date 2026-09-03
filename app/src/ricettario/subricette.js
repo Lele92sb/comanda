@@ -1,38 +1,61 @@
 import { esc, save, state, toast, uid } from '../core/state.js';
+import { Cloud } from '../lib/cloud.js';
 import { itemCost, itemLabel, subrecipeCost, subrecipeRawWeightKg } from './costi.js';
 import { montaRighe } from './righe.js';
+import './ricette-vista.ts';
 /* ============================= SUB-RICETTE ============================= */
+let elenco = null;
+
+/* Il calo peso: quanto si perde in cottura. Si puo' dire solo quando la resa e'
+   in chili, perche' e' li' che il confronto col peso crudo ha un senso — due
+   litri di fondo non si confrontano con tre chili di ossa. */
+function caloPeso(sub){
+  const crudoKg = subrecipeRawWeightKg(sub);
+  if(!crudoKg || sub.yieldUnit !== 'kg' || crudoKg <= 0) return null;
+  return (crudoKg - parseFloat(sub.yieldQty)) / crudoKg * 100;
+}
+
+function daDisegnare(){
+  return state.subrecipes.map((sub, i) => {
+    const { totalCost, costPerUnit } = subrecipeCost(sub);
+    const calo = caloPeso(sub);
+    return {
+      id: sub.id,
+      nome: sub.name,
+      numero: 'SUB' + String(i + 1).padStart(3, '0'),
+      resa: 'resa ' + (sub.yieldQty || '—') + ' ' + sub.yieldUnit
+            + (calo !== null ? ' · calo peso ' + calo.toFixed(0) + '%' : ''),
+      voci: (sub.items || []).map(it => ({
+        nome: itemLabel(it),
+        quantita: it.qty + it.unit + ' · €' + itemCost(it).toFixed(2),
+      })),
+      metriche: [
+        { etichetta: 'Costo totale', valore: '€ ' + totalCost.toFixed(2) },
+        { etichetta: 'Costo per ' + sub.yieldUnit, valore: '€ ' + costPerUnit.toFixed(2) },
+      ],
+      note: sub.notes || '',
+    };
+  });
+}
+
 export function renderSubrecipes(){
   const el = document.getElementById('subr-list');
-  if(!state.subrecipes.length){ el.innerHTML = `<div class="empty">Nessuna sub-ricetta ancora (fondi, salse, basi, composte...).</div>`; return; }
-  el.innerHTML = state.subrecipes.map((sub,idx)=>{
-    const {totalCost, costPerUnit} = subrecipeCost(sub);
-    const rawKg = subrecipeRawWeightKg(sub);
-    const calo = (rawKg && sub.yieldUnit==='kg' && rawKg>0) ? ((rawKg-parseFloat(sub.yieldQty))/rawKg*100) : null;
-    return `
-    <div class="comanda">
-      <div class="comanda-head">
-        <div><div class="comanda-title">${esc(sub.name)}</div><div class="comanda-cat">resa ${sub.yieldQty||'—'} ${esc(sub.yieldUnit)}${calo!==null?` · calo peso ${calo.toFixed(0)}%`:''}</div></div>
-        <div class="comanda-num">SUB${String(idx+1).padStart(3,'0')}</div>
-      </div>
-      <ul class="ing-list">${(sub.items||[]).map(it=>`<li><span class="n">${esc(itemLabel(it))}</span><span class="q">${it.qty}${esc(it.unit)} · €${itemCost(it).toFixed(2)}</span></li>`).join('')}</ul>
-      <div class="metric-row">
-        <div class="metric">Costo totale<b>€ ${totalCost.toFixed(2)}</b></div>
-        <div class="metric">Costo per ${esc(sub.yieldUnit)}<b>€ ${costPerUnit.toFixed(2)}</b></div>
-      </div>
-      ${sub.notes? `<div class="steps">${esc(sub.notes)}</div>`:''}
-      <div class="card-actions">
-        <button data-edit="${sub.id}">Modifica</button>
-        <button class="danger" data-del="${sub.id}">Elimina</button>
-      </div>
-    </div>`;
-  }).join('');
-  el.querySelectorAll('[data-edit]').forEach(b=> b.addEventListener('click', ()=> openSubForm(state.subrecipes.find(s=>s.id===b.dataset.edit))));
-  el.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', ()=>{
-    state.subrecipes = state.subrecipes.filter(s=>s.id!==b.dataset.del);
-    save('subrecipes'); renderSubrecipes(); toast('Sub-ricetta eliminata');
-  }));
+  if(!el) return;
+  if(!elenco || !elenco.isConnected){
+    elenco = document.createElement('cmd-sub-ricette');
+    elenco.addEventListener('sub-nuova', ()=> openSubForm(null));
+    elenco.addEventListener('sub-modifica', e =>
+      openSubForm(state.subrecipes.find(s => s.id === e.detail.id)));
+    elenco.addEventListener('sub-elimina', e => {
+      state.subrecipes = state.subrecipes.filter(s => s.id !== e.detail.id);
+      save('subrecipes'); renderSubrecipes(); toast('Sub-ricetta eliminata');
+    });
+    el.replaceChildren(elenco);
+  }
+  elenco.sottoricette = daDisegnare();
+  elenco.soloLettura = Cloud.enabled && !Cloud.canWrite();
 }
+
 export function openSubForm(existing, prefill){
   const holder = document.getElementById('subr-form-holder');
   const base = {id:uid(), name:'', items:[], yieldQty:'', yieldUnit:'kg', notes:''};

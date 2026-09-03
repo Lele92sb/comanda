@@ -70,6 +70,8 @@ import '../viste/menu-vista.ts';
 import type { MenuVista } from '../viste/menu-vista.ts';
 import '../viste/benessere-vista.ts';
 import type { OreSettimana } from '../viste/benessere-vista.ts';
+import '../ricettario/ricette-vista.ts';
+import type { PiattoVista, SubRicettaVista } from '../ricettario/ricette-vista.ts';
 
 interface Caso {
   id: string;
@@ -267,6 +269,40 @@ const MENU_VISTA: MenuVista[] = [
 const SETTIMANA: OreSettimana[] = [
   { nome: 'Lorenc', ore: 44, oltreSoglia: false },
   { nome: 'Uddin', ore: 52.5, oltreSoglia: true },
+];
+
+const SOTTORICETTE: SubRicettaVista[] = [
+  { id: 'sr1', nome: 'Fondo di vitello', numero: 'SUB001',
+    resa: 'resa 2 kg · calo peso 40%',
+    voci: [ { nome: 'Ossa di vitello', quantita: '3kg · €7.50' },
+            { nome: 'Sedano, carota, cipolla', quantita: '600g · €1.20' } ],
+    metriche: [ { etichetta: 'Costo totale', valore: '€ 8.70' },
+                { etichetta: 'Costo per kg', valore: '€ 4.35' } ],
+    note: 'Sfumare col vino solo dopo che le ossa hanno preso colore.' },
+];
+
+/* Uno in linea e uno FUORI: il food cost e il margine si accendono, ed e' la
+   sola cosa che si guarda scorrendo venti schede. */
+const PIATTI: PiattoVista[] = [
+  { id: 'pt1', nome: 'Asparagi, uovo e nocciola', numero: 'P001',
+    categoria: 'Antipasti · 180g/ml porzione · 25 min', foto: '',
+    voci: [ { nome: 'Asparagi extra', quantita: '150g · €2.85' },
+            { nome: 'Nocciole', quantita: '20g · €0.60' } ],
+    metriche: [ { etichetta: 'Costo materia prima', valore: '€ 3.45' },
+                { etichetta: 'Prezzo effettivo', valore: '€ 18.00' },
+                { etichetta: 'Food cost reale', valore: '19.2%', tono: 'buono' },
+                { etichetta: 'Margine effettivo', valore: '€ 14.55', tono: 'buono' } ],
+    allergeni: ['Uova', 'Frutta a guscio'],
+    procedimento: 'Sbollentare gli asparagi 3 minuti. Uovo a 63° per 45 minuti.',
+    note: 'Fuori stagione sostituire con puntarelle.' },
+  { id: 'pt2', nome: 'Branzino in crosta', numero: 'P002',
+    categoria: 'Secondi', foto: '',
+    voci: [ { nome: 'Branzino', quantita: '400g · €11.20' } ],
+    metriche: [ { etichetta: 'Costo materia prima', valore: '€ 11.20' },
+                { etichetta: 'Prezzo effettivo', valore: '€ 26.00' },
+                { etichetta: 'Food cost reale', valore: '43.1%', tono: 'storto' },
+                { etichetta: 'Margine effettivo', valore: '€ 14.80', tono: 'buono' } ],
+    allergeni: ['Pesce'], procedimento: '', note: '' },
 ];
 
 const GRUPPI: Gruppo[] = [
@@ -498,6 +534,27 @@ const GRUPPI: Gruppo[] = [
         contenuto: () => html`
           <cmd-scheda-persona .persona=${PERSONA_NUOVA} .stazioni=${[]}
                               .ruoli=${RUOLI} .membri=${[]} nuova></cmd-scheda-persona>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-sub-ricette e cmd-piatti — due schermate intere',
+    casi: [
+      {
+        id: 'piatti',
+        titolo: 'Uno in linea e uno fuori',
+        nota: 'Il food cost e il margine si accendono: sono la sola cosa che si guarda davvero scorrendo venti schede.',
+        contenuto: () => html`<cmd-piatti .piatti=${PIATTI}></cmd-piatti>`,
+      },
+      {
+        id: 'sub-ricette',
+        titolo: 'Con la resa e il calo peso',
+        contenuto: () => html`<cmd-sub-ricette .sottoricette=${SOTTORICETTE}></cmd-sub-ricette>`,
+      },
+      {
+        id: 'piatti-vuoti',
+        titolo: 'Prima che ce ne sia uno',
+        contenuto: () => html`<cmd-piatti .piatti=${[]}></cmd-piatti>`,
       },
     ],
   },
