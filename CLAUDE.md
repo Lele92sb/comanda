@@ -12,6 +12,7 @@ npm run preview # build + wrangler: come in produzione, funzioni server comprese
 npm test        # 166 test
 npm run typecheck
 npm run lint:import
+npm run lint:lingue  # quanto coprono i dizionari (non blocca)
 ```
 
 `npm run preview` legge `.dev.vars` (non versionato: copia `.dev.vars.example`).
@@ -19,6 +20,11 @@ Serve solo per le funzioni server — AI e raccolta errori.
 
 **Prima di ogni push**, gli stessi quattro controlli della pipeline:
 `npm test && npm run typecheck && npm run lint:import && npm run build`
+
+**La build va guardata, non solo lanciata.** `tsc` non controlla i `.js`, e il
+controllo degli import non vede i nomi doppi: una funzione importata che si
+chiama come una locale la trova SOLO la build, e a quel punto la locale chiama
+se stessa. È già successo.
 
 ## Struttura
 
@@ -135,8 +141,7 @@ fallisce non si pubblica.
 - **Variabili su Cloudflare** (`SUPABASE_URL`, `SUPABASE_PUBLIC_KEY`,
   `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`): senza, le tre funzioni AI
   rispondono "servizio non configurato". Tutto il resto funziona.
-- **Traduzioni**: l'impianto c'è, coperti markup e schede principali. Il resto
-  dei moduli è ancora solo in italiano.
+
 - **Modello dati**: ogni sezione è un blob JSON riscritto per intero a ogni
   salvataggio. A 5.000 ingredienti sono 620 KB per cambiare un prezzo. Il
   momento in cui va affrontato: oltre ~500 ingredienti per cucina, o due
