@@ -58,7 +58,10 @@ const NAV = [
   {id:'benessere',  label:'Benessere', icona:'🌱',     soloChiModifica:true, render:()=>renderBenessere()},
   // Ultima voce, ed e' voluto: sono le cose che si impostano una volta. Chi
   // apre l'app ogni giorno cerca i turni, non il fabbisogno.
-  {id:'impostazioni', label:'Impostazioni cucina', icona:'⚙', soloChiModifica:true, sezioni:[
+  // `breve` e' l'etichetta per la barra in basso, dove ogni voce ha meno di
+  // cento pixel: «Impostazioni cucina» ne chiede 105 e finiva tagliata, e
+  // un'etichetta tagliata si legge come un guasto, non come un'abbreviazione.
+  {id:'impostazioni', label:'Impostazioni cucina', breve:'Impostazioni', icona:'⚙', soloChiModifica:true, sezioni:[
     {id:'brigata',    label:'Brigata',           render:()=>renderStaffList()},
     {id:'servizi',    label:'Servizi e turni',   render:()=>{ renderServices(); renderShiftTypes(); renderCopiaConfig(); }},
     {id:'stazioni',   label:'Stazioni',          render:()=>renderStations()},
@@ -105,12 +108,36 @@ function montaSezioni(voce){
 // perche' `montaSezioni` deve poterlo comporre senza sapere di chi si tratta.
 NAV.forEach(v=>{ v.prefisso = v.id === 'ricette' ? 'sub-' : (v.id === 'impostazioni' ? 'impsub-' : v.id + 'sub-'); });
 
-/* Quante voci stanno in fondo allo schermo senza diventare illeggibili.
-   Cinque e' il numero che tutte le app usano, e non per moda: sotto i 64px per
-   voce la parola non si legge piu' e restano icone che nessuno sa decifrare.
-   375 / 5 = 75px. La sesta e le successive vanno dietro «Altro». */
-const VOCI_IN_BASSO = 5;
-const eTelefono = () => window.matchMedia('(max-width:767px)').matches;
+/* IL MENU SI VEDE SEMPRE, a qualunque larghezza. Sotto i 900px sta incollato
+   in fondo, sopra e' la colonna a sinistra: non esiste una larghezza in cui
+   scorra via insieme alla pagina. Prima fra 768 e 1023 era una fila di voci in
+   cima che se ne andava appena si scorreva — proprio sul tablet in verticale,
+   che e' lo schermo su cui si compilano i turni appoggiati al passe.
+
+   QUANTE VOCI CI STANNO IN BASSO NON SI CALCOLA: SI MISURA.
+   Il primo tentativo divideva la larghezza per 72px a voce. Sembra ragionevole
+   e sbaglia comunque, perche' 72px non e' una proprieta' dello schermo — e'
+   una proprieta' delle PAROLE, e le parole cambiano. A 599px entravano tutte e
+   otto le voci, e «Assistente AI» restava tagliata a meta'. Con lo spagnolo e
+   l'inglese in arrivo, ogni costante scelta oggi sarebbe sbagliata in due
+   lingue su tre.
+   Quindi si disegna la barra, si guarda se qualche parola e' tagliata
+   (`scrollWidth > clientWidth`, che e' il browser stesso a dirlo) e in tal caso
+   si toglie una voce e si riprova. Due o tre giri, e la barra e' larga esatta.
+   Tre voci sono il minimo: sotto, «Altro» conterrebbe piu' dell'app. */
+const MINIMO_IN_BASSO = 3;
+const menuInBasso = () => window.matchMedia('(max-width:899px)').matches;
+
+/** Vero se il browser dice che almeno un'etichetta non ci sta. */
+function qualcosaTagliato(nav){
+  const voci = [...nav.querySelectorAll('button')];
+  // Una barra non ancora a schermo misura zero, e zero sembrerebbe «tagliato»
+  // sempre: si ridurrebbe al minimo ogni volta che questa funzione gira mentre
+  // la schermata d'accesso e' ancora davanti. Meglio non decidere che decidere
+  // sul niente.
+  if(!voci.length || voci.every(b => b.clientWidth === 0)) return false;
+  return voci.some(b => b.scrollWidth > b.clientWidth + 1);
+}
 
 function chiudiAltro(){ document.querySelector('.tab-altro-sheet')?.remove(); }
 
@@ -133,14 +160,32 @@ function apriAltro(nascoste){
 export function initTabs(){
   const nav = document.getElementById('tabs');
   const visibili = NAV.filter(puoVedere);
-  // In basso ci stanno le prime cinque; le altre dietro «Altro». Su schermo
-  // largo ci stanno tutte e la voce non compare.
-  const inBarra = eTelefono() && visibili.length > VOCI_IN_BASSO
-    ? visibili.slice(0, VOCI_IN_BASSO - 1) : visibili;
-  const nascoste = visibili.filter(v=> !inBarra.includes(v));
-  nav.innerHTML = inBarra.map(x=>
-      `<button data-tab="${x.id}" data-icona="${esc(x.icona||'')}">${esc(t(x.label))}</button>`).join('')
-    + (nascoste.length ? `<button data-altro data-icona="⋯">${esc(t('Altro'))}</button>` : '');
+  // Nella colonna a sinistra ci stanno tutte: una lista verticale non finisce
+  // lo spazio. In basso ci sta quel che ci sta, e se qualcosa avanza si tiene
+  // un posto per «Altro» — che e' una voce anche lui, e va contato.
+  const inBasso = menuInBasso();
+  // Il nome per esteso resta nel titolo: chi va col mouse, o chi usa un lettore
+  // di schermo, sente «Impostazioni cucina» anche dove ci sta «Impostazioni».
+  const nome = x => (inBasso && x.breve) ? t(x.breve) : t(x.label);
+  const disegnaBarra = inBarra => {
+    const nascoste = visibili.filter(v=> !inBarra.includes(v));
+    nav.innerHTML = inBarra.map(x=>
+        `<button data-tab="${x.id}" data-icona="${esc(x.icona||'')}" title="${esc(t(x.label))}">${esc(nome(x))}</button>`).join('')
+      + (nascoste.length ? `<button data-altro data-icona="⋯">${esc(t('Altro'))}</button>` : '');
+    return nascoste;
+  };
+
+  // Nella colonna a sinistra ci stanno tutte: una lista verticale non finisce
+  // lo spazio. In basso si prova, si guarda, e semmai si toglie.
+  let inBarra = visibili;
+  let nascoste = disegnaBarra(inBarra);
+  if(inBasso){
+    while(inBarra.length > MINIMO_IN_BASSO && qualcosaTagliato(nav)){
+      inBarra = inBarra.slice(0, inBarra.length - 1);
+      nascoste = disegnaBarra(inBarra);
+    }
+  }
+
   nav.querySelectorAll('button[data-tab]').forEach(b=> b.addEventListener('click', ()=>{
     chiudiAltro(); switchTab(b.dataset.tab);
   }));
@@ -172,12 +217,29 @@ export function switchTab(id){
 
 /* Girando il telefono, o passando da finestra stretta a larga, cambia quante
    voci ci stanno: la barra si rifa'. Senza, restava quella del primo caricamento
-   — otto voci schiacciate su un telefono, o «Altro» inutile su un desktop. */
-let ultimoTelefono = eTelefono();
+   — otto voci schiacciate su un telefono, o «Altro» inutile su un desktop.
+
+   Si aspetta che il trascinamento si fermi: rifarla a ogni evento la farebbe
+   lampeggiare. E si ignorano le variazioni sotto gli 8px — su iOS la barra
+   dell'indirizzo che si nasconde scorrendo conta come un ridimensionamento, e
+   senza questa soglia il menu si rifarebbe a ogni scorrimento di pagina. */
+let rifaiBarra;
+let ultimaLarghezza = window.innerWidth;
+let ultimoInBasso = menuInBasso();
 window.addEventListener('resize', ()=>{
-  if(eTelefono() === ultimoTelefono) return;
-  ultimoTelefono = eTelefono();
-  const attiva = document.querySelector('nav.tabs button.active')?.dataset.tab;
-  initTabs();
-  if(attiva) switchTab(attiva);
+  // Trascinando il bordo di una finestra arrivano decine di eventi al secondo.
+  // Rifare la barra a ognuno la farebbe lampeggiare, quindi si aspetta che il
+  // trascinamento si fermi. Le voci le decide la misura, e la misura si puo'
+  // prendere solo dopo aver disegnato: non c'e' un numero da confrontare prima.
+  const cambiataDavvero = menuInBasso() !== ultimoInBasso ||
+                          Math.abs(window.innerWidth - ultimaLarghezza) > 8;
+  if(!cambiataDavvero) return;
+  ultimaLarghezza = window.innerWidth;
+  ultimoInBasso = menuInBasso();
+  clearTimeout(rifaiBarra);
+  rifaiBarra = setTimeout(()=>{
+    const attiva = document.querySelector('nav.tabs button.active')?.dataset.tab;
+    initTabs();
+    if(attiva) switchTab(attiva);
+  }, 120);
 });

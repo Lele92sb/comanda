@@ -134,12 +134,40 @@ export function contrastoDi(el: Element): { rapporto: number; soglia: number; ok
 }
 
 /**
+ * Spegne transizioni e animazioni per il tempo della misura, e le rimette.
+ *
+ * NON E' UN DETTAGLIO. Quasi ogni colore di questa app ha una `transition`, e
+ * cambiando tema un colore in transizione E' un colore intermedio: si
+ * misurerebbe una tinta che nessuno vede mai, per un sesto di secondo. Peggio
+ * ancora dove la pagina non sta disegnando — una scheda in secondo piano, una
+ * finestra coperta — perche' li' le transizioni non avanzano affatto e il
+ * valore resta fermo su quello VECCHIO, all'infinito.
+ * E' costato un'indagine: la barra del menu risultava a 2,7:1 in tema scuro,
+ * col colore del tema chiaro, e i token erano giusti. Era la transizione, non
+ * il colore.
+ */
+function senzaMovimento<T>(quel: () => T): T {
+  const foglio = document.createElement('style');
+  foglio.textContent =
+    '*,*::before,*::after{transition:none !important;animation:none !important;}';
+  document.head.appendChild(foglio);
+  // Leggere una misura forza il ricalcolo: senza, la regola appena messa
+  // potrebbe non essere ancora applicata quando si misura.
+  void document.body.offsetHeight;
+  try { return quel(); } finally { foglio.remove(); }
+}
+
+/**
  * Passa tutto quello che disegna testo, shadow DOM compreso, e raccoglie
  * quello che non arriva alla soglia. Lo stesso difetto ripetuto in venti
  * schede resta UN difetto, con accanto quante volte compare: un elenco di
  * duecento righe uguali non lo legge nessuno.
  */
 export function controllaContrasto(radice: ParentNode = document.body): Esito {
+  return senzaMovimento(() => passa(radice));
+}
+
+function passa(radice: ParentNode): Esito {
   const fuori: Omit<Difetto, 'volte'>[] = [];
   let esaminati = 0;
 

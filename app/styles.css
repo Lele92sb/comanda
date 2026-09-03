@@ -105,7 +105,12 @@ input,textarea,select{font-family:inherit;}
    della cucina lo si legge una volta entrando. */
 header.top{
   padding:22px 20px 14px;border-bottom:1px solid var(--line);
-  background:rgba(29,27,24,0.92);
+  /* Un token, non un colore scritto a mano. Il valore fisso era ghisa al 92%:
+     in tema chiaro restava una fascia scura con sopra testo scuro, cioe' il
+     nome dell'app illeggibile sulla prima cosa che si vede. Il velo dell'alpha
+     non serviva a niente da quando l'intestazione non e' piu' incollata in
+     cima: sotto non ci passa piu' nulla. */
+  background:var(--bg-elev);
 }
 header.top .brand{font-family:var(--font-display);font-weight:700;font-size:26px;letter-spacing:0.3px;display:flex;align-items:baseline;gap:10px;}
 header.top .brand .mark{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--copper);transform:translateY(-2px);}
@@ -130,7 +135,9 @@ header.top .sub{font-family:var(--font-body);font-weight:600;font-size:var(--tex
    863 e «IMPOSTAZIONI CUCINA» era tagliato a meta', senza nessun segno che ci
    fosse altro da vedere. */
 nav.tabs{display:flex;flex-wrap:wrap;gap:4px;padding:14px 20px 0;border-bottom:1px solid var(--line);
-  position:sticky;top:0;z-index:30;background:var(--bg);}
+  /* Sopra il foglio di «Altro» (30): il menu deve restare visibile mentre si
+     sceglie dove andare — e' quello che dice dove sei adesso. */
+  position:sticky;top:0;z-index:35;background:var(--bg);}
 nav.tabs button{background:none;border:none;color:var(--brass);font-family:var(--font-body);font-weight:600;font-size:var(--text-sm);padding:9px 12px 12px;white-space:nowrap;border-bottom:2px solid transparent;transition:color .15s, border-color .15s;}
 nav.tabs button.active{color:var(--paper);border-bottom-color:var(--copper);}
 nav.tabs button:hover{color:var(--paper);}
@@ -328,7 +335,7 @@ body.readonly main label.btn{opacity:0.45;}
    titolare otto — quindi la barra le distribuisce e le eccedenti finiscono
    dietro «Altro». Cosi' regge anche il giorno in cui saranno venti.
    --------------------------------------------------------------------------- */
-@media(max-width:767px){
+@media(max-width:899px){
   nav.tabs{
     position:fixed; left:0; right:0; bottom:0; top:auto;
     padding:6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
@@ -360,7 +367,7 @@ body.readonly main label.btn{opacity:0.45;}
 
 /* Il foglio di via per «Altro»: la voce che raccoglie quelle che non entrano. */
 .tab-altro-sheet{
-  position:fixed; left:0; right:0; bottom:0; z-index:40;
+  position:fixed; left:0; right:0; bottom:0; z-index:30;
   background:var(--bg-elev); border-top:1px solid var(--line);
   padding:12px 16px calc(78px + env(safe-area-inset-bottom, 0px));
   box-shadow:0 -10px 30px rgba(0,0,0,.5);
@@ -373,12 +380,18 @@ body.readonly main label.btn{opacity:0.45;}
 .tab-altro-sheet button:last-child{border-bottom:0;}
 
 /* ============================================================================
-   L'IMPIANTO LARGO — sopra i 1024px.
+   L'IMPIANTO LARGO — sopra i 900px.
 
    «Il cuoco usera' l'app del telefono, chi gestisce usera' il PC.» Chi gestisce
    e' quello che ci passa le ore: costruisce i turni, controlla i costi, guarda
    il fabbisogno. E fino a ieri, su un monitor da 1920, guardava una colonna da
    900 con 1020 pixel di nero intorno — due terzi di schermo buttati.
+
+   La soglia era 1024 e ora e' 900. In mezzo — il tablet in verticale, la
+   finestra affiancata a un'altra — il menu era una fila di voci in cima che se
+   ne andava appena si scorreva: proprio sullo schermo su cui si compilano i
+   turni appoggiati al passe. Ora sotto i 900 sta incollato in fondo, sopra sta
+   a sinistra, e non c'e' larghezza in cui sparisca.
 
    Tre cose cambiano insieme:
    1. la navigazione diventa una colonna a sinistra. Una lista verticale non
@@ -391,9 +404,9 @@ body.readonly main label.btn{opacity:0.45;}
       stessa cosa: una tabella vuole spazio, un paragrafo no. Oltre le 78
       lettere per riga si perde il segno tornando a capo.
    ============================================================================ */
-@media(min-width:1024px){
+@media(min-width:900px){
   nav.tabs{
-    position:fixed;left:0;top:0;bottom:0;width:216px;
+    position:fixed;left:0;top:0;bottom:0;width:var(--colonna-menu);
     flex-direction:column;flex-wrap:nowrap;align-items:stretch;gap:2px;
     padding:20px 12px;overflow-y:auto;
     border-bottom:0;border-right:1px solid var(--line);
@@ -418,7 +431,7 @@ body.readonly main label.btn{opacity:0.45;}
     border-bottom-color:transparent;
   }
 
-  #app{margin:0 0 0 216px;max-width:none;padding-bottom:40px;}
+  #app{margin:0 0 0 var(--colonna-menu);max-width:none;padding-bottom:40px;}
   header.top,main{max-width:var(--pagina-larga);margin-inline:auto;}
   main{padding:26px 32px;}
 

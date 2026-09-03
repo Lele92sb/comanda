@@ -177,6 +177,18 @@
      disposizione al desktop senza toccare le viste da telefono. */
   --colonna-lettura:900px;
   --pagina-larga:1400px;
+
+  /* La colonna del menu. Sotto i 1200 sta stretta apposta: su un tablet da 900
+     una colonna da 216 si prende un quarto dello schermo, e quello che manca
+     lo perde la tabella dei turni, che e' la cosa per cui si e' aperta l'app.
+     Sta qui e non nel foglio di stile perche' due punti la usano — la colonna
+     e il margine della pagina — e se si allontanano restano due strisce
+     sovrapposte. */
+  --colonna-menu:184px;
+}
+
+@media(min-width:1200px){
+  :root{ --colonna-menu:216px; }
 }
 
 /* Chi ha chiesto al sistema operativo di ridurre le animazioni le riceve
