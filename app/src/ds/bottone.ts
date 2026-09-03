@@ -120,6 +120,7 @@ export class Bottone extends Elemento {
   override render(): TemplateResult {
     return html`
       <button
+        part="bottone"
         type=${this.tipo}
         ?disabled=${this.disabilitato || this.inCorso}
         aria-label=${this.etichetta || nothing}

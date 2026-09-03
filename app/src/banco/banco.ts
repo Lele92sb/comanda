@@ -20,15 +20,26 @@
 // uno e confronta con le foto di riferimento. Un bordo che cambia da solo
 // adesso fa fallire una prova invece di arrivare in cucina.
 //
-// COME SI AGGIUNGE UN CASO: una voce in CASI. Nient'altro.
+// PERCHE' STA IN banco/ E NON IN ds/: il banco mostra anche schermate intere
+// dell'app, quindi importa da turni/. ds/ non puo' farlo — e' la regola che
+// tiene il design system riusabile. Il controllo dei confini ha bocciato
+// questo file il primo giorno, quando stava ancora nella cartella sbagliata.
+//
+// COME SI AGGIUNGE UN CASO: una voce in GRUPPI. Nient'altro.
 // ============================================================================
 import { html, render, type TemplateResult } from 'lit';
-import './bottone.ts';
-import './campo.ts';
-import './riquadro.ts';
-import './scelta.ts';
-import './vuoto.ts';
-import type { Opzione } from './scelta.ts';
+import '../ds/bottone.ts';
+import '../ds/campo.ts';
+import '../ds/chip.ts';
+import '../ds/riquadro.ts';
+import '../ds/scelta.ts';
+import '../ds/vuoto.ts';
+import type { Opzione } from '../ds/scelta.ts';
+// Una SCHERMATA INTERA dell'app, qui dentro, senza account e senza database.
+// E' il punto di tutto questo lavoro: chi disegna le partite non deve piu'
+// avere una cucina vera per vederle.
+import '../turni/partite-vista.ts';
+import type { PartitaVista } from '../turni/partite-vista.ts';
 
 interface Caso {
   id: string;
@@ -50,6 +61,17 @@ const PARTITE: Opzione[] = [
   { valore: 'secondi', etichetta: 'Secondi' },
   { valore: 'insalate', etichetta: 'Insalate' },
   { valore: 'lavaggio', etichetta: 'Lavaggio', disabilitata: true },
+];
+
+/* Le stesse sei partite della cucina di prova, gia' pronte da disegnare. I
+   colori sono quelli automatici convertiti in esadecimale, come fa l'app. */
+const PARTITE_VISTA: PartitaVista[] = [
+  { id: 'pass',      nome: 'Pass',      colore: '#b8873f', copre: [] },
+  { id: 'antipasti', nome: 'Antipasti', colore: '#7bb87f', copre: [] },
+  { id: 'primi',     nome: 'Primi',     colore: '#5ec2a8', copre: [] },
+  { id: 'secondi',   nome: 'Secondi',   colore: '#6aa8d6', copre: [] },
+  { id: 'insalate',  nome: 'Insalate',  colore: '#a48ad6', copre: ['lavaggio'] },
+  { id: 'lavaggio',  nome: 'Lavaggio',  colore: '#d67fa8', copre: [] },
 ];
 
 const GRUPPI: Gruppo[] = [
@@ -185,6 +207,45 @@ const GRUPPI: Gruppo[] = [
                         sottotitolo="98 servono · 96 coperti · 2 extra inevitabili">
             <p class="testo">Il dettaglio per partita.</p>
           </cmd-riquadro>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-chip',
+    casi: [
+      {
+        id: 'chip',
+        titolo: 'Acceso, spento, spento e bloccato',
+        nota: 'Questo schema esisteva gia’ a mano in cinque schermate, e i cinque erano gia’ partiti ad allontanarsi: in una fila i chip avevano 5px di riempimento, in un’altra 8.',
+        contenuto: () => html`
+          <div class="fila">
+            <cmd-chip acceso>Pranzo</cmd-chip>
+            <cmd-chip>Cena</cmd-chip>
+            <cmd-chip acceso>Spezzato</cmd-chip>
+            <cmd-chip disabilitato>Colazione</cmd-chip>
+          </div>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-partite — una schermata intera',
+    casi: [
+      {
+        id: 'partite-piene',
+        titolo: 'Le sei partite di una cucina vera',
+        nota: 'Non e’ una finta: e’ lo stesso componente che gira dentro Impostazioni cucina. Qui riceve i dati da una costante invece che dal database, e non se ne accorge — non sa cosa sia un database.',
+        contenuto: () => html`<cmd-partite .partite=${PARTITE_VISTA}></cmd-partite>`,
+      },
+      {
+        id: 'partite-vuote',
+        titolo: 'Prima che ce ne sia una',
+        contenuto: () => html`<cmd-partite .partite=${[]}></cmd-partite>`,
+      },
+      {
+        id: 'partite-sola-lettura',
+        titolo: 'Chi puo’ solo guardare',
+        nota: 'I comandi spariscono invece di restare spenti: qui dentro non c’e’ niente da leggere in un bottone Elimina disattivato.',
+        contenuto: () => html`<cmd-partite solo-lettura .partite=${PARTITE_VISTA}></cmd-partite>`,
       },
     ],
   },

@@ -25,6 +25,8 @@ Serve solo per le funzioni server — AI e raccolta errori.
 ```
 app/src/
   main.js            avvio, lingua, diagnostica (window.__comanda)
+  ds/                design system: token e componenti <cmd-…>, in TypeScript
+  banco/             il banco: ogni componente in ogni stato (/banco.html)
   core/              state, lingua, errori, backup
   lib/               logic (motore turni), cloud (dati+account), config
   ricettario/        ingredienti, piatti, costi, fatture/
@@ -39,6 +41,20 @@ Ogni modulo dichiara cosa importa. `npm run lint:import` lo verifica: un
 simbolo usato ma non importato non lo vede né il compilatore né il bundler,
 esplode solo a schermo. È successo quattro volte prima che quel controllo
 esistesse.
+
+Lo stesso controllo fa ora anche da **guardiano dei confini**, e la tabella sta
+in cima a `scripts/controlla-import.cjs`:
+
+- **`ds/` può importare solo `lit`.** Il design system non sa niente di
+  Comanda: non conosce turni, cucine, ruoli, database. È ciò che rende ogni
+  componente apribile da solo nel banco e riusabile altrove.
+- **`lib/` non importa niente dall'app.** È il motivo per cui il motore turni
+  gira dentro Node e ha dei test: se importasse una vista si porterebbe dietro
+  il DOM.
+- **`core/` può scendere in `lib/`**, non salire nelle funzionalità.
+
+Le rotture note stanno in un elenco di eccezioni **con la ragione scritta**.
+Un'eccezione senza motivo non la toglie più nessuno.
 
 ## Le regole che non vanno rotte
 
@@ -63,6 +79,24 @@ con qualsiasi valore mancante o sbagliato: un errore deve costare una prova
 ripetuta, non dati veri mescolati a dati finti.
 
 **Non si scrive ciò che non si può leggere.**
+
+**L'interfaccia nuova si fa a componenti, non a stringhe.** `ds/` contiene i
+pezzi (`<cmd-bottone>`, `<cmd-campo>`, `<cmd-scelta>`, `<cmd-chip>`,
+`<cmd-riquadro>`, `<cmd-vuoto>`), scritti in TypeScript perché le proprietà di
+un componente sono la sua interfaccia pubblica. Le decisioni visive stanno
+tutte in `ds/tokens.css`: se stai per scrivere `#b06b34` o `12px` dentro un
+componente, o il token esiste già o va aggiunto lì.
+
+Una schermata si divide in due: un **componente** che disegna e manda eventi
+senza sapere cosa sia `state`, e un **collante** che traduce quegli eventi in
+modifiche ai dati (vedi `turni/partite-vista.ts` + `turni/stazioni.js`). Il
+vecchio schema — costruire HTML come stringa e riagganciare gli ascoltatori
+dopo — ridisegnava la schermata intera a ogni modifica: il selettore del colore
+si chiudeva da solo e il cursore usciva dal campo.
+
+Ogni componente nuovo va nel banco (`npm run dev`, poi `/banco.html`), in
+**ogni** stato: acceso, spento, vuoto, in errore, mentre lavora. Uno stato che
+non sta nel banco è uno stato che nessuno guarderà mai.
 
 ## Ambienti
 
