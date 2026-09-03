@@ -2,6 +2,7 @@ import { t } from '../core/lingua.ts';
 import { chiediTesto, conferma, esc, toast } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
 import { startApp } from '../main.js';
+import './accesso-vista.ts';
 /* ============================= ACCESSO, CUCINA, RUOLI ============================= */
 export const gateEl  = document.getElementById('gate');
 const gateErr = document.getElementById('gate-error');
@@ -30,105 +31,117 @@ export function humanError(e){
   return m || 'Qualcosa non ha funzionato. Riprova.';
 }
 
-export function screenSignIn(mode){
-  const isNew = mode === 'signup';
-  gateRender(isNew ? 'Crea il tuo account' : 'Accedi alla tua cucina', `
-    <label>Email</label>
-    <input type="email" id="g-email" autocomplete="email" placeholder="nome@ristorante.it">
-    <label>Password</label>
-    <input type="password" id="g-pass" autocomplete="${isNew?'new-password':'current-password'}" placeholder="${isNew?'almeno 6 caratteri':''}">
-    <button class="btn full mt-4" id="g-submit">${isNew?'Crea account':'Entra'}</button>
-    <div class="center mt-3">
-      <button class="gate-switch" id="g-switch">${isNew?'Ho già un account, accedi':'Non ho un account, creane uno'}</button>
-    </div>
-    ${isNew?'':'<div class="center"><button class="gate-switch" id="g-forgot">Ho dimenticato la password</button></div>'}
-  `);
+/* Il corpo della schermata d'ingresso, montato una volta e riusato. Le due
+   schermate — accesso e scelta della cucina — non convivono mai, quindi il
+   contenitore e' lo stesso: quello che cambia e' quale componente ci sta
+   dentro. */
+function montaNelVaro(tag, titolo){
+  document.getElementById('gate-lead').textContent = titolo;
+  const corpo = document.getElementById('gate-body');
+  let vista = corpo.firstElementChild;
+  if(!vista || vista.tagName.toLowerCase() !== tag){
+    vista = document.createElement(tag);
+    corpo.replaceChildren(vista);
+  }
+  gateErr.classList.add('hidden');
+  gateEl.classList.add('show');
+  return vista;
+}
 
-  const submit = async ()=>{
-    const email = document.getElementById('g-email').value.trim();
-    const pass  = document.getElementById('g-pass').value;
-    if(!email || !pass){ gateError('Servono email e password.'); return; }
-    const btn = document.getElementById('g-submit');
-    btn.disabled = true; btn.textContent = 'Un attimo…';
+export function screenSignIn(mode){
+  const nuovo = mode === 'signup';
+  const vista = montaNelVaro('cmd-accesso',
+    nuovo ? 'Crea il tuo account' : 'Accedi alla tua cucina');
+  vista.nuovo = nuovo;
+  vista.errore = '';
+  vista.inCorso = false;
+
+  if(vista.dataset.collegato) return;
+  vista.dataset.collegato = '1';
+
+  vista.addEventListener('accesso-cambia', ()=>
+    screenSignIn(vista.nuovo ? 'signin' : 'signup'));
+
+  vista.addEventListener('accesso-entra', async e => {
+    const { email, password } = e.detail;
+    if(!email || !password){ vista.errore = 'Servono email e password.'; return; }
+    vista.errore = '';
+    vista.inCorso = true;
     try{
-      if(isNew){
-        const { needsConfirmation } = await Cloud.signUp(email, pass);
+      if(vista.nuovo){
+        const { needsConfirmation } = await Cloud.signUp(email, password);
         if(needsConfirmation){
           gateRender('Controlla la posta', `
             <p class="prose">Ti abbiamo inviato un'email a <b>${esc(email)}</b>.
             Aprila e conferma l'indirizzo, poi torna qui e accedi.</p>
             <button class="btn full mt-4" id="g-back">Torna all'accesso</button>`);
-          document.getElementById('g-back').addEventListener('click', ()=>screenSignIn('signin'));
+          document.getElementById('g-back').addEventListener('click', ()=> screenSignIn('signin'));
           return;
         }
       } else {
-        await Cloud.signIn(email, pass);
+        await Cloud.signIn(email, password);
       }
       await afterSignIn();
-    }catch(e){
-      gateError(humanError(e));
-      btn.disabled = false; btn.textContent = isNew?'Crea account':'Entra';
+    }catch(err){
+      vista.errore = humanError(err);
+    }finally{
+      vista.inCorso = false;
     }
-  };
+  });
 
-  document.getElementById('g-submit').addEventListener('click', submit);
-  document.getElementById('g-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
-  document.getElementById('g-switch').addEventListener('click', ()=>screenSignIn(isNew?'signin':'signup'));
-  const forgot = document.getElementById('g-forgot');
-  if(forgot) forgot.addEventListener('click', async ()=>{
-    const email = document.getElementById('g-email').value.trim();
-    if(!email){ gateError('Scrivi prima la tua email qui sopra.'); return; }
-    try{ await Cloud.resetPassword(email); gateError('Ti abbiamo inviato un link per reimpostare la password.'); }
-    catch(e){ gateError(humanError(e)); }
+  vista.addEventListener('accesso-password-persa', async e => {
+    const email = e.detail.email;
+    if(!email){ vista.errore = 'Scrivi prima la tua email qui sopra.'; return; }
+    try{
+      await Cloud.resetPassword(email);
+      vista.errore = 'Ti abbiamo inviato un link per reimpostare la password.';
+    }catch(err){ vista.errore = humanError(err); }
   });
 }
 
 function screenKitchens(){
-  const rows = Cloud.memberships.map(m=>`
-    <button class="kitchen-row" data-k="${esc(m.kitchen.id)}">
-      <span>${esc(m.kitchen.name)}</span>
-      <span class="role-badge ${m.role==='viewer'?'viewer':''}">${m.role==='owner'?'titolare':(m.role==='editor'?'può modificare':'sola lettura')}</span>
-    </button>`).join('');
+  const vista = montaNelVaro('cmd-cucine',
+    Cloud.memberships.length ? 'Scegli la cucina' : 'Nessuna cucina, ancora');
 
-  gateRender(Cloud.memberships.length ? 'Scegli la cucina' : 'Nessuna cucina, ancora', `
-    ${rows}
-    <div class="panel mt-4" >
-      <h3>Apri una nuova cucina</h3>
-      <label>Nome della cucina</label>
-      <input type="text" id="g-kname" placeholder="es. Trattoria del Porto">
-      <label>Come ti chiamano</label>
-      <input type="text" id="g-myname" placeholder="es. Emanuele, chef">
-      <button class="btn full mt-3" id="g-create">Crea cucina</button>
-    </div>
-    <div class="panel">
-      <h3>Entra con un codice d'invito</h3>
-      <p class="small-note mt-0" >Te lo dà chi gestisce la cucina.</p>
-      <label>Codice</label>
-      <input type="text" id="g-code" placeholder="ABCD2345" style="text-transform:uppercase;letter-spacing:2px;">
-      <label>Come ti chiamano</label>
-      <input type="text" id="g-joinname" placeholder="es. Marco, secondo">
-      <p class="small-note mt-1" >Serve a chi gestisce la cucina per riconoscerti nell'elenco di chi ha accesso.</p>
-      <button class="btn ghost full mt-3" id="g-join">Entra nella cucina</button>
-    </div>
-    <div class="center"><button class="gate-switch" id="g-out">Esci dall'account</button></div>
-  `);
+  const nomeRuolo = r => r === 'owner' ? 'titolare'
+                       : r === 'editor' ? 'può modificare' : 'sola lettura';
+  vista.cucine = Cloud.memberships.map(m => ({
+    id: m.kitchen.id,
+    nome: m.kitchen.name,
+    ruolo: nomeRuolo(m.role),
+    soloLettura: m.role === 'viewer',
+  }));
+  vista.errore = '';
+  vista.inCorso = false;
 
-  gateEl.querySelectorAll('.kitchen-row').forEach(b=>{
-    b.addEventListener('click', ()=>{ Cloud.selectKitchen(b.dataset.k); startApp(); });
+  if(vista.dataset.collegato) return;
+  vista.dataset.collegato = '1';
+
+  vista.addEventListener('cucina-scelta', e => {
+    Cloud.selectKitchen(e.detail.id);
+    startApp();
   });
-  document.getElementById('g-create').addEventListener('click', async ()=>{
-    const name = document.getElementById('g-kname').value.trim();
-    if(!name){ gateError('Dai un nome alla cucina.'); return; }
-    try{ await Cloud.createKitchen(name, document.getElementById('g-myname').value); startApp(); }
-    catch(e){ gateError(humanError(e)); }
+
+  vista.addEventListener('cucina-crea', async e => {
+    if(!e.detail.nome){ vista.errore = 'Dai un nome alla cucina.'; return; }
+    vista.errore = ''; vista.inCorso = true;
+    try{ await Cloud.createKitchen(e.detail.nome, e.detail.io); startApp(); }
+    catch(err){ vista.errore = humanError(err); }
+    finally{ vista.inCorso = false; }
   });
-  document.getElementById('g-join').addEventListener('click', async ()=>{
-    const code = document.getElementById('g-code').value.trim().toUpperCase();
-    if(!code){ gateError('Inserisci il codice.'); return; }
-    try{ await Cloud.joinKitchen(code, document.getElementById('g-joinname').value); startApp(); }
-    catch(e){ gateError(humanError(e)); }
+
+  vista.addEventListener('cucina-entra', async e => {
+    if(!e.detail.codice){ vista.errore = 'Inserisci il codice.'; return; }
+    vista.errore = ''; vista.inCorso = true;
+    try{ await Cloud.joinKitchen(e.detail.codice, e.detail.io); startApp(); }
+    catch(err){ vista.errore = humanError(err); }
+    finally{ vista.inCorso = false; }
   });
-  document.getElementById('g-out').addEventListener('click', async ()=>{ await Cloud.signOut(); screenSignIn('signin'); });
+
+  vista.addEventListener('account-esci', async ()=>{
+    await Cloud.signOut();
+    screenSignIn('signin');
+  });
 }
 
 export function screenBlocked(reason){

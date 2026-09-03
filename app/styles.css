@@ -435,8 +435,6 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .overlay .lead{font-family:var(--font-mono);font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--brass);margin:0 0 24px;}
 .gate-error{background:var(--alert-soft);border:1px solid rgba(168,65,47,0.4);border-radius:6px;padding:10px 12px;font-size:12.5px;margin-bottom:12px;}
 .gate-switch{background:none;border:none;color:var(--copper-light);font-family:var(--font-mono);font-size:11px;text-decoration:underline;padding:6px 0;}
-.kitchen-row{width:100%;text-align:left;background:var(--bg-elev);border:1px solid var(--line);border-radius:6px;padding:12px 14px;margin-bottom:8px;color:var(--paper);display:flex;justify-content:space-between;align-items:center;gap:10px;}
-.kitchen-row:hover{border-color:var(--copper);}
 .role-badge{font-family:var(--font-mono);font-size:9.5px;letter-spacing:0.8px;text-transform:uppercase;padding:3px 7px;border-radius:20px;background:var(--copper-soft);color:var(--copper-light);white-space:nowrap;}
 .role-badge.viewer{background:rgba(140,122,78,0.2);color:var(--brass);}
 .invite-code{font-family:var(--font-mono);font-size:17px;letter-spacing:3px;background:var(--bg-elev2);border:1px dashed var(--copper);border-radius:6px;padding:12px;text-align:center;color:var(--copper-light);margin:8px 0;}
