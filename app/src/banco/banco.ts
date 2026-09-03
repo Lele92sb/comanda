@@ -42,8 +42,11 @@ import type { Opzione } from '../ds/scelta.ts';
 // avere una cucina vera per vederle.
 import '../turni/partite-vista.ts';
 import type { PartitaVista } from '../turni/partite-vista.ts';
+import '../ds/interruttore.ts';
 import '../viste/brigata-vista.ts';
 import type { PersonaVista } from '../viste/brigata-vista.ts';
+import '../viste/persona-vista.ts';
+import type { PartitaScelta, PersonaModifica } from '../viste/persona-vista.ts';
 
 interface Caso {
   id: string;
@@ -95,6 +98,26 @@ const BRIGATA_VISTA: PersonaVista[] = [
     telefono: '', email: '',
     partite: ['Lavaggio'], fuoriExtra: true },
 ];
+
+const RUOLI = ['Chef', 'Sous Chef', 'Chef de partie', 'Cuoco', 'Commis', 'Pasticcere', 'Plongeur'];
+
+const STAZIONI_SCELTA: PartitaScelta[] = PARTITE_VISTA.map(p => ({ id: p.id, nome: p.nome }));
+
+const MEMBRI = [
+  { id: 'u1', nome: 'lorenc@ristorante.it', email: 'lorenc@ristorante.it' },
+  { id: 'u2', nome: 'Valerio', email: 'valerio@ristorante.it' },
+];
+
+const PERSONA_PIENA: PersonaModifica = {
+  id: 'lorenc', nome: 'Lorenc', ruolo: 'Chef de partie', ore: '49',
+  telefono: '333 1234567', email: 'lorenc@ristorante.it',
+  partite: ['pass', 'primi'], fuoriExtra: false, accountId: 'u1',
+};
+
+const PERSONA_NUOVA: PersonaModifica = {
+  id: 'nuova', nome: '', ruolo: 'Cuoco', ore: '',
+  telefono: '', email: '', partite: [], fuoriExtra: false, accountId: '',
+};
 
 const GRUPPI: Gruppo[] = [
   {
@@ -268,6 +291,51 @@ const GRUPPI: Gruppo[] = [
         titolo: 'Chi puo’ solo guardare',
         nota: 'I comandi spariscono invece di restare spenti: qui dentro non c’e’ niente da leggere in un bottone Elimina disattivato.',
         contenuto: () => html`<cmd-partite solo-lettura .partite=${PARTITE_VISTA}></cmd-partite>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-interruttore',
+    casi: [
+      {
+        id: 'interruttore',
+        titolo: 'Acceso, spento, bloccato',
+        nota: 'Tutta la riga e’ il comando, titolo e spiegazione compresi: una casella da 18px e’ un bersaglio che si sbaglia col dito.',
+        contenuto: () => html`
+          <cmd-interruttore acceso titolo="Può fare turni extra"
+            spiega="Quando il fabbisogno supera le quote della brigata, il generatore può assegnarle un turno oltre la sua quota."></cmd-interruttore>
+          <cmd-interruttore titolo="Chi può modificare vede i costi"
+            spiega="Spenta, i prezzi e il food cost restano solo a te. Il database non li manda proprio: non è un riquadro nascosto."></cmd-interruttore>
+          <cmd-interruttore disabilitato titolo="Uso offline"
+            spiega="Non disponibile in questa versione."></cmd-interruttore>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-scheda-persona — una schermata intera',
+    casi: [
+      {
+        id: 'persona-modifica',
+        titolo: 'Modifica, con due partite in ordine di priorità',
+        nota: 'La prima riga e’ accesa in rame e porta il rango scritto: un elenco che si riordina e basta non dice a nessuno che il primo conta piu’ degli altri.',
+        contenuto: () => html`
+          <cmd-scheda-persona .persona=${PERSONA_PIENA} .stazioni=${STAZIONI_SCELTA}
+                              .ruoli=${RUOLI} .membri=${MEMBRI} ?nuova=${false}></cmd-scheda-persona>`,
+      },
+      {
+        id: 'persona-nuova',
+        titolo: 'Nuova, e senza account collegabili',
+        nota: 'Senza membri con un account la sezione «Account collegato» non compare: una tendina con una sola voce vuota e’ una domanda a cui non si puo’ rispondere.',
+        contenuto: () => html`
+          <cmd-scheda-persona .persona=${PERSONA_NUOVA} .stazioni=${STAZIONI_SCELTA}
+                              .ruoli=${RUOLI} .membri=${[]} nuova></cmd-scheda-persona>`,
+      },
+      {
+        id: 'persona-senza-stazioni',
+        titolo: 'Quando in cucina non c’è ancora nessuna partita',
+        contenuto: () => html`
+          <cmd-scheda-persona .persona=${PERSONA_NUOVA} .stazioni=${[]}
+                              .ruoli=${RUOLI} .membri=${[]} nuova></cmd-scheda-persona>`,
       },
     ],
   },
