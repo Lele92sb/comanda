@@ -13,12 +13,14 @@
 // di lavorare sull'aspetto senza pestarsi i piedi, e a chi rivede il lavoro di
 // guardare una pagina sola invece di dodici schermate.
 //
-// E' ANCHE IL BANCO DI PROVA VISIVO. CLAUDE.md dice che i test non coprono
+// SARA' ANCHE IL BANCO DI PROVA VISIVO — non lo e' ancora, e vale la pena
+// dirlo invece di lasciarlo intendere. CLAUDE.md dice che i test non coprono
 // l'interfaccia, e che le due regressioni visive di questo progetto sono state
-// trovate confrontando schermate a mano. Ogni caso qui sotto ha un `data-caso`:
-// e' l'appiglio con cui scripts/prove-visive.mjs fotografa i componenti uno per
-// uno e confronta con le foto di riferimento. Un bordo che cambia da solo
-// adesso fa fallire una prova invece di arrivare in cucina.
+// trovate confrontando schermate a mano. Ogni caso qui sotto ha un `data-caso`
+// apposta: e' l'appiglio a cui si aggancera' un confronto automatico di
+// schermate, cosi' che un bordo che cambia da solo faccia fallire una prova
+// invece di arrivare in cucina. Manca il pezzo che scatta le foto, e costa
+// una dipendenza vera (un browser senza schermo dentro la pipeline).
 //
 // PERCHE' STA IN banco/ E NON IN ds/: il banco mostra anche schermate intere
 // dell'app, quindi importa da turni/. ds/ non puo' farlo — e' la regola che
