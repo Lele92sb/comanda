@@ -201,183 +201,22 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .ok-box{background:var(--sage-soft);border:1px solid rgba(107,128,100,0.4);border-radius:6px;padding:12px 14px;margin-bottom:10px;font-size:13px;}
 
 /* ============================================================================
-   GRIGLIA DEI TURNI
+   LA GRIGLIA DEI TURNI E' UN COMPONENTE: <cmd-griglia-turni>.
 
-   GEOMETRIA DICHIARATA, non emergente. Prima non c'era `table-layout:fixed`:
-   le colonne si "spremevano" da sole e la stessa tendina della stazione
-   misurava 91,3px in vista settimana e 52,0px in vista mese. Qualunque
-   taratura in pixel valeva per una vista sola.
+   Qui restavano 175 righe di geometria misurata a schermo — la larghezza delle
+   colonne, la settimana intera su un telefono, le colonne che restano ferme
+   mentre si scorre. Sono passate tutte dentro il componente, numeri e commenti
+   compresi: quei numeri vengono da misure fatte sul telefono del proprietario,
+   e riscriverli «meglio» vorrebbe dire rifare quelle misure.
 
-   DUE SOLE TAGLIE DI CARATTERE, al posto delle sei di prima (8, 9, 10, 10,5,
-   12 e 13,5px), e la più grande sulla sigla del turno invece che sul testo che
-   non entrava.
-   ========================================================================== */
-.shift-table{
-  --turni-col:56px;        /* larghezza MINIMA di una colonna-giorno */
-  --turni-nome:132px;
-  --turni-ore:76px;
-  --turni-cella-h:54px;    /* bersaglio per il dito: prima 23,3px, minimo 44 */
-  --turni-sigla:13px;
-  --turni-dettaglio:9.5px;
-  --riga-orario:0px;       /* acceso da .con-orario — vedi adattaTesti() */
-  table-layout:fixed;
-  width:100%;
-  /* Sotto questa larghezza si scorre invece di spremere: --n-giorni lo scrive
-     la griglia (7 o 31), è un dato del periodo, non una scelta di stile. */
-  min-width:calc(var(--turni-nome) + var(--turni-ore) + var(--n-giorni,7) * var(--turni-col));
-  border-collapse:separate;border-spacing:0;
-  font-family:var(--font-mono);font-size:var(--turni-dettaglio);
-}
-.shift-table.con-orario{--riga-orario:12px;}
-/* LA SETTIMANA INTERA SU UN TELEFONO, senza scorrere in orizzontale.
-   Chiesto dal proprietario: "si riescono a leggere solo 5 giorni, la dobbiamo
-   ridimensionare in modo che si visualizzi almeno l'intera settimana".
-   Misurato prima: area utile 302px, colonna nomi 92, colonna giorno 56, colonna
-   ore 76 -> 3,8 giorni su 7.
-   Il conto che decide questi numeri, e che va rifatto se qualcuno li cambia:
-     302 (area) + 32 (margini del riquadro, tolti qui sotto) = 334
-     334 - 66 (nomi) = 268 ;  268 / 7 = 38,3  ->  colonna 38px
-   La colonna ORE esce dalla griglia perche' le stesse ore sono gia' scritte,
-   per intero e con lo scarto dal contratto, nel riquadro "Ore extra del
-   periodo" che sta sotto: era l'unica delle tre cose in cella che avesse gia'
-   un altro posto dove vivere.
-   Dalla cella escono orario e nome della partita: restano la sigla e il
-   PALLINO, che il colore lo dice meglio di sei lettere tagliate. Toccando la
-   cella si apre lo stesso dialogo di sempre, con dentro tutto. */
+   Resta qui una riga sola, e riguarda il RIQUADRO, non la griglia: su un
+   telefono i 16px di margine per lato sono mezzo giorno, e il conto della
+   settimana intera li da' per tolti.
+   ============================================================================ */
 @media(max-width:767px){
-  .shift-table{
-    /* 80 al nome e 36 al giorno: 80 + 7x36 = 332, dentro i 334 disponibili.
-       A 66px i nomi si riducevano a una lettera sola — e con due R in brigata
-       una lettera non dice chi e'. Due pixel per giorno pagano un nome
-       leggibile: la sigla del turno sta in 24px, il resto era aria. */
-    --turni-nome:80px;
-    --turni-col:36px;
-    --turni-ore:0px;
-    --turni-cella-h:46px;   /* resta sopra i 44px del bersaglio per il dito */
-    --turni-sigla:11px;
-  }
-  /* Colonna ore fuori: e' l'unico dato che ha gia' un altro posto dove stare. */
-  .shift-table col.c-ore,
-  .shift-table th.ore-col,
-  .shift-table td.ore-col{display:none;}
-  /* Orario e nome della partita spariscono dalla cella: a 38px non ci stanno,
-     e tagliati direbbero una cosa falsa. Il pallino resta. */
-  .shift-table .ct-orario,
-  .shift-table .ct-nome-stazione{display:none !important;}
-  .shift-table{--riga-orario:0px;}
-  /* Il riquadro non stringe piu' la griglia: 16px per lato sono mezzo giorno. */
   #turni-panel{padding-left:0;padding-right:0;}
 }
-@media(max-width:560px){ .shift-table{--turni-nome:80px;} }
-.shift-table col.c-nome{width:var(--turni-nome);}
-.shift-table col.c-ore{width:var(--turni-ore);}
-.shift-table th,.shift-table td{border:1px solid var(--line);padding:var(--space-1);text-align:center;vertical-align:middle;}
-.shift-table th{font-weight:400;color:var(--brass);text-transform:uppercase;font-size:var(--turni-dettaglio);line-height:1.35;}
-.shift-table td.name{text-align:left;padding-left:6px;white-space:nowrap;}
-/* Su un mese sono 31 colonne: la colonna dei nomi resta ferma mentre si scorre,
-   altrimenti a metà mese non si sa più di chi sia la riga che si sta guardando. */
-.shift-table th.name-col,.shift-table td.name{position:sticky;left:0;z-index:2;background:var(--bg-elev);}
-/* ...e le date restano ferme mentre si scorre in basso. Con 12-15 persone in
-   brigata si arrivava in fondo senza sapere più che giorno si stava guardando:
-   lo stesso problema che la colonna ferma risolve nell'altra direzione. */
-.shift-table thead th{position:sticky;top:0;z-index:3;background:var(--bg-elev);}
-.shift-table thead th.name-col{z-index:4;}
-/* Il fondo di "oggi" nell'intestazione dev'essere OPACO: una tinta trasparente
-   su un elemento appiccicato lascia vedere le righe che gli scorrono sotto. */
-.shift-table th.today{background-color:var(--bg-elev);background-image:linear-gradient(rgba(176,107,52,0.14),rgba(176,107,52,0.14));}
-.shift-table td.today-col{background:rgba(176,107,52,0.14);}
-.shift-table th.weekend{color:var(--copper-light);}
-/* Il contenitore scorre in ENTRAMBE le direzioni: è ciò che rende possibile
-   l'intestazione ferma in alto. Senza altezza massima non scorrerebbe mai in
-   verticale e `position:sticky` non avrebbe nulla a cui aggrapparsi. */
-.shift-scroll{overflow:auto;max-width:100%;max-height:70vh;}
 
-/* Frecce per scorrere di una schermata di giorni per volta, con scritto quali
-   giorni si stanno guardando. Compaiono solo quando c'è da scorrere: sul
-   telefono la vista mese è larga 1904px in una finestra da 302px. */
-.shift-nav{display:flex;align-items:center;justify-content:center;gap:var(--space-2);margin-bottom:var(--space-2);}
-.shift-nav button{background:transparent;border:1px solid var(--line-strong);color:var(--paper);
-  font-family:var(--font-mono);font-size:13px;line-height:1;padding:8px 14px;border-radius:var(--radius-sm);}
-.shift-nav button:hover:not(:disabled){border-color:var(--copper);}
-.shift-nav button:disabled{opacity:0.35;cursor:default;}
-.shift-nav .shift-nav-label{font-family:var(--font-mono);font-size:var(--text-xs);
-  color:var(--copper-light);min-width:130px;text-align:center;}
-
-/* --- Colonna delle ore e riga dei totali ---------------------------------
-   La colonna delle ore è appiccicata a destra, simmetrica a quella dei nomi —
-   ma SOLO su schermo largo: su un telefono da 375px la griglia utile è larga
-   302px, e togliendone altri 76 fissi i giorni visibili scenderebbero da 3,8 a
-   2,4, cioè meno di prima del ridisegno. Sotto i 560px la colonna resta in
-   coda alla riga e la si raggiunge scorrendo. Misurato a schermo, non deciso a
-   tavolino. */
-.shift-table td.ore,.shift-table th.ore-col{background:var(--bg-elev);}
-.shift-table .ore-tot,.shift-table .ore-scarto{display:block;line-height:1.5;}
-.shift-table .ore-scarto{color:var(--brass);}
-.shift-table .ore-scarto.extra{color:var(--copper-light);font-weight:700;}
-.shift-table .ore-scarto.under{color:var(--brass);}
-@media(min-width:561px){
-  .shift-table td.ore,.shift-table th.ore-col{position:sticky;right:0;z-index:2;}
-  .shift-table thead th.ore-col{z-index:4;}
-  .shift-table tfoot td.ore{z-index:4;}
-}
-.shift-table tfoot th,.shift-table tfoot td{position:sticky;bottom:0;z-index:3;
-  background:var(--bg-elev);border-top:1px solid var(--line-strong);color:var(--paper-dim);}
-.shift-table tfoot th.name-col{left:0;z-index:4;color:var(--brass);text-transform:uppercase;}
-
-/* Nome della persona: si accorcia cambiando FORMA (nome e iniziale, poi solo
-   nome, poi le iniziali), non tagliando con i puntini — vedi accorciaNomi().
-   Il pallino vuoto marca chi non ha stazioni; per gli altri resta al suo posto
-   invisibile, così tutti i nomi partono dalla stessa colonna. */
-.shift-table td.name .ct-pallino{visibility:hidden;margin-right:5px;}
-.shift-table td.name.senza-stazioni{color:var(--brass);}
-.shift-table td.name.senza-stazioni .ct-pallino{visibility:visible;}
-.shift-table .nome-persona{display:inline-block;width:calc(100% - 14px);overflow:hidden;white-space:nowrap;vertical-align:middle;}
-
-/* --- La cella: un solo bersaglio, di misura dichiarata ------------------- */
-.cella-turno{
-  position:relative;display:grid;gap:1px;
-  grid-template-rows:19px var(--riga-orario) 13px;
-  align-content:center;justify-items:center;
-  width:100%;height:var(--turni-cella-h);padding:0;
-  background:transparent;border:none;border-radius:var(--radius-sm);
-  color:var(--paper);font-family:var(--font-mono);font-size:var(--turni-dettaglio);
-}
-.cella-turno:hover{background:var(--bg-elev2);}
-.cella-turno:focus-visible{outline:2px solid var(--copper);outline-offset:-2px;}
-.ct-sigla{
-  display:flex;align-items:center;justify-content:center;
-  min-width:32px;height:19px;padding:0 6px;border-radius:var(--radius-sm);
-  background:var(--bg-elev2);border:1px solid var(--line-strong);
-  font-size:var(--turni-sigla);line-height:1;
-}
-.ct-sigla.C{background:#d38f57;border-color:#d38f57;color:#1d1b18;font-weight:700;}
-.ct-sigla.P{background:#b06b34;border-color:#b06b34;color:#1d1b18;font-weight:700;}
-.ct-sigla.S{background:#332c24;border-color:#4a4036;color:#f3eee2;font-weight:700;}
-.ct-sigla.SP{background:#6b8064;border-color:#6b8064;color:#1d1b18;font-weight:700;}
-.ct-sigla.M{background:#a8412f;border-color:#a8412f;color:#f3eee2;font-weight:700;}
-.ct-sigla.F{background:#5a5a5a;border-color:#5a5a5a;color:#f3eee2;font-weight:700;}
-.ct-orario,.ct-stazione{display:flex;align-items:center;justify-content:center;gap:4px;
-  max-width:100%;overflow:hidden;white-space:nowrap;color:var(--brass);}
-.ct-orario{height:var(--riga-orario);}
-.ct-nome-stazione{overflow:hidden;white-space:nowrap;color:var(--paper-dim);}
-.shift-table:not(.con-stazione) .ct-nome-stazione{display:none;}
-.ct-pallino{display:inline-block;flex:0 0 auto;width:7px;height:7px;border-radius:50%;
-  background:var(--pallino,var(--brass));}
-.ct-pallino.vuoto{background:transparent;border:1px solid var(--brass);}
-
-/* Turno extra. Prima era un `outline:2px` sulla <td>: disegnato FUORI dal
-   riquadro, invadeva di 2px le quattro celle confinanti, e il `border-radius`
-   non si vedeva perché il fondo della cella restava quadrato. Ora sta tutto
-   dentro il bottone. */
-.cella-turno.extra{background:rgba(211,143,87,0.14);box-shadow:inset 0 0 0 1px var(--copper-light);}
-.cella-turno.extra::after{content:"";position:absolute;top:0;right:0;
-  border-top:6px solid var(--copper-light);border-left:6px solid transparent;}
-
-/* --- Legenda: il pallino è l'unica cosa che resta quando il nome della
-       stazione non entra nella cella, quindi qui si legge cosa vuol dire. --- */
-#turni-legend .riga-legenda{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);margin-top:var(--space-2);}
-#turni-legend .voce-legenda{display:inline-flex;align-items:flex-start;gap:5px;}
-#turni-legend .voce-legenda .ct-pallino{position:relative;top:4px;}
 
 .period-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
 .period-modes{display:flex;gap:4px;}
