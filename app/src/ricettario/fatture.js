@@ -1,10 +1,11 @@
-import { esc, save, state, toast, uid } from '../core/state.js';
+import { save, state, toast, uid } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
 import { renderSuppliers } from './fornitori.js';
 import { renderIngredients } from './ingredienti.js';
 import { applicaFatture } from './fatture/applica.ts';
 import { annullaImportazione } from './fatture/annulla.ts';
 import { fonteFile } from './fatture/fonti.ts';
+import './fatture-vista.ts';
 import { conferma } from '../core/state.js';
 
 /* ============================= IMPORT FATTURE ELETTRONICHE =============================
@@ -16,8 +17,18 @@ import { conferma } from '../core/state.js';
    da lì escono i prezzi d'acquisto su cui si calcola il food cost.
    ============================================================================ */
 
+/* Il riquadro dell'esito: uno solo, riusato. Si crea alla prima importazione e
+   resta li' spento finche' non c'e' qualcosa da dire. */
+function esito(){
+  const box = document.getElementById('invoice-log');
+  if(!box) return null;
+  let e = box.querySelector('cmd-esito-importazione');
+  if(!e){ e = document.createElement('cmd-esito-importazione'); box.replaceChildren(e); }
+  return e;
+}
+
 export async function importaDaFonte(fonte, periodo){
-  const logEl = document.getElementById('invoice-log');
+  const logEl = esito();
   const documenti = await fonte.elenca(periodo);
   if(!documenti.length){ toast('Nessuna fattura da importare'); return null; }
 
@@ -45,11 +56,14 @@ export async function importaDaFonte(fonte, periodo){
   if(modifiche.saltatiPerchéGiàImportati) parti.push(`${modifiche.saltatiPerchéGiàImportati} già importate`);
   if(modifiche.scartati) parti.push(`${modifiche.scartati} non leggibili`);
 
-  logEl.innerHTML =
-    `<div class="ok-box">${parti.length ? parti.join(', ') : 'Niente da aggiornare'}.</div>` +
-    (modifiche.resoconto.length
-      ? `<div class="small-note" style="white-space:pre-line;">${modifiche.resoconto.map(esc).join('\n')}</div>`
-      : '');
+  if(logEl){
+    // Il tono lo decide una cosa sola: se qualche fattura non si è potuta
+    // leggere. Il resto sono numeri, e un numero non è un problema.
+    logEl.tono = modifiche.scartati ? 'allarme' : 'ok';
+    logEl.riassunto = (parti.length ? parti.join(', ') : 'Niente da aggiornare') + '.';
+    logEl.dettagli = modifiche.resoconto;
+    logEl.inCorso = '';
+  }
 
   renderIngredients(); renderSuppliers(); renderStoricoImportazioni();
   toast('Fatture importate');
@@ -57,67 +71,82 @@ export async function importaDaFonte(fonte, periodo){
   // La resa (parte edibile) si stima solo per gli ingredienti appena nati:
   // su quelli esistenti lo chef potrebbe averla già corretta a mano.
   if(modifiche.creati.length){
-    logEl.innerHTML += `<div class="small-note">Sto stimando la resa per ${modifiche.creati.length} nuovi ingredienti…</div>`;
+    if(logEl) logEl.inCorso = `Sto stimando la resa per ${modifiche.creati.length} nuovi ingredienti…`;
     await estimateYieldsWithAI(modifiche.creati);
-    logEl.innerHTML += `<div class="ok-box">Resa stimata — controllala in "Ingredienti" (badge "resa stimata AI").</div>`;
+    if(logEl){
+      logEl.inCorso = '';
+      logEl.riassunto += " Resa stimata: controllala in Ingredienti, hanno l'etichetta «resa stimata AI».";
+    }
     renderIngredients();
   }
   return modifiche;
 }
 
 /* ---- Storico e annullamento ---- */
+
+let storicoVista = null;
+
 export function renderStoricoImportazioni(){
   const el = document.getElementById('invoice-history');
-  const storico = (state.invoiceHistory || []).slice().reverse();
-  if(!storico.length){ el.innerHTML = `<div class="empty">Nessuna importazione ancora.</div>`; return; }
-  el.innerHTML = storico.map(imp=>{
-    const quando = new Date(imp.quando).toLocaleString('it-IT', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
-    const cosa = [
+  if(!el) return;
+  if(!storicoVista || !storicoVista.isConnected){
+    storicoVista = document.createElement('cmd-storico-fatture');
+    storicoVista.addEventListener('importazione-annulla', e => annulla(e.detail.id));
+    el.replaceChildren(storicoVista);
+  }
+  // Dalla piu' recente: chi apre questa scheda vuole quasi sempre disfare
+  // l'ultima cosa che ha fatto.
+  storicoVista.importazioni = (state.invoiceHistory || []).slice().reverse().map(imp => ({
+    id: imp.id,
+    fornitore: imp.fornitore,
+    etichetta: imp.etichetta,
+    quando: new Date(imp.quando).toLocaleString('it-IT',
+      {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'}),
+    cosa: [
       imp.creati.length ? `${imp.creati.length} nuovi` : '',
       imp.aggiornati.length ? `${imp.aggiornati.length} aggiornati` : '',
-    ].filter(Boolean).join(', ') || 'nessuna modifica';
-    return `
-      <div class="staff-card">
-        <div class="wrap-anywhere">
-          <div class="bold">${esc(imp.fornitore)}</div>
-          <div class="contact">${esc(imp.etichetta)} · ${esc(quando)} · ${esc(cosa)}</div>
-        </div>
-        <button class="btn ghost small text-alert inv-undo" data-id="${esc(imp.id)}">Annulla</button>
-      </div>`;
-  }).join('');
-
-  el.querySelectorAll('.inv-undo').forEach(b=>b.addEventListener('click', async ()=>{
-    const imp = (state.invoiceHistory||[]).find(x=>x.id===b.dataset.id);
-    if(!imp) return;
-    const ok = await conferma(`Annullare l'importazione di ${imp.fornitore}?`,
-      `${imp.creati.length} ingredienti creati verranno tolti e ${imp.aggiornati.length} prezzi torneranno com'erano.\n`
-      + 'Quello che hai corretto a mano dopo resta come sta. La fattura potrà essere reimportata.',
-      {conferma:'Annulla importazione', pericolo:true});
-    if(!ok) return;
-
-    const esito = annullaImportazione(imp, {
-      fornitori: state.suppliers, ingredienti: state.ingredients,
-      giaImportati: state.importedInvoices || [], storico: state.invoiceHistory || [],
-    });
-    state.suppliers = esito.fornitori;
-    state.ingredients = esito.ingredienti;
-    state.importedInvoices = esito.giaImportati;
-    state.invoiceHistory = esito.storico;
-    await save('suppliers'); await save('ingredients');
-    await save('importedInvoices'); await save('invoiceHistory');
-
-    const parti = [];
-    if(esito.ingredientiRimossi) parti.push(`${esito.ingredientiRimossi} ingredienti tolti`);
-    if(esito.prezziRipristinati) parti.push(`${esito.prezziRipristinati} prezzi ripristinati`);
-    if(esito.fornitoriRimossi) parti.push(`fornitore rimosso`);
-    document.getElementById('invoice-log').innerHTML =
-      `<div class="ok-box">Importazione annullata: ${parti.join(', ') || 'niente da ripristinare'}.</div>` +
-      (esito.lasciateComeStavano.length
-        ? `<div class="small-note" style="white-space:pre-line;">${esito.lasciateComeStavano.map(esc).join('\n')}</div>` : '');
-
-    renderIngredients(); renderSuppliers(); renderStoricoImportazioni();
-    toast('Importazione annullata');
+    ].filter(Boolean).join(', ') || 'nessuna modifica',
   }));
+}
+
+async function annulla(id){
+  const imp = (state.invoiceHistory||[]).find(x=>x.id===id);
+  if(!imp) return;
+  const ok = await conferma(`Annullare l'importazione di ${imp.fornitore}?`,
+    `${imp.creati.length} ingredienti creati verranno tolti e ${imp.aggiornati.length} prezzi torneranno com'erano.
+`
+    + 'Quello che hai corretto a mano dopo resta come sta. La fattura potrà essere reimportata.',
+    {conferma:'Annulla importazione', pericolo:true});
+  if(!ok) return;
+
+  const risultato = annullaImportazione(imp, {
+    fornitori: state.suppliers, ingredienti: state.ingredients,
+    giaImportati: state.importedInvoices || [], storico: state.invoiceHistory || [],
+  });
+  state.suppliers = risultato.fornitori;
+  state.ingredients = risultato.ingredienti;
+  state.importedInvoices = risultato.giaImportati;
+  state.invoiceHistory = risultato.storico;
+  await save('suppliers'); await save('ingredients');
+  await save('importedInvoices'); await save('invoiceHistory');
+
+  const parti = [];
+  if(risultato.ingredientiRimossi) parti.push(`${risultato.ingredientiRimossi} ingredienti tolti`);
+  if(risultato.prezziRipristinati) parti.push(`${risultato.prezziRipristinati} prezzi ripristinati`);
+  if(risultato.fornitoriRimossi) parti.push('fornitore rimosso');
+
+  const e = esito();
+  if(e){
+    e.tono = 'ok';
+    e.riassunto = 'Importazione annullata: ' + (parti.join(', ') || 'niente da ripristinare') + '.';
+    // Quello che NON e' tornato indietro perche' era stato corretto a mano: e'
+    // la parte che conta, ed e' il motivo per cui l'annullamento e' sicuro.
+    e.dettagli = risultato.lasciateComeStavano;
+    e.inCorso = '';
+  }
+
+  renderIngredients(); renderSuppliers(); renderStoricoImportazioni();
+  toast('Importazione annullata');
 }
 
 document.getElementById('invoice-import-btn').addEventListener('click', async ()=>{

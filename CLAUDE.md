@@ -80,12 +80,29 @@ ripetuta, non dati veri mescolati a dati finti.
 
 **Non si scrive ciò che non si può leggere.**
 
-**L'interfaccia nuova si fa a componenti, non a stringhe.** `ds/` contiene i
-pezzi (`<cmd-bottone>`, `<cmd-campo>`, `<cmd-scelta>`, `<cmd-chip>`,
-`<cmd-riquadro>`, `<cmd-vuoto>`), scritti in TypeScript perché le proprietà di
-un componente sono la sua interfaccia pubblica. Le decisioni visive stanno
-tutte in `ds/tokens.css`: se stai per scrivere `#b06b34` o `12px` dentro un
-componente, o il token esiste già o va aggiunto lì.
+**L'interfaccia si fa a componenti, non a stringhe.** `ds/` contiene i pezzi,
+scritti in TypeScript perché le proprietà di un componente sono la sua
+interfaccia pubblica:
+
+| | |
+|---|---|
+| `<cmd-bottone>` | quattro varianti = quattro significati; sa di stare lavorando |
+| `<cmd-campo>` | etichetta, aiuto, errore — e li LEGA al controllo |
+| `<cmd-scelta>` | la tendina, con o senza ricerca. Mai più `<select>` nativi |
+| `<cmd-chip>` | un interruttore che si legge come un'etichetta |
+| `<cmd-interruttore>` | sì/no con una frase che spiega; tutta la riga è il comando |
+| `<cmd-riquadro>` | superficie con titolo e comandi; comprimibile (parte chiuso) |
+| `<cmd-scheda>` | la riga di elenco con i comandi a destra |
+| `<cmd-etichetta>` | uno stato in una parola: neutro, allarme, ok |
+| `<cmd-avviso>` | una cosa da sapere; resta finché resta la ragione |
+| `<cmd-dialogo>` | l'elemento `<dialog>` nativo: fuoco dentro, Esc, top layer |
+| `<cmd-comanda>` | la carta strappata: piatti, sub-ricette, menu |
+| `<cmd-vuoto>` | il primo passo, non un vicolo cieco |
+
+Le decisioni visive stanno tutte in `ds/tokens.css`: se stai per scrivere
+`#b06b34` o `12px` dentro un componente, o il token esiste già o va aggiunto lì.
+`styles.css` è sceso da 800 a 671 righe e continua a scendere: ogni schermata
+che diventa componente si porta via il proprio stile.
 
 Una schermata si divide in due: un **componente** che disegna e manda eventi
 senza sapere cosa sia `state`, e un **collante** che traduce quegli eventi in

@@ -28,6 +28,7 @@ export class Riquadro extends Elemento {
   declare titolo: string;
   declare sottotitolo: string;
   declare comprimibile: boolean;
+  /** Conta solo con `comprimibile`. Di partenza chiuso. */
   declare aperto: boolean;
   /** Senza fondo ne' bordo: quando il riquadro serve solo a raggruppare. */
   declare piatto: boolean;
@@ -37,7 +38,12 @@ export class Riquadro extends Elemento {
     this.titolo = '';
     this.sottotitolo = '';
     this.comprimibile = false;
-    this.aperto = true;
+    // CHIUSO di partenza, e conta solo se `comprimibile`: un riquadro che si
+    // puo' chiudere ma nasce aperto non comprime niente — chi lo ha reso
+    // comprimibile lo ha fatto perche' quel contenuto non serve subito.
+    // I riquadri normali ignorano questo valore: il foglio di stile li tiene
+    // aperti comunque (:host(:not([comprimibile])) .corpo).
+    this.aperto = false;
     this.piatto = false;
   }
 
