@@ -1,4 +1,4 @@
-import { t } from '../core/lingua.ts';
+import { dataCorta, giornoMese, t } from '../core/lingua.ts';
 import { SERVICE_LABEL, conferma, esc, periodDates, refreshShiftConfig, save, setPeriodAnchor, setPeriodMode, shiftPeriod, state, toast } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
 import { DAYS, REST_CODE, codeAllowed, constraintFor, generaMigliore, parseISO, puoFareExtra, settimaneIntere } from '../lib/logic.js';
@@ -180,7 +180,7 @@ async function generateRandomShifts(){
     let quantiRinunciatari = 0;
     shortfalls.forEach(sf=>{
       const st = state.stations.find(x=>x.id===sf.stationId);
-      const key = parseISO(sf.day).toLocaleDateString('it-IT',{weekday:'short', day:'numeric', month:'short'});
+      const key = dataCorta(parseISO(sf.day));
       const spenti = rinunciatariPer(sf, constraints);
       if(spenti.length) quantiRinunciatari++;
       byDay[key] = byDay[key] || [];
@@ -205,7 +205,7 @@ async function generateRandomShifts(){
       `Nella griglia ${nonPianificabili.length>1?'restano visibili, marcati':'resta visibile, marcato'} con un pallino vuoto: i turni si assegnano a mano, oppure si assegnano le stazioni nella scheda della persona.</div>`;
   }
   if(settimaneSalte.length){
-    const q = settimaneSalte.map(k=> parseISO(k).toLocaleDateString('it-IT',{day:'numeric', month:'short'}));
+    const q = settimaneSalte.map(k=> giornoMese(parseISO(k)));
     premessa += `<div class="ok-box">${settimaneSalte.length === 1 ? 'La settimana' : 'Le settimane'} del ${esc(q.join(', '))} ${settimaneSalte.length === 1 ? 'era già completa' : 'erano già complete'} e ${settimaneSalte.length === 1 ? 'non è stata rifatta' : 'non sono state rifatte'}: sta a cavallo del periodo, e rifarne solo una parte avrebbe richiesto turni oltre quota per rimettere in piedi un equilibrio che era già a posto. Se la vuoi diversa, rigenerala dalla vista settimana.</div>`;
   }
   if(eccedenzeCollocate && eccedenzeCollocate.length){
@@ -246,11 +246,11 @@ async function generateRandomShifts(){
       for(let k=1;k<=6;k++){
         const d = new Date(primo); d.setDate(primo.getDate()-k);
         if(d.getDay() === 0) break;                       // domenica: settimana finita
-        fuori.unshift(d.toLocaleDateString('it-IT',{weekday:'short', day:'numeric', month:'short'}));
+        fuori.unshift(dataCorta(d));
       }
       for(let k=1;k<=6;k++){
         const d = new Date(ultimo); d.setDate(ultimo.getDate()+k);
-        fuori.push(d.toLocaleDateString('it-IT',{weekday:'short', day:'numeric', month:'short'}));
+        fuori.push(dataCorta(d));
         if(d.getDay() === 0) break;                       // arrivati a domenica
       }
       const n1 = somma(bordo);

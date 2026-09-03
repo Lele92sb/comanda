@@ -1,6 +1,6 @@
 import { Cloud } from '../lib/cloud.js';
 import { renderPubblicazione } from '../turni/generatore.js';
-import { t } from '../core/lingua.ts';
+import { frase, t } from '../core/lingua.ts';
 import { esc } from '../core/state.js';
 import { renderStoricoImportazioni } from '../ricettario/fatture.js';
 import { renderChat } from '../assistente/chat.js';
@@ -44,31 +44,31 @@ import { renderMenuList } from '../viste/menu.js';
  * poi diverge da quella vera.
  */
 const NAV = [
-  {id:'dashboard',  label:'Dashboard', icona:'📋',     soloChiModifica:true, render:()=>renderDashboard()},
-  {id:'ricette',    label:'Ricettario', icona:'📖', sezioni:[
-    {id:'ingredienti', label:'Ingredienti', render:()=>renderIngredients()},
-    {id:'subricette',  label:'Sub-ricette', render:()=>renderSubrecipes()},
-    {id:'piatti',      label:'Piatti',      render:()=>renderDishes()},
-    {id:'fornitori',   label:'Fornitori',   render:()=>renderSuppliers(),          soloSeVedeCosti:true},
-    {id:'fatture',     label:'Fatture',     render:()=>renderStoricoImportazioni(), soloSeVedeCosti:true},
+  {id:'dashboard',  label:frase('Dashboard'), icona:'📋',     soloChiModifica:true, render:()=>renderDashboard()},
+  {id:'ricette',    label:frase('Ricettario'), icona:'📖', sezioni:[
+    {id:'ingredienti', label:frase('Ingredienti'), render:()=>renderIngredients()},
+    {id:'subricette',  label:frase('Sub-ricette'), render:()=>renderSubrecipes()},
+    {id:'piatti',      label:frase('Piatti'),      render:()=>renderDishes()},
+    {id:'fornitori',   label:frase('Fornitori'),   render:()=>renderSuppliers(),          soloSeVedeCosti:true},
+    {id:'fatture',     label:frase('Fatture'),     render:()=>renderStoricoImportazioni(), soloSeVedeCosti:true},
   ]},
-  {id:'menu',       label:'Menu', icona:'🍽',          soloChiModifica:true, render:()=>renderMenuList()},
-  {id:'turni',      label:'Turni', icona:'📅',         render:()=>{ renderTurni(); renderOreExtra(); renderPubblicazione(); }},
-  {id:'richieste',  label:'Richieste', icona:'✋',     render:()=>renderRichieste()},
-  {id:'assistente', label:'Assistente AI', icona:'💬', soloChiModifica:true, render:()=>{ renderKB(); renderChat(); }},
-  {id:'benessere',  label:'Benessere', icona:'🌱',     soloChiModifica:true, render:()=>renderBenessere()},
+  {id:'menu',       label:frase('Menu'), icona:'🍽',          soloChiModifica:true, render:()=>renderMenuList()},
+  {id:'turni',      label:frase('Turni'), icona:'📅',         render:()=>{ renderTurni(); renderOreExtra(); renderPubblicazione(); }},
+  {id:'richieste',  label:frase('Richieste'), icona:'✋',     render:()=>renderRichieste()},
+  {id:'assistente', label:frase('Assistente AI'), icona:'💬', soloChiModifica:true, render:()=>{ renderKB(); renderChat(); }},
+  {id:'benessere',  label:frase('Benessere'), icona:'🌱',     soloChiModifica:true, render:()=>renderBenessere()},
   // Ultima voce, ed e' voluto: sono le cose che si impostano una volta. Chi
   // apre l'app ogni giorno cerca i turni, non il fabbisogno.
   // `breve` e' l'etichetta per la barra in basso, dove ogni voce ha meno di
   // cento pixel: «Impostazioni cucina» ne chiede 105 e finiva tagliata, e
   // un'etichetta tagliata si legge come un guasto, non come un'abbreviazione.
-  {id:'impostazioni', label:'Impostazioni cucina', breve:'Impostazioni', icona:'⚙', soloChiModifica:true, sezioni:[
-    {id:'brigata',    label:'Brigata',           render:()=>renderStaffList()},
-    {id:'generale',   label:'Generale',          render:()=>renderImpostazioni()},
-    {id:'servizi',    label:'Servizi e turni',   render:()=>{ renderServices(); renderShiftTypes(); renderCopiaConfig(); }},
-    {id:'stazioni',   label:'Stazioni',          render:()=>renderStations()},
-    {id:'fabbisogno', label:'Fabbisogno',        render:()=>renderNeeds()},
-    {id:'quote',      label:'Quote per persona', render:()=>renderQuotas()},
+  {id:'impostazioni', label:frase('Impostazioni cucina'), breve:frase('Impostazioni'), icona:'⚙', soloChiModifica:true, sezioni:[
+    {id:'brigata',    label:frase('Brigata'),           render:()=>renderStaffList()},
+    {id:'generale',   label:frase('Generale'),          render:()=>renderImpostazioni()},
+    {id:'servizi',    label:frase('Servizi e turni'),   render:()=>{ renderServices(); renderShiftTypes(); renderCopiaConfig(); }},
+    {id:'stazioni',   label:frase('Stazioni'),          render:()=>renderStations()},
+    {id:'fabbisogno', label:frase('Fabbisogno'),        render:()=>renderNeeds()},
+    {id:'quote',      label:frase('Quote per persona'), render:()=>renderQuotas()},
   ]},
 ];
 const TABS = NAV;

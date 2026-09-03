@@ -1,5 +1,6 @@
 import { save, state, toast, uid } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
+import { dataOra } from '../core/lingua.ts';
 import { renderSuppliers } from './fornitori.js';
 import { renderIngredients } from './ingredienti.js';
 import { applicaFatture } from './fatture/applica.ts';
@@ -100,8 +101,7 @@ export function renderStoricoImportazioni(){
     id: imp.id,
     fornitore: imp.fornitore,
     etichetta: imp.etichetta,
-    quando: new Date(imp.quando).toLocaleString('it-IT',
-      {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'}),
+    quando: dataOra(new Date(imp.quando)),
     cosa: [
       imp.creati.length ? `${imp.creati.length} nuovi` : '',
       imp.aggiornati.length ? `${imp.aggiornati.length} aggiornati` : '',

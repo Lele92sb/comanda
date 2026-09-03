@@ -4,6 +4,7 @@ import '../ds/campo.ts';
 import '../ds/dialogo.ts';
 import { DAYS, DEFAULT_SERVICES, DEFAULT_SHIFT_TYPES, buildShiftConfig, monthDates, normalizzaCella, parseISO, weekDates } from '../lib/logic.js';
 import { VALUTA_PREDEFINITA, impostaValuta } from './valuta.ts';
+import { giornoMese, meseAnno } from './lingua.ts';
 /* ============================= STATE ============================= */
 export const STORE_KEYS = ['ingredients','subrecipes','recipes','menus','staff','shifts','knowledge','chatHistory','wellbeing','suppliers','stations','staffingNeeds','services','shiftTypes','importedInvoices','invoiceHistory','publishedShifts','eccedenzaOre','impostazioni'];
 export let state = { ingredients:[], subrecipes:[], recipes:[], menus:[], staff:[], shifts:{}, knowledge:[], chatHistory:[], wellbeing:[], suppliers:[], stations:[], staffingNeeds:{}, services:[], shiftTypes:[], importedInvoices:[], invoiceHistory:[], publishedShifts:[],
@@ -38,9 +39,9 @@ export function periodDates(){
 export function periodLabel(){
   const d = periodDates();
   if(periodMode === 'mese'){
-    return periodAnchor.toLocaleDateString('it-IT', {month:'long', year:'numeric'});
+    return meseAnno(periodAnchor);
   }
-  const fmt = iso => parseISO(iso).toLocaleDateString('it-IT', {day:'numeric', month:'short'});
+  const fmt = iso => giornoMese(parseISO(iso));
   return fmt(d[0]) + ' – ' + fmt(d[6]);
 }
 export function shiftPeriod(delta){

@@ -1,4 +1,4 @@
-import { LINGUE, caricaLingua, lingua, t } from '../core/lingua.ts';
+import { LINGUE, caricaLingua, dataNumerica, lingua, t } from '../core/lingua.ts';
 import { TEMI, scegliTema, tema } from '../core/tema.ts';
 import { conferma, esc, toast } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
@@ -309,7 +309,7 @@ async function openTeam(){
       // se stesso, per capire cosa può e cosa non può.
       quando: m.user_id === Cloud.user.id
         ? 'sei tu'
-        : 'dal ' + new Date(m.created_at).toLocaleDateString('it-IT'),
+        : t('dal {quando}', { quando: dataNumerica(new Date(m.created_at)) }),
       io: m.user_id === Cloud.user.id,
       ruolo: m.user_id === Cloud.user.id ? nomeRuolo(m.role) : m.role,
     }));

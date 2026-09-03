@@ -1,6 +1,7 @@
 import { humanError } from '../account/accesso.js';
 import { SERVICE_LABEL, conferma, state, toast } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
+import { dataCorta, giornoMese } from '../core/lingua.ts';
 import { isoDate, parseISO } from '../lib/logic.js';
 import './richieste-vista.ts';
 /* ============================= RICHIESTE DEL PERSONALE ============================= */
@@ -54,9 +55,9 @@ let vista = null;
    interessa a chi deve coprirli. */
 function periodoScritto(dal, al){
   if(dal === al){
-    return parseISO(dal).toLocaleDateString('it-IT', {weekday:'short', day:'numeric', month:'long'});
+    return dataCorta(parseISO(dal));
   }
-  const breve = iso => parseISO(iso).toLocaleDateString('it-IT', {day:'numeric', month:'short'});
+  const breve = iso => giornoMese(parseISO(iso));
   return breve(dal) + ' → ' + breve(al) + ' (' + elencoDate(dal, al).length + ' giorni)';
 }
 

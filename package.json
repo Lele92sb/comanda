@@ -10,7 +10,8 @@
     "test": "node --experimental-strip-types --test tests/*.test.js",
     "typecheck": "tsc --noEmit",
     "lint:import": "node scripts/controlla-import.cjs",
-    "icone": "node scripts/genera-icone.cjs"
+    "icone": "node scripts/genera-icone.cjs",
+    "lint:lingue": "node scripts/controlla-lingue.cjs"
   },
   "devDependencies": {
     "typescript": "^7.0.2",

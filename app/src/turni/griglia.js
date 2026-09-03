@@ -1,6 +1,7 @@
 import { CODE_HOURS, CODE_LABEL, SERVICE_LABEL, SHIFT_CONFIG, TURNO_DEF, WORKING_CODES, esc, periodDates, periodLabel, periodMode, save, state } from '../core/state.js';
 import { assegnaStazione, dayName, isoDate, normalizzaCella, parseISO, serviziDelCodice, stazioneDi, stazioniDi } from '../lib/logic.js';
 import { Cloud } from '../lib/cloud.js';
+import { dataLunga } from '../core/lingua.ts';
 import { renderDashboard } from '../viste/dashboard.js';
 // fabbisogno.js importa da qui `coloreStazione`, e qui si importa `renderCapienza`
 // da lì: i due moduli si citano a vicenda. È lecito perché nessuno dei due usa
@@ -111,8 +112,10 @@ function dettaglioPartite(cella){
   }).filter(Boolean);
 }
 
-function dataLunga(iso){
-  return parseISO(iso).toLocaleDateString('it-IT', {weekday:'long', day:'numeric', month:'long'});
+/* Da una data ISO al testo lungo. La funzione di lingua.ts prende un Date;
+   qui girano stringhe ISO, e questo fa il ponte in un punto solo. */
+function giornoPerEsteso(iso){
+  return dataLunga(parseISO(iso));
 }
 
 function apriSceltaTurno(staffId, day){
@@ -174,7 +177,7 @@ function apriSceltaTurno(staffId, day){
       : [{ servizio: '*', etichetta: 'Partita', scelta: stazioneDi(cella, servizi[0]) || '' }];
 
     foglio.persona = s.name;
-    foglio.quando = dataLunga(day);
+    foglio.quando = giornoPerEsteso(day);
     foglio.turni = Object.keys(TURNO_DEF()).map(code => ({
       codice: code, etichetta: code ? CODE_LABEL(code) : SIGLA_VUOTA,
     }));
@@ -244,7 +247,7 @@ function righeDa(dates, ore){
         // col mouse voleva dire non averla fatta.
         stazione2: partite[1] ? { id: partite[1].id, nome: partite[1].name } : null,
         extra: Boolean(cella.extra),
-        titolo: s.name + ' \u00b7 ' + dataLunga(d) + ' \u00b7 ' + CODE_LABEL(cella.code)
+        titolo: s.name + ' \u00b7 ' + giornoPerEsteso(d) + ' \u00b7 ' + CODE_LABEL(cella.code)
           + (partite.length === 1 ? ' \u00b7 ' + partite[0].name
              : partite.length > 1 ? ' \u00b7 ' + dettaglioPartite(cella).join(' / ') : '')
           + (cella.extra ? ' \u00b7 turno extra' : ''),
@@ -267,7 +270,7 @@ function totaliDa(dates){
     return {
       ore: h.toFixed(1) + 'h',
       teste,
-      titolo: dataLunga(d) + ' \u00b7 ' + h.toFixed(1) + 'h su ' + teste
+      titolo: giornoPerEsteso(d) + ' \u00b7 ' + h.toFixed(1) + 'h su ' + teste
         + (teste === 1 ? ' persona' : ' persone'),
     };
   });
