@@ -16,6 +16,19 @@ import { t } from '../core/lingua.ts';
 import '../ds/avviso.ts';
 import '../ds/vuoto.ts';
 
+/**
+ * Un avviso della dashboard: cosa non va, e dove si ripara.
+ *
+ * `dove` non e' un di piu': un avviso che dice cosa non va e non dice dove
+ * ripararlo costringe a rifare a mano la strada che aveva gia' indicato. Con
+ * `dove`, l'avviso E' il passaggio.
+ */
+export interface AvvisoDashboard {
+  testo: string;
+  tono: 'allarme' | 'nota' | 'ok';
+  dove?: string;
+}
+
 export interface NumeroDashboard {
   numero: number;
   etichetta: string;
@@ -44,7 +57,7 @@ export class Dashboard extends LitElement {
     giorno: { type: String },
   };
 
-  declare avvisi: string[];
+  declare avvisi: AvvisoDashboard[];
   declare numeri: NumeroDashboard[];
   declare turniOggi: TurnoOggi[];
   /** Il giorno di oggi scritto per esteso, per il caso in cui non ci sia nessuno. */
@@ -85,6 +98,17 @@ export class Dashboard extends LitElement {
     .numero .l{font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);
       color:var(--brass);margin-top:2px;}
 
+    /* L'avviso che porta da qualche parte sta dentro un bottone vero, cosi'
+       lo raggiunge il tabulatore. Il bottone non si vede: e' l'avviso che si
+       vede, e deve continuare a sembrare un avviso e non un bottone. */
+    button.avviso-vai{
+      display:block;width:100%;text-align:left;
+      background:none;border:0;padding:0;margin:0;
+      font-family:inherit;color:inherit;cursor:pointer;
+    }
+    button.avviso-vai:focus-visible{outline:var(--fuoco);outline-offset:var(--fuoco-stacco);border-radius:var(--radius-md);}
+    button.avviso-vai:hover cmd-avviso{opacity:0.88;}
+
     .riquadro{
       background:var(--bg-elev);border:1px solid var(--line);
       border-radius:var(--radius-md);padding:var(--space-4);
@@ -114,7 +138,13 @@ export class Dashboard extends LitElement {
   override render(): TemplateResult {
     return html`
       ${this.avvisi.length
-        ? this.avvisi.map(a => html`<cmd-avviso tono="allarme">${a}</cmd-avviso>`)
+        ? this.avvisi.map(a => a.dove
+          ? html`
+            <button type="button" class="avviso-vai"
+                    @click=${() => this.manda('dashboard-vai', { dove: a.dove })}>
+              <cmd-avviso tono=${a.tono}>${a.testo}</cmd-avviso>
+            </button>`
+          : html`<cmd-avviso tono=${a.tono}>${a.testo}</cmd-avviso>`)
         : html`<cmd-avviso tono="ok">${t('Nessun alert. Cucina in equilibrio.')}</cmd-avviso>`}
 
       <div class="numeri">

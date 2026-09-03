@@ -47,6 +47,17 @@ export async function caricaRichieste(){
   catch(e){ console.error('richieste non caricate', e); RICHIESTE = []; }
 }
 
+/* Le richieste che aspettano una decisione. La dashboard le guarda per dirlo
+   in prima pagina: sono l'unica cosa nell'app che sta ferma finche' qualcuno
+   non decide, e una cosa ferma non si fa notare da sola.
+
+   Legge quello che c'e' GIA' in memoria e non va in rete: la dashboard si
+   ridisegna a ogni entrata nella scheda, e una lettura di rete a ogni entrata
+   si sentirebbe. Chi vuole il dato fresco chiama prima `caricaRichieste()`. */
+export function richiesteInAttesa(){
+  return RICHIESTE.filter(r => r.stato === 'in_attesa');
+}
+
 let vista = null;
 
 /* Il periodo scritto come lo si legge. Un giorno solo si dice per esteso —
