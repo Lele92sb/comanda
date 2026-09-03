@@ -9,7 +9,7 @@ del personale, assistente AI. Italiano e inglese.
 npm ci          # richiede Node >= 22.6 (i test caricano moduli .ts direttamente)
 npm run dev     # sviluppo, ricarica a caldo — le funzioni server NON girano
 npm run preview # build + wrangler: come in produzione, funzioni server comprese
-npm test        # 166 test
+npm test        # 197 test
 npm run typecheck
 npm run lint:import
 npm run lint:lingue  # quanto coprono i dizionari (non blocca)
@@ -104,6 +104,7 @@ interfaccia pubblica:
 | `<cmd-dialogo>` | l'elemento `<dialog>` nativo: fuoco dentro, Esc, top layer |
 | `<cmd-comanda>` | la carta strappata: piatti, sub-ricette, menu |
 | `<cmd-vuoto>` | il primo passo, non un vicolo cieco |
+| `<cmd-ricerca>` | cercare in un elenco: accenti, parole fuori ordine, conteggio |
 
 Le decisioni visive stanno tutte in `ds/tokens.css`: se stai per scrivere
 `#b06b34` o `12px` dentro un componente, o il token esiste già o va aggiunto lì.
@@ -133,6 +134,43 @@ L'ambiente lo decide il **branch** al momento della build, non l'indirizzo:
 
 La pipeline è `test → tipi → import → build → pubblica`. Se un controllo
 fallisce non si pubblica.
+
+## I sedici punti della prova in cucina
+
+Provata coi colleghi, l'agosto 2026, sono usciti sedici punti. Undici fatti,
+uno per commit — il messaggio di ognuno spiega cosa e perché.
+
+| | | |
+|---|---|---|
+| 16 | caratteri più leggibili | fatto (in due passate) |
+| 8 | chiaro e scuro | fatto |
+| 15 | tutto nel profilo | fatto |
+| 1 | menu sempre visibile | fatto |
+| 14 | valute | fatto |
+| 2 | spagnolo | fatto — 519 frasi × 3 lingue |
+| 4 | blocchi sugli stati impossibili | fatto |
+| 7 | si vede che ha salvato | fatto |
+| 6 | ricerca in sei elenchi | fatto |
+| 9 | quello che sembra cliccabile lo è | fatto |
+| 12 | dashboard | fatto |
+| 11 | permesso per le richieste altrui | codice fatto, migrazione applicata |
+| 5 | notifiche | **da fare** |
+| 13 | iscrizione con QR e link | **da fare** |
+| 10 | modifiche in tempo reale | **da fare** — il canale è aperto solo sulle richieste, vedi sotto |
+| 3 | studio dei concorrenti | **da fare** (per ultimo, come chiesto) |
+
+**Il tempo reale sui DATI della cucina non è banale, e la ragione è una sola:**
+la lettura passa da `leggi_sezione()`, che REDIGE — toglie i prezzi a chi non
+li vede, i telefoni a chi non li vede, i turni non pubblicati. Il canale in
+tempo reale di Supabase non passa da lì: manderebbe la riga INTERA a chiunque
+possa leggere la tabella. Per questo `kitchen_data` non è nella pubblicazione e
+`kitchen_requests` sì. Chi affronterà il punto 10 deve partire da qui: serve
+un canale che notifichi il CAMBIAMENTO senza mandare il contenuto, e poi una
+rilettura da `leggi_sezione()`.
+
+Le migrazioni da applicare a mano stanno in `supabase/migrazioni/`, numerate.
+`schema.sql` resta la fonte di verità per una cucina nuova; le migrazioni
+servono a chi ce l'ha già.
 
 ## Cosa manca
 
