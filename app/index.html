@@ -17,6 +17,15 @@
 <link rel="apple-touch-icon" href="/icone/icona-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/icone/icona-192.png">
 
+<!-- IL TEMA SI APPLICA PRIMA DI TUTTO. I moduli ES sono differiti: aspettarli
+     vorrebbe dire un lampo di tema sbagliato a ogni apertura dell'app. Sono
+     quattro righe, e stanno qui apposta. -->
+<script>
+  try{
+    var t = localStorage.getItem('comanda_tema');
+    if(t === 'chiaro' || t === 'scuro') document.documentElement.setAttribute('data-tema', t);
+  }catch(e){}
+</script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="./styles.css">
@@ -27,24 +36,21 @@
     <div class="brand"><span class="mark"></span>Comanda</div>
     <div class="sub" data-t>Cucina · Brigata · Menu · Testa libera</div>
     <div id="staging-badge" class="badge-ambiente hidden" data-t>⚠ AMBIENTE DI TEST — dati separati da quelli reali</div>
+    <!-- LA BARRA IN ALTO HA DUE COSE: dove sei, e chi sei. Tutto il resto —
+         cambiare cucina, gli accessi, il tema, la lingua, l'uscita — sta
+         dentro il profilo, a un clic. Prima erano cinque comandi in fila sopra
+         OGNI schermata, per cose che si toccano una volta al mese: su un
+         telefono quella fila andava a capo e mangiava due righe di schermo
+         prima ancora di cominciare a lavorare. -->
     <div id="account-bar">
       <div class="who">
-        <select id="ab-kitchen-sel" class="hidden"></select>
         <span id="ab-kitchen"></span>
         <span id="ab-role" class="role-badge"></span>
-        <!-- Il nome è il pulsante: cliccarlo lo cambia. Un pulsante separato
-             "Il tuo nome" non diceva a cosa servisse. -->
-        <button id="ab-rename" class="ab-nome" title="Cambia il tuo nome" data-t-title>
-          <span id="ab-email"></span><span class="matita" aria-hidden="true">✎</span>
-        </button>
       </div>
       <div class="acts">
-        <button id="ab-team" class="hidden" data-t>Accessi</button>
-        <button id="ab-switch" data-t>Cambia cucina</button>
-        <button id="ab-logout" data-t>Esci</button>
-        <!-- Ultimo a destra: è la posizione dove si cerca, ed è una scelta
-             che si fa una volta e poi si dimentica. -->
-        <div class="lingua-scelta" id="ab-lingua" role="group" aria-label="Lingua"></div>
+        <button id="ab-profilo" class="ab-nome" title="Il tuo profilo" data-t-title>
+          <span id="ab-email"></span><span class="matita" aria-hidden="true">⌄</span>
+        </button>
       </div>
     </div>
   </header>

@@ -29,8 +29,9 @@ import './assistente/conoscenza.js';
 import './assistente/chat.js';
 import './core/backup.js';
 import * as stato from './core/state.js';
-import { LINGUE, caricaLingua, lingua, t, traduciMarkup } from './core/lingua.ts';
+import { caricaLingua, lingua, t, traduciMarkup } from './core/lingua.ts';
 import { raccogliErrori } from './core/errori.ts';
+import { applica as applicaTema, seguiIlSistema } from './core/tema.ts';
 
 /* ============================= DIAGNOSTICA =============================
    I moduli non lasciano più niente su window, ed è giusto così. Ma senza un
@@ -53,22 +54,11 @@ window.__comanda = {
 };
 
 /* ============================= LINGUA ============================= */
+// La SCELTA della lingua sta nel profilo (<cmd-profilo>), insieme al tema e a
+// tutto il resto: prima erano due sigle appese alla barra in alto, che a ogni
+// lingua in piu' sarebbero diventate tre, quattro, cinque. Qui resta solo il
+// caricamento all'avvio.
 async function preparaLingua(){
-  const box = document.getElementById('ab-lingua');
-  // Due sigle affiancate invece di un menu: con due sole lingue, un menu
-  // costerebbe un clic in più e occuperebbe il triplo dello spazio.
-  box.innerHTML = LINGUE.map(l =>
-    `<button type="button" data-lingua="${l.codice}" title="${esc(l.nome)}"
-             aria-pressed="${l.codice===lingua()}">${l.codice.toUpperCase()}</button>`).join('');
-
-  box.querySelectorAll('[data-lingua]').forEach(b => b.addEventListener('click', async () => {
-    if(b.dataset.lingua === lingua()) return;
-    await caricaLingua(b.dataset.lingua);
-    // Ricarico invece di ritradurre a caldo: mezza app è disegnata da
-    // JavaScript, e ridisegnarla pezzo per pezzo lascerebbe testi misti.
-    location.reload();
-  }));
-
   await caricaLingua(lingua());
   traduciMarkup();
   document.documentElement.lang = lingua();
@@ -112,6 +102,12 @@ Cloud.onConflict = function(key){
     cucinaId: Cloud.kitchen?.id,
     utenteId: Cloud.user?.id,
   }));
+
+  // Il tema e' gia' applicato dallo script nella testa: qui si aggiunge solo
+  // l'ascolto del sistema, per chi sta su «automatico» e ha il telefono che
+  // passa a scuro da solo al tramonto.
+  applicaTema();
+  seguiIlSistema();
 
   // La lingua si sceglie prima di disegnare qualsiasi cosa: altrimenti la
   // schermata d'accesso comparirebbe in italiano e cambierebbe sotto gli occhi.

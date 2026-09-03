@@ -40,12 +40,12 @@ const stile = css`
   *,*::before,*::after{box-sizing:border-box;}
   .portate{margin:8px 0 0;padding:0;list-style:none;font-size:var(--text-md);}
   .portate li{display:flex;justify-content:space-between;gap:8px;
-    padding:4px 0;border-bottom:1px solid rgba(29,27,24,0.08);}
-  .portate .prezzo{font-family:var(--font-mono);color:rgba(29,27,24,0.6);white-space:nowrap;}
+    padding:4px 0;border-bottom:1px solid var(--line);}
+  .portate .prezzo{font-family:var(--font-mono);color:var(--brass);white-space:nowrap;}
   .conti{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 0;}
   .conto{font-family:var(--font-mono);font-size:var(--text-sm);}
   .conto b{display:block;font-size:var(--text-lg);}
-  .conto.buono b{color:#3f6b3a;}
+  .conto.buono b{color:var(--sage);}
   .conto.storto b{color:var(--alert);}
 `;
 

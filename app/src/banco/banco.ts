@@ -81,6 +81,7 @@ import type { MessaggioChat, NotaConoscenza } from '../assistente/assistente-vis
 import '../account/accesso-vista.ts';
 import type { CucinaVista } from '../account/accesso-vista.ts';
 import '../account/squadra-vista.ts';
+import { controllaContrasto } from './contrasto.ts';
 import type { InvitoVista, MembroVista } from '../account/squadra-vista.ts';
 
 interface Caso {
@@ -701,6 +702,57 @@ const GRUPPI: Gruppo[] = [
     ],
   },
   {
+    nome: 'cmd-profilo',
+    casi: [
+      {
+        id: 'profilo-titolare',
+        titolo: 'Il titolare, con piu’ di una cucina',
+        nota: 'Tutto quello che si tocca una volta al mese sta qui: il nome, la cucina, chi ha accesso, l’aspetto, la lingua, l’uscita. Prima erano cinque comandi in fila sopra OGNI schermata. Con piu’ cucine compare la tendina; il bottone «Chi ha accesso» lo vede solo il titolare.',
+        contenuto: () => html`
+          <cmd-bottone @click=${(e: Event) => {
+            const d = (e.target as HTMLElement).nextElementSibling as HTMLElement & { aperto: boolean };
+            d.aperto = true;
+          }}>Apri il profilo</cmd-bottone>
+          <cmd-profilo
+            nome="Emanuele" email="emanuele@ristorante.it" ruolo="titolare"
+            cucina="k2" titolare
+            .cucine=${[{ valore: 'k1', etichetta: 'Osteria del Borgo' },
+                       { valore: 'k2', etichetta: 'De Roma' },
+                       { valore: 'k3', etichetta: 'Il Molo' }]}
+            .temi=${[{ valore: 'auto', etichetta: 'Automatico', simbolo: '◐' },
+                     { valore: 'chiaro', etichetta: 'Chiaro', simbolo: '☀' },
+                     { valore: 'scuro', etichetta: 'Scuro', simbolo: '☾' }]}
+            tema="auto"
+            .lingue=${[{ valore: 'it', etichetta: 'Italiano' }, { valore: 'en', etichetta: 'English' }]}
+            lingua="it"
+            @profilo-chiudi=${(e: Event) => { (e.target as HTMLElement & { aperto: boolean }).aperto = false; }}
+          ></cmd-profilo>`,
+      },
+      {
+        id: 'profilo-cuoco',
+        titolo: 'Chi ha una cucina sola, e non e’ il titolare',
+        nota: 'Niente tendina (una cucina non si sceglie, si legge) e niente «Chi ha accesso»: e’ roba del titolare. Restano il proprio nome — che ognuno puo’ cambiare, anche in sola lettura — l’aspetto e la lingua.',
+        contenuto: () => html`
+          <cmd-bottone @click=${(e: Event) => {
+            const d = (e.target as HTMLElement).nextElementSibling as HTMLElement & { aperto: boolean };
+            d.aperto = true;
+          }}>Apri il profilo</cmd-bottone>
+          <cmd-profilo
+            nome="" email="lorenc@ristorante.it" ruolo="sola lettura"
+            cucina="De Roma"
+            .cucine=${[{ valore: 'k2', etichetta: 'De Roma' }]}
+            .temi=${[{ valore: 'auto', etichetta: 'Automatico', simbolo: '◐' },
+                     { valore: 'chiaro', etichetta: 'Chiaro', simbolo: '☀' },
+                     { valore: 'scuro', etichetta: 'Scuro', simbolo: '☾' }]}
+            tema="scuro"
+            .lingue=${[{ valore: 'it', etichetta: 'Italiano' }, { valore: 'en', etichetta: 'English' }]}
+            lingua="it"
+            @profilo-chiudi=${(e: Event) => { (e.target as HTMLElement & { aperto: boolean }).aperto = false; }}
+          ></cmd-profilo>`,
+      },
+    ],
+  },
+  {
     nome: 'cmd-dialogo e cmd-foglio-turno',
     casi: [
       {
@@ -1049,6 +1101,53 @@ const LARGHEZZE = [
 let larghezza = 'largo';
 let eco = '';
 
+/* I TEMI stanno accanto alle larghezze per la stessa ragione: un componente
+   sbagliato nel tema chiaro non si vede finche' non si guarda nel tema chiaro,
+   e finora per farlo bisognava cambiare le impostazioni del sistema operativo.
+   Qui e' un bottone. Il primo giro ha trovato tre difetti veri — l'etichetta
+   neutra era un velo bianco su fondo bianco, il testo sopra il rame restava
+   scuro su rame scuro, e i bordi degli avvisi erano scritti a mano. */
+const TEMI_BANCO = [
+  { id: 'auto', etichetta: 'Come il sistema' },
+  { id: 'chiaro', etichetta: 'Chiaro' },
+  { id: 'scuro', etichetta: 'Scuro' },
+];
+let temaBanco = 'auto';
+function applicaTemaBanco(): void {
+  const r = document.documentElement;
+  if (temaBanco === 'auto') r.removeAttribute('data-tema');
+  else r.setAttribute('data-tema', temaBanco);
+}
+
+/* Il contrasto si controlla NEI DUE TEMI in un colpo solo: un difetto che
+   esiste solo al chiaro non lo trova chi guarda solo lo scuro, ed e' successo.
+   Il tema scelto viene rimesso com'era: il banco non deve cambiare sotto le
+   mani a chi lo stava usando. */
+let esitoContrasto = '';
+async function provaContrasto(): Promise<void> {
+  const prima = temaBanco;
+  const righe: string[] = [];
+  try {
+  for (const t of ['chiaro', 'scuro']) {
+    temaBanco = t; applicaTemaBanco();
+    // Un timeout, non requestAnimationFrame: una scheda in secondo piano non
+    // disegna, e li' rAF non arriva mai. La prova restava appesa a meta',
+    // col tema cambiato e nessun risultato — il modo peggiore di fallire.
+    await new Promise(r => setTimeout(r, 60));
+    const e = controllaContrasto();
+    righe.push(e.sotto === 0
+      ? `${t}: ${e.esaminati} testi, tutti sopra soglia`
+      : `${t}: ${e.sotto} sotto soglia su ${e.esaminati} — ` +
+        e.difetti.slice(0, 3).map(d => `${d.dove} ${d.rapporto}:1 (serve ${d.soglia})`).join(' · '));
+    if (e.sotto) console.table(e.difetti);
+  }
+  } finally {
+    temaBanco = prima; applicaTemaBanco();
+  }
+  esitoContrasto = righe.join('   |   ');
+  disegna();
+}
+
 function disegna(): void {
   const radice = document.getElementById('banco');
   if (!radice) return;
@@ -1062,6 +1161,14 @@ function disegna(): void {
             <button aria-pressed=${larghezza === l.id ? 'true' : 'false'}
                     @click=${() => { larghezza = l.id; disegna(); }}>${l.etichetta}</button>`)}
         </div>
+        <div class="larghezze">
+          ${TEMI_BANCO.map(x => html`
+            <button aria-pressed=${temaBanco === x.id ? 'true' : 'false'}
+                    @click=${() => { temaBanco = x.id; applicaTemaBanco(); disegna(); }}>${x.etichetta}</button>`)}
+          <button @click=${provaContrasto} title="Misura il contrasto di ogni testo, nei due temi">
+            Prova il contrasto</button>
+        </div>
+        ${esitoContrasto ? html`<p class="eco">${esitoContrasto}</p>` : ''}
         <p class="eco">${eco}</p>
       </header>
 

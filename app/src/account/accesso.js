@@ -1,5 +1,6 @@
-import { t } from '../core/lingua.ts';
-import { chiediTesto, conferma, esc, toast } from '../core/state.js';
+import { LINGUE, caricaLingua, lingua, t } from '../core/lingua.ts';
+import { TEMI, scegliTema, tema } from '../core/tema.ts';
+import { conferma, esc, toast } from '../core/state.js';
 import { Cloud } from '../lib/cloud.js';
 import { startApp } from '../main.js';
 import './accesso-vista.ts';
@@ -168,39 +169,85 @@ export async function afterSignIn(){
   screenKitchens();
 }
 
-/* ---- Barra account e sola lettura ---- */
+/* ---- Barra account e profilo ---- */
+
+let vistaProfilo = null;
+
+function apriProfilo(){
+  if(!vistaProfilo || !vistaProfilo.isConnected){
+    vistaProfilo = document.createElement('cmd-profilo');
+    collegaProfilo(vistaProfilo);
+    document.body.appendChild(vistaProfilo);
+  }
+  vistaProfilo.nome = Cloud.myDisplayName || '';
+  vistaProfilo.email = Cloud.user.email;
+  vistaProfilo.ruolo = nomeDelRuolo(Cloud.role);
+  vistaProfilo.cucina = Cloud.memberships.length > 1 ? Cloud.kitchen.id : Cloud.kitchen.name;
+  vistaProfilo.cucine = Cloud.memberships.map(m => ({ valore: m.kitchen.id, etichetta: m.kitchen.name }));
+  vistaProfilo.titolare = Cloud.isOwner();
+  vistaProfilo.temi = TEMI.map(x => ({ valore: x.valore, etichetta: t(x.etichetta), simbolo: x.simbolo }));
+  vistaProfilo.tema = tema();
+  vistaProfilo.lingue = LINGUE.map(l => ({ valore: l.codice, etichetta: l.nome }));
+  vistaProfilo.lingua = lingua();
+  vistaProfilo.aperto = true;
+}
+
+function collegaProfilo(v){
+  v.addEventListener('profilo-chiudi', ()=>{ v.aperto = false; });
+
+  v.addEventListener('profilo-nome', async e => {
+    try{
+      // La RPC, non la scrittura diretta: `setMemberName` tocca
+      // `kitchen_members` ed e' riservata al titolare che corregge gli altri.
+      // Qui ognuno cambia il PROPRIO nome, anche chi e' in sola lettura.
+      await Cloud.setMyDisplayName(e.detail.nome);
+      renderAccountBar();
+      toast(t('Nome aggiornato'));
+    }catch(err){ toast(humanError(err)); }
+  });
+
+  // Cambiare cucina cambia TUTTO (brigata, servizi, turni, richieste): si
+  // ricarica invece di ridisegnare, cosi' non restano residui della precedente.
+  v.addEventListener('profilo-cucina', e => {
+    Cloud.selectKitchen(e.detail.id);
+    location.reload();
+  });
+
+  v.addEventListener('profilo-accessi', ()=>{ v.aperto = false; openTeam(); });
+  v.addEventListener('profilo-tema', e => { scegliTema(e.detail.valore); apriProfilo(); });
+
+  v.addEventListener('profilo-lingua', async e => {
+    if(e.detail.valore === lingua()) return;
+    await caricaLingua(e.detail.valore);
+    // Meta' app e' disegnata da JavaScript: ritradurla a caldo lascerebbe
+    // testi misti, e ricaricare e' l'unica cosa onesta.
+    location.reload();
+  });
+
+  v.addEventListener('profilo-esci', async ()=>{
+    v.aperto = false;
+    await Cloud.signOut();
+    screenSignIn('signin');
+  });
+}
+
+function nomeDelRuolo(r){
+  return r === 'owner' ? t('titolare')
+       : r === 'editor' ? t('può modificare') : t('sola lettura');
+}
+
 export function renderAccountBar(){
   if(!Cloud.enabled) return;
   const bar = document.getElementById('account-bar');
   bar.style.display = 'flex';
-  // Con più cucine il nome diventa un menu: chi ne gestisce quattro cambia di
-  // continuo, e passare dalla schermata iniziale ogni volta è una tortura.
-  const sel = document.getElementById('ab-kitchen-sel');
-  const nome = document.getElementById('ab-kitchen');
-  // La visibilità passa dalle classi: .hidden è marcata !important e uno
-  // style.display non riuscirebbe a scavalcarla.
-  const piùCucine = Cloud.memberships.length > 1;
-  if(piùCucine){
-    sel.innerHTML = Cloud.memberships.map(m=>
-      `<option value="${esc(m.kitchen.id)}" ${m.kitchen.id===Cloud.kitchen.id?'selected':''}>${esc(m.kitchen.name)}</option>`).join('');
-  } else {
-    nome.textContent = Cloud.kitchen.name;
-  }
-  sel.classList.toggle('hidden', !piùCucine);
-  nome.classList.toggle('hidden', piùCucine);
-
-  // Il nome scelto, se c'è: l'email è lunga e non dice niente a colpo d'occhio.
-  document.getElementById('ab-email').textContent = Cloud.myDisplayName || Cloud.user.email;
+  document.getElementById('ab-kitchen').textContent = Cloud.kitchen.name;
   const badge = document.getElementById('ab-role');
-  badge.textContent = Cloud.role==='owner' ? t('titolare')
-                    : (Cloud.role==='editor' ? t('può modificare') : t('sola lettura'));
-  badge.className = 'role-badge' + (Cloud.role==='viewer' ? ' viewer' : '');
-  document.getElementById('ab-team').classList.toggle('hidden', !Cloud.isOwner());
+  badge.textContent = nomeDelRuolo(Cloud.role);
+  badge.className = 'role-badge' + (Cloud.role === 'viewer' ? ' viewer' : '');
+  // Il nome scelto, se c'e': l'email e' lunga e non dice niente a colpo d'occhio.
+  document.getElementById('ab-email').textContent = Cloud.myDisplayName || Cloud.user.email;
 }
 
-// I comandi di navigazione e l'assistente personale restano usabili anche in
-// sola lettura: quello che si blocca è tutto ciò che modificherebbe i dati.
-const READONLY_ALLOWED = '#tabs, nav.subtabs, #chat-input, #chat-send, #btn-export, #account-bar, .overlay';
 function readonlyGuard(e){
   if(!Cloud.enabled || Cloud.canWrite()) return;
   const t = e.target;
@@ -349,23 +396,4 @@ function teamError(e){
   el.textContent = humanError(e); el.classList.remove('hidden');
 }
 
-document.getElementById('ab-kitchen-sel').addEventListener('change', e=>{
-  // Ricarico invece di ridisegnare: cambiare cucina cambia tutto (brigata,
-  // servizi, turni, richieste) e una ripartenza pulita non lascia residui.
-  Cloud.selectKitchen(e.target.value);
-  location.reload();
-});
-document.getElementById('ab-team').addEventListener('click', openTeam);
-document.getElementById('ab-rename').addEventListener('click', async ()=>{
-  const nome = await chiediTesto("Il tuo nome nell'app", 'Come ti chiamano',
-                      Cloud.myDisplayName || '',
-                      'È il nome con cui compari fra chi ha accesso a questa cucina. Non è la scheda della brigata: quella la gestisce il titolare in Brigata.');
-  if(nome === null) return;
-  try{ await Cloud.setMyDisplayName(nome); renderAccountBar(); toast('Nome aggiornato'); }
-  catch(e){ toast(humanError(e)); }
-});
-document.getElementById('ab-logout').addEventListener('click', async ()=>{ await Cloud.signOut(); location.reload(); });
-document.getElementById('ab-switch').addEventListener('click', ()=>{
-  try{ localStorage.removeItem((Cloud.isStaging?'comanda_staging_':'comanda_')+'last_kitchen'); }catch(e){}
-  location.reload();
-});
+document.getElementById('ab-profilo').addEventListener('click', apriProfilo);

@@ -249,8 +249,8 @@ export class GrigliaTurni extends LitElement {
     /* Il fondo di «oggi» nell'intestazione dev'essere OPACO: una tinta
        trasparente su un elemento appiccicato lascia vedere le righe sotto. */
     .shift-table th.today{background-color:var(--bg-elev);
-      background-image:linear-gradient(rgba(176,107,52,0.14),rgba(176,107,52,0.14));}
-    .shift-table td.today-col{background:rgba(176,107,52,0.14);}
+      background-image:linear-gradient(var(--copper-soft),var(--copper-soft));}
+    .shift-table td.today-col{background:var(--copper-soft);}
     .shift-table th.weekend{color:var(--copper-light);}
 
     /* Il contenitore scorre in ENTRAMBE le direzioni: e' cio' che rende
@@ -341,7 +341,7 @@ export class GrigliaTurni extends LitElement {
     /* Turno extra. Prima era un outline:2px sulla <td>: disegnato FUORI dal
        riquadro, invadeva di 2px le quattro celle confinanti, e il
        border-radius non si vedeva perche' il fondo restava quadrato. */
-    .cella-turno.extra{background:rgba(211,143,87,0.14);box-shadow:inset 0 0 0 1px var(--copper-light);}
+    .cella-turno.extra{background:var(--copper-soft);box-shadow:inset 0 0 0 1px var(--copper-light);}
     .cella-turno.extra::after{content:"";position:absolute;top:0;right:0;
       border-top:6px solid var(--copper-light);border-left:6px solid transparent;}
 

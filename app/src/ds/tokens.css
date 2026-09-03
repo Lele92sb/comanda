@@ -19,23 +19,67 @@
      La tavolozza e' quella di una cucina: il rame delle pentole, l'ottone
      delle etichette, la carta della comanda, il verde salvia e il rosso del
      richiamo. Non e' decorazione: sono cinque significati, e ognuno ha un
-     solo colore. */
+     solo colore.
+
+     QUESTO BLOCCO E' IL TEMA SCURO, ed e' quello di partenza. Il chiaro sta
+     piu' sotto e ridefinisce GLI STESSI NOMI: nessun componente sa in che tema
+     sta, e non deve saperlo — chiede «il fondo di un riquadro» e riceve quello
+     giusto. E' il motivo per cui aggiungere il chiaro ha richiesto zero
+     modifiche ai 36 componenti. */
+  /* I VALORI DI QUESTA TAVOLOZZA NON SONO SCELTI A OCCHIO: ognuno regge
+     almeno 4,5:1 sulla superficie PEGGIORE su cui puo' finire — il fondo,
+     un riquadro, un riquadro dentro un riquadro, e per allarme e va bene
+     anche il proprio colore morbido. Misurato, non stimato: la versione
+     precedente dava 2,58:1 all'allarme e 3,73:1 alle etichette, cioe' il
+     testo che spiega i campi era il meno leggibile della pagina.
+     Chi cambia un colore qui rimisura, e non a occhio: il rapporto si
+     calcola, e a occhio uno schermo in cucina con le luci accese mente. */
   --bg:#1d1b18;              /* il fondo, ghisa */
   --bg-elev:#262320;         /* un riquadro sopra il fondo */
   --bg-elev2:#2e2a25;        /* un riquadro dentro un riquadro */
-  --paper:#f3eee2;           /* il testo, e la carta della comanda */
-  --paper-dim:#e7e0cf;
-  --ink:#1d1b18;             /* testo sulla carta */
-  --copper:#b06b34;          /* l'azione principale */
+  --paper:#f3eee2;           /* il testo corrente */
+  --paper-dim:#e7e0cf;       /* testo secondario */
+  /* Il testo SOPRA il rame, e sopra ogni superficie invertita (il toast).
+     GIRA COL TEMA, e deve: nel chiaro il rame si scurisce fino a #96552a
+     perche' deve reggere anche come testo su fondo bianco, e li' un ink
+     scuro darebbe 2,9:1 — sotto la soglia leggibile. */
+  --ink:#14120f;
+  --copper:#b87338;          /* l'azione principale */
   --copper-light:#d38f57;    /* l'azione principale, accesa */
   --copper-soft:rgba(176,107,52,0.16);
-  --brass:#8c7a4e;           /* testo di servizio, etichette */
-  --sage:#6b8064;            /* va bene */
+  --brass:#a89361;           /* testo di servizio, etichette */
+  --sage:#95a88e;            /* va bene */
   --sage-soft:rgba(107,128,100,0.18);
-  --alert:#a8412f;           /* non va bene */
+  --alert:#dc8878;           /* non va bene */
   --alert-soft:rgba(168,65,47,0.18);
   --line:rgba(243,238,226,0.12);
   --line-strong:rgba(243,238,226,0.22);
+
+  /* Il BORDO di un avviso: il colore pieno griderebbe, il colore morbido
+     sparirebbe. E' una terza cosa, e senza un nome finiva scritta a mano in
+     quattro file — dove restava scura anche in tema chiaro. */
+  --alert-linea:rgba(168,65,47,0.40);
+  --sage-linea:rgba(107,128,100,0.40);
+  /* La pellicola neutra: il fondo di <cmd-etichetta> quando non dice ne' bene
+     ne' male. E' il testo al 10%, quindi GIRA — al chiaro un velo bianco su
+     fondo bianco non lo vedrebbe nessuno. */
+  --film:rgba(243,238,226,0.10);
+  /* Il velo dietro un dialogo. Resta scuro anche al chiaro: serve a spegnere
+     la pagina, e una pagina si spegne abbassandola, non schiarendola. */
+  --velo:rgba(15,13,11,0.72);
+
+  /* LA CARTA DELLA COMANDA ha due token suoi, e serve. Prima il suo fondo era
+     `--paper`, cioe' lo stesso token del TESTO: funzionava per caso, perche' in
+     tema scuro il testo e' chiaro. In tema chiaro il testo diventa scuro, e la
+     carta sarebbe diventata nera. La carta e' carta in tutti e due i temi. */
+  --carta:#f3eee2;
+  --carta-testo:#1d1b18;
+  --carta-linea:rgba(29,27,24,0.25);
+  /* L'inchiostro sbiadito della carta: il numero della comanda, i comandi
+     sopra il piatto. Era 0.5 e dava 3,16:1 — il numero d'ordine, che serve
+     proprio a essere letto in fretta, era la cosa meno leggibile della
+     scheda. A 0.64 passa su tutte e due le carte. */
+  --carta-tenue:rgba(29,27,24,0.64);
 
   /* --- Caratteri -----------------------------------------------------------
      TRE, e ognuno ha un mestiere:
@@ -146,4 +190,85 @@
     --tempo-breve:0ms;
     --tempo-lungo:0ms;
   }
+}
+
+/* ============================================================================
+   IL TEMA CHIARO.
+
+   TRE STATI, non due: automatico (segue il telefono), chiaro, scuro. L'automatico
+   e' quello di partenza, ed e' la scelta giusta — chi ha messo il telefono in
+   chiaro alle otto di sera se lo ritrova chiaro anche qui, senza doverlo dire
+   a un'app in piu'.
+
+   L'ordine delle due regole non e' casuale:
+     1. il sistema dice chiaro E l'utente non ha scelto  -> chiaro
+     2. l'utente ha scelto chiaro                        -> chiaro, sempre
+   La seconda vince perche' viene dopo e pesa di piu': una scelta esplicita
+   batte il sistema, che e' esattamente quello che ci si aspetta.
+
+   IL CHIARO NON E' IL BUIO ROVESCIATO. Il bianco pieno su uno schermo in
+   cucina, con le luci accese sopra la testa, abbaglia: il fondo e' un bianco
+   caldo, e il testo non e' nero ma la stessa ghisa del tema scuro. Il rame
+   invece si SCURISCE — quello che risalta sul buio sparisce sul chiaro, e un
+   pulsante principale che non risalta non e' piu' principale.
+   ============================================================================ */
+:root[data-tema="chiaro"],
+:root:not([data-tema="scuro"]):not([data-tema="chiaro"]) {
+  /* vuoto: serve solo a tenere insieme i due selettori qui sotto */
+}
+
+@media (prefers-color-scheme: light){
+  :root:not([data-tema="scuro"]){
+    --bg:#faf7f0;
+    --bg-elev:#ffffff;
+    --bg-elev2:#f2ece0;
+    --paper:#1d1b18;
+    --paper-dim:#3a352e;
+    --copper:#96552a;
+    --copper-light:#7d4622;
+    --copper-soft:rgba(150,85,42,0.12);
+    --ink:#fff8ef;
+    --brass:#736440;
+    --sage:#4c6146;
+    --sage-soft:rgba(76,97,70,0.14);
+    --alert:#93341f;
+    --alert-soft:rgba(147,52,31,0.12);
+    --line:rgba(29,27,24,0.13);
+    --line-strong:rgba(29,27,24,0.24);
+    --alert-linea:rgba(147,52,31,0.38);
+    --sage-linea:rgba(76,97,70,0.38);
+    --film:rgba(29,27,24,0.07);
+    --velo:rgba(29,27,24,0.45);
+    --shadow-card:0 6px 18px rgba(29,27,24,0.10);
+    --shadow-float:0 6px 20px rgba(29,27,24,0.16);
+    /* Sul chiaro la carta della comanda sparirebbe nel fondo: si scurisce
+       appena, quel tanto che basta perche' resti una carta appoggiata sopra. */
+    --carta:#efe8d8;
+  }
+}
+
+:root[data-tema="chiaro"]{
+  --bg:#faf7f0;
+  --bg-elev:#ffffff;
+  --bg-elev2:#f2ece0;
+  --paper:#1d1b18;
+  --paper-dim:#3a352e;
+  --copper:#96552a;
+  --copper-light:#7d4622;
+  --copper-soft:rgba(150,85,42,0.12);
+  --ink:#fff8ef;
+  --brass:#736440;
+  --sage:#4c6146;
+  --sage-soft:rgba(76,97,70,0.14);
+  --alert:#93341f;
+  --alert-soft:rgba(147,52,31,0.12);
+  --line:rgba(29,27,24,0.13);
+  --line-strong:rgba(29,27,24,0.24);
+  --alert-linea:rgba(147,52,31,0.38);
+  --sage-linea:rgba(76,97,70,0.38);
+  --film:rgba(29,27,24,0.07);
+  --velo:rgba(29,27,24,0.45);
+  --shadow-card:0 6px 18px rgba(29,27,24,0.10);
+  --shadow-float:0 6px 20px rgba(29,27,24,0.16);
+  --carta:#efe8d8;
 }

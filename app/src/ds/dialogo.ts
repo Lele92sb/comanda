@@ -53,7 +53,10 @@ export class Dialogo extends Elemento {
       padding:var(--space-4);
       font-family:var(--font-body);
     }
-    dialog::backdrop{background:rgba(15,13,11,0.72);backdrop-filter:blur(3px);}
+    /* Il fallback non e' pigrizia: ::backdrop sta nel top layer, e non
+       tutti i browser gli fanno ereditare le variabili dell'elemento che
+       lo genera. Senza, il velo sparirebbe del tutto. */
+    dialog::backdrop{background:var(--velo, rgba(15,13,11,0.72));backdrop-filter:blur(3px);}
 
     @media (prefers-reduced-motion: no-preference){
       dialog[open]{animation:entra var(--tempo-breve) var(--curva);}

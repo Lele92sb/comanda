@@ -71,14 +71,14 @@ const stile = css`
   .metriche{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0;}
   .metrica{font-family:var(--font-mono);font-size:var(--text-sm);}
   .metrica b{display:block;font-size:var(--text-lg);font-family:var(--font-mono);}
-  .metrica.buono b{color:#3f6b3a;}
+  .metrica.buono b{color:var(--sage);}
   .metrica.storto b{color:var(--alert);}
 
   .voci{margin:8px 0 0;padding:0;list-style:none;font-size:var(--text-md);}
   .voci li{display:flex;justify-content:space-between;gap:8px;
-    padding:4px 0;border-bottom:1px solid rgba(29,27,24,0.08);}
+    padding:4px 0;border-bottom:1px solid var(--line);}
   .voci .nome{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .voci .quanto{font-family:var(--font-mono);color:rgba(29,27,24,0.6);white-space:nowrap;}
+  .voci .quanto{font-family:var(--font-mono);color:var(--brass);white-space:nowrap;}
 
   .procedimento{font-size:var(--text-md);line-height:1.55;margin-top:8px;white-space:pre-wrap;}
   .procedimento.note{color:var(--copper);font-style:italic;}

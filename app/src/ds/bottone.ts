@@ -101,7 +101,7 @@ export class Bottone extends Elemento {
     :host([variante=fantasma]) button{background:transparent;border-color:var(--line-strong);color:var(--paper);font-weight:500;}
     :host([variante=fantasma]) button:hover:not(:disabled){border-color:var(--copper);}
 
-    :host([variante=pericolo]) button{background:transparent;border-color:rgba(168,65,47,0.45);color:var(--alert);font-weight:500;}
+    :host([variante=pericolo]) button{background:transparent;border-color:var(--alert-linea);color:var(--alert);font-weight:500;}
     :host([variante=pericolo]) button:hover:not(:disabled){background:var(--alert-soft);border-color:var(--alert);}
 
     :host([variante=piano]) button{background:transparent;color:var(--brass);font-family:var(--font-body);font-weight:400;font-size:var(--text-xs);}

@@ -38,8 +38,8 @@ export class Avviso extends Elemento {
       font-size:var(--text-md);line-height:1.55;
       background:var(--bg-elev2);border:1px solid var(--line);
     }
-    :host([tono=allarme]) .scatola{background:var(--alert-soft);border-color:rgba(168,65,47,0.4);}
-    :host([tono=ok]) .scatola{background:var(--sage-soft);border-color:rgba(107,128,100,0.4);}
+    :host([tono=allarme]) .scatola{background:var(--alert-soft);border-color:var(--alert-linea);}
+    :host([tono=ok]) .scatola{background:var(--sage-soft);border-color:var(--sage-linea);}
     .simbolo{flex:0 0 auto;line-height:1.4;}
     .testo{min-width:0;overflow-wrap:anywhere;}
   `];

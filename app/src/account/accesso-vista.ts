@@ -21,7 +21,10 @@ import '../ds/avviso.ts';
 import '../ds/bottone.ts';
 import '../ds/campo.ts';
 import '../ds/etichetta.ts';
+import '../ds/chip.ts';
+import '../ds/dialogo.ts';
 import '../ds/riquadro.ts';
+import '../ds/scelta.ts';
 
 export interface CucinaVista {
   id: string;
@@ -239,4 +242,153 @@ declare global {
     'cmd-accesso': Accesso;
     'cmd-cucine': Cucine;
   }
+}
+
+/* ============================================================================
+   <cmd-profilo> — tutto quello che riguarda TE, in un posto solo.
+
+   Prima era sparso nella barra in alto: il nome da una parte, la cucina da
+   un'altra, gli accessi, la lingua, l'uscita. Cinque comandi in fila sopra
+   ogni schermata, per cose che si toccano una volta al mese — e su un telefono
+   quella fila andava a capo e mangiava due righe di schermo prima ancora di
+   cominciare a lavorare.
+
+   Ora la barra ha il nome della cucina e un pulsante. Dentro, quattro gruppi
+   in ordine di quanto spesso si usano:
+     chi sei      il tuo nome, che gli altri vedono nell'elenco degli accessi
+     la cucina    cambiarla, e — se sei il titolare — chi ci ha accesso
+     l'aspetto    tema e lingua
+     l'uscita     in fondo, staccata: e' l'unica che ti butta fuori
+   ============================================================================ */
+export interface SceltaSemplice { valore: string; etichetta: string; simbolo?: string }
+
+export class Profilo extends LitElement {
+  static override properties = {
+    aperto: { type: Boolean },
+    nome: { type: String },
+    email: { type: String },
+    ruolo: { type: String },
+    cucina: { type: String },
+    cucine: { type: Array },
+    titolare: { type: Boolean },
+    temi: { type: Array },
+    tema: { type: String },
+    lingue: { type: Array },
+    lingua: { type: String },
+  };
+
+  declare aperto: boolean;
+  declare nome: string;
+  declare email: string;
+  declare ruolo: string;
+  declare cucina: string;
+  declare cucine: SceltaSemplice[];
+  declare titolare: boolean;
+  declare temi: SceltaSemplice[];
+  declare tema: string;
+  declare lingue: SceltaSemplice[];
+  declare lingua: string;
+
+  constructor() {
+    super();
+    this.aperto = false;
+    this.nome = '';
+    this.email = '';
+    this.ruolo = '';
+    this.cucina = '';
+    this.cucine = [];
+    this.titolare = false;
+    this.temi = [];
+    this.tema = 'auto';
+    this.lingue = [];
+    this.lingua = 'it';
+  }
+
+  static override styles = css`
+    :host{display:contents;font-family:var(--font-body);}
+    .gruppo{margin-bottom:var(--space-4);}
+    .gruppo:last-of-type{margin-bottom:0;}
+    .etichetta{
+      display:block;font-family:var(--font-body);font-weight:600;
+      font-size:var(--text-xs);color:var(--brass);margin-bottom:var(--space-2);
+    }
+    .chips{display:flex;flex-wrap:wrap;gap:6px;}
+    .riga{font-size:var(--text-sm);color:var(--brass);line-height:1.6;
+      margin-top:var(--space-1);overflow-wrap:anywhere;}
+    input{
+      width:100%;
+      background:var(--bg-elev2);border:1px solid var(--line-strong);color:var(--paper);
+      padding:9px 10px;border-radius:var(--radius-sm);
+      font-family:var(--font-body);font-size:var(--text-md);
+    }
+    input:focus{outline:var(--fuoco);outline-offset:var(--fuoco-stacco);border-color:var(--copper);}
+    @media (pointer:coarse){ input{min-height:var(--tocco-min);} }
+    /* L'uscita sta staccata dal resto da una linea: e' l'unica cosa qui dentro
+       che ti butta fuori, e non deve stare in fila con «cambia lingua». */
+    .uscita{border-top:1px solid var(--line);padding-top:var(--space-3);margin-top:var(--space-4);}
+  `;
+
+  private manda<T>(nome: string, dettaglio?: T): void {
+    this.dispatchEvent(new CustomEvent(nome, { detail: dettaglio, bubbles: true, composed: true }));
+  }
+
+  private gruppoChips(etichetta: string, voci: SceltaSemplice[], scelto: string,
+                      evento: string): TemplateResult {
+    return html`
+      <div class="gruppo">
+        <span class="etichetta">${etichetta}</span>
+        <div class="chips">
+          ${voci.map(v => html`
+            <cmd-chip ?acceso=${v.valore === scelto}
+                      @cmd-chip=${() => this.manda(evento, { valore: v.valore })}>
+              ${v.simbolo ? html`${v.simbolo} ` : nothing}${v.etichetta}
+            </cmd-chip>`)}
+        </div>
+      </div>`;
+  }
+
+  override render(): TemplateResult {
+    return html`
+      <cmd-dialogo ?aperto=${this.aperto} titolo=${t('Il tuo profilo')}
+                   @cmd-chiudi=${() => this.manda('profilo-chiudi')}>
+
+        <div class="gruppo">
+          <span class="etichetta">${t('Come ti chiami nell\'app')}</span>
+          <input type="text" id="pr-nome" .value=${this.nome}
+                 placeholder=${t('es. Emanuele, chef')}
+                 @change=${(e: Event) =>
+                   this.manda('profilo-nome', { nome: (e.target as HTMLInputElement).value })}>
+          <p class="riga">${this.email}${this.ruolo ? ' · ' + this.ruolo : ''}</p>
+        </div>
+
+        <div class="gruppo">
+          <span class="etichetta">${t('La cucina')}</span>
+          ${this.cucine.length > 1
+            ? html`
+              <cmd-scelta .opzioni=${this.cucine} valore=${this.cucina}
+                          etichetta=${t('Cucina')}
+                          @cmd-cambio=${(e: CustomEvent<{ valore: string }>) =>
+                            this.manda('profilo-cucina', { id: e.detail.valore })}></cmd-scelta>`
+            : html`<p class="riga" style="margin-top:0">${this.cucina}</p>`}
+          ${this.titolare ? html`
+            <cmd-bottone style="margin-top:var(--space-2)" misura="piccolo" variante="fantasma"
+                         @click=${() => this.manda('profilo-accessi')}
+            >${t('Chi ha accesso')}</cmd-bottone>` : nothing}
+        </div>
+
+        ${this.gruppoChips(t('Aspetto'), this.temi, this.tema, 'profilo-tema')}
+        ${this.gruppoChips(t('Lingua'), this.lingue, this.lingua, 'profilo-lingua')}
+
+        <div class="uscita">
+          <cmd-bottone pieno variante="pericolo"
+                       @click=${() => this.manda('profilo-esci')}>${t('Esci dall\'account')}</cmd-bottone>
+        </div>
+      </cmd-dialogo>`;
+  }
+}
+
+customElements.define('cmd-profilo', Profilo);
+
+declare global {
+  interface HTMLElementTagNameMap { 'cmd-profilo': Profilo }
 }

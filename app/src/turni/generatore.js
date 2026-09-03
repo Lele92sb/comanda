@@ -376,6 +376,13 @@ async function revoca(){
   toast(t('Pubblicazione revocata'));
 }
 
+/* La vista dell'eccedenza sta dichiarata QUI e non accanto alla sua funzione:
+   `renderEccedenza()` viene chiamata poche righe piu' sotto, mentre il modulo
+   si sta ancora caricando, e una `let` piu' in basso e' irraggiungibile fino
+   a quel punto. Costava un errore a ogni avvio, e con lui tutto il resto del
+   modulo: i tre pulsanti del periodo non venivano mai collegati. */
+let vistaEccedenza = null;
+
 /* ---- Navigazione del periodo ---- */
 function aggiornaPeriodo(){ renderTurni(); renderOreExtra(); renderPubblicazione(); renderEccedenza(); }
 // Anche al primo disegno, non solo cambiando periodo: senza, i pulsanti
@@ -397,7 +404,6 @@ document.getElementById('period-today').addEventListener('click', ()=>{ setPerio
 // e l'app scorre la lista dall'alto finché le ore ci stanno. Il numero accanto
 // al nome dice a che punto della fila sta quel giorno — senza, «Ven e Sab
 // accesi» non direbbe quale dei due viene prima quando ne avanza una sola.
-let vistaEccedenza = null;
 
 export function renderEccedenza(){
   const el = document.getElementById('eccedenza-panel');

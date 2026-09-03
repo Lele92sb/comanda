@@ -2,6 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "comanda-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 4173
+    },
+    {
       "name": "comanda",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
