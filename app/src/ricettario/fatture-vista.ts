@@ -66,12 +66,12 @@ export class EsitoImportazione extends LitElement {
     *,*::before,*::after{box-sizing:border-box;}
     :host(:not([mostra])){display:none;}
     .dettagli{
-      font-family:var(--font-mono);font-size:var(--text-xs);color:var(--brass);
+      font-family:var(--font-body);font-size:var(--text-xs);color:var(--brass);
       line-height:1.7;white-space:pre-line;margin:var(--space-2) 0 0;
       max-height:40vh;overflow:auto;
     }
     .aspetta{display:flex;align-items:center;gap:var(--space-2);
-      font-family:var(--font-mono);font-size:var(--text-xs);color:var(--brass);
+      font-family:var(--font-body);font-size:var(--text-xs);color:var(--brass);
       margin-top:var(--space-2);}
     .giro{width:12px;height:12px;border-radius:50%;flex:0 0 auto;
       border:2px solid currentColor;border-top-color:transparent;
@@ -116,7 +116,7 @@ export class StoricoFatture extends LitElement {
   static override styles = css`
     :host{display:block;font-family:var(--font-body);color:var(--paper);}
     *,*::before,*::after{box-sizing:border-box;}
-    .riga{font-family:var(--font-mono);font-size:11px;color:var(--brass);
+    .riga{font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       line-height:1.6;margin-top:3px;overflow-wrap:anywhere;}
   `;
 

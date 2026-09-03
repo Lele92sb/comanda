@@ -50,7 +50,7 @@ export class Interruttore extends Elemento {
     .titolo{display:block;font-size:var(--text-md);font-weight:600;line-height:1.4;}
     .spiega{
       display:block;
-      font-family:var(--font-mono);font-size:11px;color:var(--brass);
+      font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       line-height:1.6;margin-top:3px;
     }
   `];

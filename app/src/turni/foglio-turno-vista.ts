@@ -90,14 +90,14 @@ export class FoglioTurno extends LitElement {
 
   static override styles = css`
     :host{display:contents;font-family:var(--font-body);}
-    .quando{font-family:var(--font-mono);font-size:11px;color:var(--brass);
+    .quando{font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       margin:0 0 var(--space-3);}
-    .etichetta{display:block;font-family:var(--font-mono);font-size:var(--text-xs);
-      letter-spacing:0.5px;text-transform:uppercase;color:var(--brass);
+    .etichetta{display:block;font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);
+      color:var(--brass);
       margin:var(--space-3) 0 var(--space-1);}
     .chips{display:flex;flex-wrap:wrap;gap:6px;}
     .nota{
-      font-family:var(--font-mono);font-size:var(--text-xs);color:var(--brass);
+      font-family:var(--font-body);font-size:var(--text-xs);color:var(--brass);
       line-height:1.6;margin:var(--space-2) 0 0;
       background:var(--bg-elev2);padding:var(--space-2);border-radius:var(--radius-sm);
     }

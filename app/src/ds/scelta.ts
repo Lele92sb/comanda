@@ -98,7 +98,7 @@ export class Scelta extends Elemento {
     .scritta{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
     .scritta.vuota{color:var(--brass);}
     .punta{
-      flex:0 0 auto;color:var(--brass);font-size:9px;line-height:1;
+      flex:0 0 auto;color:var(--brass);font-size:11px;line-height:1;
       transition:transform var(--tempo-breve) var(--curva);
     }
     .comando[aria-expanded="true"] .punta{transform:rotate(180deg);}
@@ -135,7 +135,7 @@ export class Scelta extends Elemento {
        deve poter capire dove si trova senza perdere di vista cosa ha scelto. */
     [role="option"].evidenziata{background:var(--bg-elev2);}
     [role="option"][aria-selected="true"]{color:var(--copper-light);font-weight:600;}
-    .segno{flex:0 0 auto;width:12px;font-size:11px;color:var(--copper-light);}
+    .segno{flex:0 0 auto;width:12px;font-size:var(--text-sm);color:var(--copper-light);}
 
     /* Il campo di ricerca resta fermo in cima mentre l'elenco scorre: con
        trecento ingredienti, scorrendo si perderebbe di vista cosa si e'
@@ -153,7 +153,7 @@ export class Scelta extends Elemento {
     }
     .ricerca input:focus{outline:var(--fuoco);outline-offset:var(--fuoco-stacco);border-color:var(--copper);}
     .niente{
-      padding:10px;font-family:var(--font-mono);font-size:var(--text-xs);
+      padding:10px;font-family:var(--font-body);font-size:var(--text-xs);
       color:var(--brass);text-align:center;
     }
   `];

@@ -44,7 +44,7 @@ const stile = css`
   .portate .prezzo{font-family:var(--font-mono);color:rgba(29,27,24,0.6);white-space:nowrap;}
   .conti{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 0;}
   .conto{font-family:var(--font-mono);font-size:var(--text-sm);}
-  .conto b{display:block;font-size:16px;}
+  .conto b{display:block;font-size:var(--text-lg);}
   .conto.buono b{color:#3f6b3a;}
   .conto.storto b{color:var(--alert);}
 `;
@@ -136,12 +136,12 @@ export class SchedaMenu extends LitElement {
       border-radius:var(--radius-md);padding:var(--space-4);margin-bottom:var(--space-4);}
     h3{margin:0 0 var(--space-3);font-family:var(--font-display);
       font-size:var(--text-lg);font-weight:600;}
-    .etichetta{display:block;font-family:var(--font-mono);font-size:var(--text-xs);
-      letter-spacing:0.5px;text-transform:uppercase;color:var(--brass);
+    .etichetta{display:block;font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);
+      color:var(--brass);
       margin:var(--space-3) 0 var(--space-1);}
     .chips{display:flex;flex-wrap:wrap;gap:6px;}
     .azioni{display:flex;gap:var(--space-3);margin-top:var(--space-4);}
-    .quante{font-family:var(--font-mono);font-size:var(--text-xs);
+    .quante{font-family:var(--font-body);font-size:var(--text-xs);
       color:var(--brass);margin-top:var(--space-2);}
   `];
 

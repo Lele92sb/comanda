@@ -103,10 +103,10 @@ export class Richieste extends LitElement {
     .due{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);}
     @media(max-width:560px){ .due{grid-template-columns:1fr;} }
     .chips{display:flex;flex-wrap:wrap;gap:6px;}
-    .etichetta{display:block;font-family:var(--font-mono);font-size:var(--text-xs);
-      letter-spacing:0.5px;text-transform:uppercase;color:var(--brass);
+    .etichetta{display:block;font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);
+      color:var(--brass);
       margin:var(--space-4) 0 var(--space-1);}
-    .riga{font-family:var(--font-mono);font-size:11px;color:var(--brass);
+    .riga{font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       line-height:1.6;margin-top:3px;overflow-wrap:anywhere;}
     .nome{font-weight:600;}
     .comandi{display:flex;flex-direction:column;align-items:flex-end;gap:var(--space-1);}

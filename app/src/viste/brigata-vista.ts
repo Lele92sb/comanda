@@ -68,7 +68,7 @@ export class Brigata extends LitElement {
     .dati{min-width:0;}
     .nome{font-weight:600;font-size:var(--text-md);overflow-wrap:anywhere;}
     .riga{
-      font-family:var(--font-mono);font-size:11px;color:var(--brass);
+      font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       line-height:1.6;margin-top:2px;overflow-wrap:anywhere;
     }
     .riga.allarme{color:var(--alert);}

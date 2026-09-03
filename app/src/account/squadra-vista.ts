@@ -99,7 +99,7 @@ export class Squadra extends LitElement {
     }
     .testa{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-3);}
     .nome{font-weight:600;overflow-wrap:anywhere;}
-    .riga{font-family:var(--font-mono);font-size:11px;color:var(--brass);
+    .riga{font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       line-height:1.6;margin-top:3px;overflow-wrap:anywhere;}
     .comandi{flex-shrink:0;min-width:150px;}
     .sotto{display:grid;grid-template-columns:1fr auto;gap:var(--space-2);
@@ -125,7 +125,7 @@ export class Squadra extends LitElement {
     /* Il codice si detta al telefono: grande, spaziato, e con un bordo che dice
        «questo è da leggere ad alta voce». */
     .codice{
-      font-family:var(--font-mono);font-size:17px;letter-spacing:3px;text-align:center;
+      font-family:var(--font-mono);font-size:var(--text-xl);letter-spacing:3px;text-align:center;
       background:var(--bg-elev2);border:1px dashed var(--copper);
       border-radius:var(--radius-md);padding:12px;color:var(--copper-light);
       margin:var(--space-3) 0 var(--space-1);
@@ -136,7 +136,7 @@ export class Squadra extends LitElement {
     }
     .invito .testa{align-items:center;}
     .invito .codice{margin:0;padding:6px 10px;font-size:15px;letter-spacing:2px;}
-    .nota{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--brass);
+    .nota{font-family:var(--font-body);font-size:var(--text-xs);color:var(--brass);
       line-height:1.6;margin:var(--space-1) 0 0;}
   `;
 

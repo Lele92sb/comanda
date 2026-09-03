@@ -49,7 +49,7 @@ export class Eccedenza extends LitElement {
     :host{display:block;font-family:var(--font-body);color:var(--paper);}
     *,*::before,*::after{box-sizing:border-box;}
     .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:var(--space-2);}
-    .nota{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--brass);
+    .nota{font-family:var(--font-body);font-size:var(--text-xs);color:var(--brass);
       line-height:1.6;margin:var(--space-2) 0 0;}
     .rango{font-weight:700;color:inherit;}
   `;

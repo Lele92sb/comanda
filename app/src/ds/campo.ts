@@ -63,8 +63,8 @@ export class Campo extends Elemento {
     :host([orizzontale]) .controllo{flex:1;min-width:0;}
 
     label{
-      display:block;font-family:var(--font-mono);font-size:var(--text-xs);
-      letter-spacing:0.5px;text-transform:uppercase;color:var(--brass);
+      display:block;font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);
+      color:var(--brass);
       margin:0 0 var(--space-1);cursor:pointer;
     }
     .stella{color:var(--copper-light);margin-left:3px;}

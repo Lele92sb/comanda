@@ -65,7 +65,7 @@ export class Accesso extends LitElement {
     .altro{text-align:center;margin-top:var(--space-3);}
     .collegamento{
       background:none;border:none;color:var(--copper-light);
-      font-family:var(--font-mono);font-size:11px;text-decoration:underline;
+      font-family:var(--font-mono);font-size:var(--text-sm);text-decoration:underline;
       padding:6px 4px;cursor:pointer;
     }
     .collegamento:hover{color:var(--paper);}
@@ -153,7 +153,7 @@ export class Cucine extends LitElement {
     }
     input:focus{outline:var(--fuoco);outline-offset:var(--fuoco-stacco);border-color:var(--copper);}
     @media (pointer:coarse){ input{min-height:var(--tocco-min);} }
-    #c-codice{text-transform:uppercase;letter-spacing:2px;font-family:var(--font-mono);}
+    #c-codice{font-family:var(--font-body);font-weight:600;}
 
     .cucina{
       display:flex;justify-content:space-between;align-items:center;gap:10px;
@@ -173,7 +173,7 @@ export class Cucine extends LitElement {
     .altro{text-align:center;margin-top:var(--space-3);}
     .collegamento{
       background:none;border:none;color:var(--copper-light);
-      font-family:var(--font-mono);font-size:11px;text-decoration:underline;
+      font-family:var(--font-mono);font-size:var(--text-sm);text-decoration:underline;
       padding:6px 4px;cursor:pointer;
     }
     .collegamento:hover{color:var(--paper);}

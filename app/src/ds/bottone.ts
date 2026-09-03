@@ -81,7 +81,7 @@ export class Bottone extends Elemento {
       display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);
       min-height:40px;padding:10px 16px;
       border:1px solid transparent;border-radius:var(--radius-sm);
-      font-family:var(--font-body);font-size:13px;font-weight:600;letter-spacing:0.2px;
+      font-family:var(--font-body);font-size:var(--text-md);font-weight:600;letter-spacing:0.2px;
       line-height:1.2;white-space:nowrap;cursor:pointer;
       transition:background-color var(--tempo-istante) var(--curva),
                  border-color var(--tempo-istante) var(--curva),
@@ -104,10 +104,10 @@ export class Bottone extends Elemento {
     :host([variante=pericolo]) button{background:transparent;border-color:rgba(168,65,47,0.45);color:var(--alert);font-weight:500;}
     :host([variante=pericolo]) button:hover:not(:disabled){background:var(--alert-soft);border-color:var(--alert);}
 
-    :host([variante=piano]) button{background:transparent;color:var(--brass);font-family:var(--font-mono);font-weight:400;font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.5px;}
+    :host([variante=piano]) button{background:transparent;color:var(--brass);font-family:var(--font-body);font-weight:400;font-size:var(--text-xs);}
     :host([variante=piano]) button:hover:not(:disabled){color:var(--paper);}
 
-    :host([misura=piccolo]) button{min-height:32px;padding:6px 10px;font-size:11.5px;}
+    :host([misura=piccolo]) button{min-height:32px;padding:6px 10px;font-size:var(--text-sm);}
     @media (pointer:coarse){ :host([misura=piccolo]) button{min-height:36px;} }
 
     /* La rotellina occupa lo spazio di un'icona a sinistra dell'etichetta: il

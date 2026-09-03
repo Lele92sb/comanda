@@ -87,8 +87,8 @@ export class Capienza extends LitElement {
       display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);
       flex-wrap:wrap;
     }
-    .cifre{font-family:var(--font-mono);font-size:var(--text-xs);
-      text-transform:uppercase;letter-spacing:0.5px;color:var(--brass);
+    .cifre{font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);
+      color:var(--brass);
       overflow-wrap:anywhere;}
     .cifra{font-family:var(--font-display);font-size:26px;font-weight:700;
       color:var(--paper);margin-right:var(--space-1);letter-spacing:0;}
@@ -97,15 +97,15 @@ export class Capienza extends LitElement {
     @media(max-width:560px){ .cifra{font-size:22px;} }
 
     .dettaglio{margin-top:var(--space-3);}
-    .nota{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--brass);
+    .nota{font-family:var(--font-body);font-size:var(--text-xs);color:var(--brass);
       line-height:1.6;margin:var(--space-2) 0 0;}
     .nota.allarme{color:var(--alert);}
     .nota b{color:var(--paper-dim);}
 
     .somma{display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-4);
       align-items:baseline;margin:var(--space-3) 0;
-      font-family:var(--font-mono);font-size:var(--text-xs);
-      text-transform:uppercase;letter-spacing:0.5px;color:var(--brass);}
+      font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);
+      color:var(--brass);}
 
     /* Una griglia sola per l'intestazione e per le righe: le colonne restano
        incolonnate perche' sono la STESSA griglia, non due tarature che si
@@ -114,22 +114,21 @@ export class Capienza extends LitElement {
       grid-template-columns:minmax(84px,1.1fr) 46px 46px 46px minmax(56px,1fr) minmax(64px,auto);
       padding:var(--space-2) 0;border-top:1px solid var(--line);}
     .riga.intestazione{border-top:none;padding-bottom:var(--space-1);
-      font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;
-      letter-spacing:0.5px;color:var(--brass);}
+      font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);color:var(--brass);}
     .nome{display:flex;align-items:center;gap:6px;min-width:0;
       overflow-wrap:anywhere;font-size:var(--text-sm);}
-    .riga.intestazione .nome{font-size:9.5px;}
+    .riga.intestazione .nome{font-size:var(--text-xs);}
     .n{font-family:var(--font-mono);font-size:var(--text-md);text-align:right;}
-    .riga.intestazione .n{font-size:9.5px;}
+    .riga.intestazione .n{font-size:var(--text-xs);}
     .n.ok{color:var(--brass);}
     .n.manca{color:var(--alert);font-weight:700;}
-    .n sup{color:var(--brass);font-size:9px;}
+    .n sup{color:var(--brass);font-size:11px;}
     .pallino{display:inline-block;flex:0 0 auto;width:7px;height:7px;border-radius:50%;}
     .barra{height:6px;border-radius:3px;background:var(--bg);overflow:hidden;display:block;}
     .riga.scoperta .barra{background:var(--alert);}
     .riga.intestazione .barra{background:none;}
     .barra i{display:block;height:100%;background:var(--sage);}
-    .chi{font-family:var(--font-mono);font-size:9.5px;color:var(--brass);
+    .chi{font-family:var(--font-body);font-size:var(--text-xs);color:var(--brass);
       text-align:right;overflow-wrap:anywhere;}
 
     /* Sul telefono le sei colonne non ci stanno: nome e numeri restano sulla
@@ -141,7 +140,7 @@ export class Capienza extends LitElement {
       .barra{grid-column:1/3;}
       .chi{grid-column:3/-1;}
       .riga.intestazione .barra,.riga.intestazione .chi{display:none;}
-      .riga.intestazione .n{font-size:8.5px;}
+      .riga.intestazione .n{font-size:var(--text-sm);}
     }
   `;
 

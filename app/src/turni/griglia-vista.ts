@@ -347,7 +347,7 @@ export class GrigliaTurni extends LitElement {
 
     /* --- La legenda. Il pallino e' l'unica cosa che resta quando il nome
            della partita non entra nella cella: qui si legge cosa vuol dire. */
-    .legenda{font-family:var(--font-mono);font-size:var(--text-xs);
+    .legenda{font-family:var(--font-body);font-size:var(--text-xs);
       color:var(--brass);line-height:1.6;margin-top:var(--space-2);}
     .voci{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);margin-top:var(--space-2);}
     .voce{display:inline-flex;align-items:flex-start;gap:5px;}
@@ -665,11 +665,11 @@ export class OreExtra extends LitElement {
     *,*::before,*::after{box-sizing:border-box;}
     table{width:100%;border-collapse:collapse;font-size:12.5px;}
     th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;}
-    th{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;color:var(--brass);}
+    th{font-family:var(--font-body);font-weight:600;font-size:9.5px;color:var(--brass);}
     td.num{font-family:var(--font-mono);text-align:right;}
     td.num.extra{color:var(--copper-light);font-weight:700;}
     td.num.under{color:var(--brass);}
-    .vuoto{font-family:var(--font-mono);font-size:var(--text-sm);color:var(--brass);
+    .vuoto{font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       border:1px dashed var(--line-strong);border-radius:var(--radius-md);
       padding:var(--space-3);text-align:center;}
   `;

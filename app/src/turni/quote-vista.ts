@@ -73,8 +73,8 @@ export class Quote extends LitElement {
     *,*::before,*::after{box-sizing:border-box;}
 
     .etichetta{
-      display:block;font-family:var(--font-mono);font-size:var(--text-xs);
-      letter-spacing:0.5px;text-transform:uppercase;color:var(--brass);
+      display:block;font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);
+      color:var(--brass);
       margin:var(--space-3) 0 var(--space-1);
     }
     .etichetta:first-child{margin-top:0;}
@@ -93,10 +93,10 @@ export class Quote extends LitElement {
     }
     input[type=number]:focus{outline:var(--fuoco);outline-offset:var(--fuoco-stacco);border-color:var(--copper);}
     @media (pointer:coarse){ input[type=number]{min-height:var(--tocco-min);} }
-    .per{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--brass);flex:1;}
+    .per{font-family:var(--font-body);font-size:var(--text-xs);color:var(--brass);flex:1;}
 
     .nota{
-      font-family:var(--font-mono);font-size:11px;color:var(--brass);
+      font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       line-height:1.6;margin:var(--space-2) 0 0;
     }
     /* Il totale accanto al nome: sette e' la settimana, e vedere 6/7 o 8/7 e'

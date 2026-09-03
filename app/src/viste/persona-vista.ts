@@ -104,13 +104,13 @@ export class SchedaPersona extends LitElement {
     @media(max-width:560px){ .due{grid-template-columns:1fr;} }
 
     .nota{
-      font-family:var(--font-mono);font-size:11px;color:var(--brass);
+      font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       line-height:1.6;margin:var(--space-2) 0 var(--space-3);
     }
     .nota b{color:var(--paper-dim);}
     .etichetta{
-      display:block;font-family:var(--font-mono);font-size:var(--text-xs);
-      letter-spacing:0.5px;text-transform:uppercase;color:var(--brass);
+      display:block;font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);
+      color:var(--brass);
       margin:var(--space-3) 0 var(--space-1);
     }
 
@@ -130,7 +130,7 @@ export class SchedaPersona extends LitElement {
     .partita.principale .rango{background:var(--copper);color:var(--ink);}
     .nome-partita{flex:1;min-width:0;overflow-wrap:anywhere;}
     .nome-partita .titolo{font-weight:600;font-size:var(--text-md);}
-    .nome-partita .sotto{font-family:var(--font-mono);font-size:11px;color:var(--copper-light);margin-top:2px;}
+    .nome-partita .sotto{font-family:var(--font-body);font-size:var(--text-sm);color:var(--copper-light);margin-top:2px;}
     .comandi{display:flex;gap:var(--space-1);flex-shrink:0;}
     .comandi cmd-bottone::part(bottone){width:36px;padding-left:0;padding-right:0;}
     @media(max-width:560px){ .comandi cmd-bottone::part(bottone){width:40px;} }
@@ -138,7 +138,7 @@ export class SchedaPersona extends LitElement {
     .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:var(--space-1);}
     .azioni{display:flex;gap:var(--space-3);margin-top:var(--space-4);}
     .vuoto-partite{
-      font-family:var(--font-mono);font-size:var(--text-sm);color:var(--brass);
+      font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       border:1px dashed var(--line-strong);border-radius:var(--radius-md);
       padding:var(--space-3);text-align:center;
     }

@@ -58,11 +58,10 @@ export class Comanda extends Elemento {
       border-bottom:1px dashed rgba(29,27,24,0.25);
       padding-bottom:10px;margin-bottom:10px;
     }
-    .titolo{font-family:var(--font-display);font-weight:600;font-size:19px;line-height:1.2;
+    .titolo{font-family:var(--font-display);font-weight:600;font-size:var(--text-xl);line-height:1.2;
       overflow-wrap:anywhere;}
-    .categoria{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;
-      letter-spacing:1px;color:var(--copper);margin-top:3px;}
-    .numero{font-family:var(--font-mono);font-size:11px;color:rgba(29,27,24,0.5);
+    .categoria{font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);color:var(--copper);margin-top:3px;}
+    .numero{font-family:var(--font-mono);font-size:var(--text-sm);color:rgba(29,27,24,0.5);
       text-align:right;flex-shrink:0;}
 
     /* I COMANDI SULLA CARTA SI RIBALTANO. E' l'unico posto dell'app dove il

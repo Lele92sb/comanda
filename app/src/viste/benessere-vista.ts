@@ -70,7 +70,7 @@ export class Benessere extends LitElement {
     .promemoria li{margin-bottom:var(--space-3);}
     .promemoria li:last-child{margin-bottom:0;}
     ul{margin:0;padding-left:1.1em;}
-    .nota{font-family:var(--font-mono);font-size:var(--text-xs);
+    .nota{font-family:var(--font-body);font-size:var(--text-xs);
       color:var(--brass);line-height:1.6;margin:var(--space-2) 0 0;}
   `;
 

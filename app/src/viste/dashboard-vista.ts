@@ -61,8 +61,8 @@ export class Dashboard extends LitElement {
     }
     .numero .n{font-family:var(--font-display);font-size:28px;font-weight:700;
       color:var(--copper-light);line-height:1.1;}
-    .numero .l{font-family:var(--font-mono);font-size:var(--text-xs);
-      text-transform:uppercase;letter-spacing:0.5px;color:var(--brass);margin-top:2px;}
+    .numero .l{font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);
+      color:var(--brass);margin-top:2px;}
 
     .riquadro{
       background:var(--bg-elev);border:1px solid var(--line);
@@ -76,7 +76,7 @@ export class Dashboard extends LitElement {
       font-size:var(--text-md);
     }
     .riga:last-child{border-bottom:none;}
-    .riga .turno{font-family:var(--font-mono);color:var(--copper-light);text-align:right;}
+    .riga .turno{font-family:var(--font-body);color:var(--copper-light);text-align:right;}
     /* Su schermo largo la riga si ferma: a 1200px il nome e il turno finiscono
        ai due capi opposti dello schermo e per leggerli insieme si muove la
        testa. */

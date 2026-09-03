@@ -63,7 +63,7 @@ export class Riquadro extends Elemento {
       color:var(--paper);overflow-wrap:anywhere;
     }
     .sotto{
-      margin:var(--space-1) 0 0;font-family:var(--font-mono);font-size:var(--text-xs);
+      margin:var(--space-1) 0 0;font-family:var(--font-body);font-size:var(--text-xs);
       letter-spacing:0.5px;color:var(--brass);line-height:1.6;
     }
     .azioni{display:flex;align-items:center;gap:var(--space-2);flex-shrink:0;}
@@ -76,7 +76,7 @@ export class Riquadro extends Elemento {
       min-height:var(--tocco-min);
     }
     .freccia{
-      flex:0 0 auto;color:var(--brass);font-size:11px;line-height:1;
+      flex:0 0 auto;color:var(--brass);font-size:var(--text-sm);line-height:1;
       transition:transform var(--tempo-breve) var(--curva);
     }
     :host([aperto]) .freccia{transform:rotate(90deg);}

@@ -107,7 +107,7 @@ export class RigheRicetta extends LitElement {
     }
     .costo.manca{color:var(--alert);}
     .vuoto{
-      font-family:var(--font-mono);font-size:var(--text-sm);color:var(--brass);
+      font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       border:1px dashed var(--line-strong);border-radius:var(--radius-md);
       padding:var(--space-3);text-align:center;margin-bottom:var(--space-2);
     }

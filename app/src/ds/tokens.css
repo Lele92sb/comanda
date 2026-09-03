@@ -37,10 +37,26 @@
   --line:rgba(243,238,226,0.12);
   --line-strong:rgba(243,238,226,0.22);
 
-  /* --- Caratteri --- */
-  --font-display:'Fraunces',serif;
-  --font-mono:'Space Mono',monospace;
-  --font-body:'Inter',sans-serif;
+  /* --- Caratteri -----------------------------------------------------------
+     TRE, e ognuno ha un mestiere:
+
+       display   Fraunces. I titoli e i numeri grandi. E' la voce del prodotto.
+       body      Inter. Tutto quello che si legge — testo, etichette, bottoni.
+                 E' il carattere che usano mezze le app del mondo, e c'e' una
+                 ragione: e' disegnato per gli schermi, non per la carta.
+       mono      Space Mono. SOLO dove le cifre devono restare incolonnate:
+                 ore, prezzi, sigle dei turni, codici d'invito.
+
+     Il monospazio NON e' piu' il carattere delle etichette. Lo era, in
+     maiuscolo, in 31 punti dell'app: e da solo faceva sembrare Comanda un
+     cruscotto tecnico invece che uno strumento di cucina. Le maiuscole
+     spaziate dicono «pannello di controllo»; il minuscolo dice «leggi».
+
+     La riserva di sistema non e' generica: sono i caratteri che il telefono ha
+     gia' installati, cosi' se la rete e' lenta la prima schermata non balla. */
+  --font-display:'Fraunces',Georgia,serif;
+  --font-mono:'Space Mono','SF Mono',Menlo,Consolas,monospace;
+  --font-body:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif;
 
   /* --- Spaziature ---------------------------------------------------------
      Una scala sola per tutta l'app. Prima esistevano margini da 4, 6, 8, 10,
@@ -59,13 +75,29 @@
   --shadow-card:0 8px 24px rgba(0,0,0,0.35);
   --shadow-float:0 6px 20px rgba(0,0,0,0.4);
 
-  /* --- Dimensioni del testo ---
-     xs = etichette e note in monospazio, sm = testo di servizio,
-     md = testo corrente, lg = titoli di riquadro. */
-  --text-xs:10.5px;
-  --text-sm:12px;
-  --text-md:13.5px;
-  --text-lg:16px;
+  /* --- Dimensioni del testo ------------------------------------------------
+     ALZATE TUTTE, dopo la prova coi colleghi. Le vecchie misure — 10,5px per
+     le etichette e 13,5px per il testo corrente — venivano da un'abitudine da
+     cruscotto: tanti dati in poco spazio. Ma questa app si legge in cucina,
+     spesso di corsa e con le mani sporche, e 10,5px su un telefono a mezzo
+     metro sono al limite di quello che si legge senza avvicinarsi.
+
+     La scala di riferimento e' quella che usano le app che tutti hanno gia'
+     sul telefono: 15px per il testo corrente, non 13,5.
+
+       xs  12  etichette dei campi, note
+       sm  13  testo di servizio, righe secondarie
+       md  15  testo corrente — quello che si legge davvero
+       lg  18  titoli di riquadro
+       xl  22  titoli di schermata
+
+     Il prezzo e' che ci sta meno roba in una schermata. Va bene: quello che
+     non si legge non e' informazione, e' inchiostro. */
+  --text-xs:12px;
+  --text-sm:13px;
+  --text-md:15px;
+  --text-lg:18px;
+  --text-xl:22px;
 
   /* --- Movimento ----------------------------------------------------------
      NUOVI, e sono la ragione per cui l'app sembrava ferma: in 9.600 righe

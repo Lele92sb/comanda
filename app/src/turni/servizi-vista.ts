@@ -61,11 +61,11 @@ const stile = css`
     .aggiungi cmd-bottone::part(bottone){width:100%;}
   }
 
-  .nota{font-family:var(--font-mono);font-size:11px;color:var(--brass);
+  .nota{font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
     line-height:1.6;margin:var(--space-2) 0 0;}
   .nota.allarme{color:var(--alert);}
-  .etichetta{display:block;font-family:var(--font-mono);font-size:var(--text-xs);
-    letter-spacing:0.5px;text-transform:uppercase;color:var(--brass);
+  .etichetta{display:block;font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);
+    color:var(--brass);
     margin:var(--space-3) 0 var(--space-1);}
   .chips{display:flex;flex-wrap:wrap;gap:6px;}
 
@@ -203,7 +203,7 @@ export class TipiTurno extends LitElement {
     .griglia{display:grid;grid-template-columns:90px 1fr 80px 44px;gap:var(--space-2);align-items:end;}
     @media(max-width:560px){ .griglia{grid-template-columns:1fr 1fr;} }
     .colore{display:flex;align-items:center;height:40px;}
-    .sigla input{font-family:var(--font-mono);text-transform:uppercase;font-weight:700;}
+    .sigla input{font-family:var(--font-body);font-weight:700;}
   `];
 
   private manda<T>(nome: string, dettaglio: T): void {

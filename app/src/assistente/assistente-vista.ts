@@ -73,7 +73,7 @@ export class Conoscenza extends LitElement {
     textarea:focus,input:focus{outline:var(--fuoco);outline-offset:var(--fuoco-stacco);border-color:var(--copper);}
     .due{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);}
     @media(max-width:560px){ .due{grid-template-columns:1fr;} }
-    .riga{font-family:var(--font-mono);font-size:11px;color:var(--brass);}
+    .riga{font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);}
   `;
 
   private manda<T>(nome: string, dettaglio: T): void {
@@ -170,9 +170,8 @@ export class Chat extends LitElement {
     .msg.suo{align-self:flex-start;background:var(--bg-elev2);border:1px solid var(--line);}
     .msg.suo::before{
       content:"Sous-chef AI";display:block;
-      font-family:var(--font-mono);font-size:9.5px;color:var(--brass);
-      margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;
-    }
+      font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);color:var(--brass);
+      margin-bottom:4px;}
     .msg.scrive{color:var(--brass);font-family:var(--font-mono);font-size:var(--text-xs);}
 
     /* I tre puntini: un movimento piccolo che dice «sta succedendo qualcosa»

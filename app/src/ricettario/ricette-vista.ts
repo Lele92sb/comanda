@@ -70,7 +70,7 @@ const stile = css`
 
   .metriche{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0;}
   .metrica{font-family:var(--font-mono);font-size:var(--text-sm);}
-  .metrica b{display:block;font-size:16px;font-family:var(--font-mono);}
+  .metrica b{display:block;font-size:var(--text-lg);font-family:var(--font-mono);}
   .metrica.buono b{color:#3f6b3a;}
   .metrica.storto b{color:var(--alert);}
 

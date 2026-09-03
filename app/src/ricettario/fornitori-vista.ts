@@ -44,7 +44,7 @@ export class Fornitori extends LitElement {
   static override styles = css`
     :host{display:block;font-family:var(--font-body);color:var(--paper);}
     *,*::before,*::after{box-sizing:border-box;}
-    .riga{font-family:var(--font-mono);font-size:11px;color:var(--brass);
+    .riga{font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       line-height:1.6;margin-top:3px;overflow-wrap:anywhere;}
   `;
 

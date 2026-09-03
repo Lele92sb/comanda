@@ -54,8 +54,8 @@ const stile = css`
   .due{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);}
   .tre{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-3);}
   @media(max-width:560px){ .due,.tre{grid-template-columns:1fr;} }
-  .etichetta{display:block;font-family:var(--font-mono);font-size:var(--text-xs);
-    letter-spacing:0.5px;text-transform:uppercase;color:var(--brass);
+  .etichetta{display:block;font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);
+    color:var(--brass);
     margin:var(--space-4) 0 var(--space-1);}
   .azioni{display:flex;gap:var(--space-3);margin-top:var(--space-4);}
   .chips{display:flex;flex-wrap:wrap;gap:6px;}
@@ -77,13 +77,13 @@ const stile = css`
     background:var(--bg-elev2);border-radius:var(--radius-md);
     padding:var(--space-3);margin-top:var(--space-3);
   }
-  .voce{font-family:var(--font-mono);font-size:var(--text-xs);
-    text-transform:uppercase;letter-spacing:0.5px;color:var(--brass);}
+  .voce{font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);
+    color:var(--brass);}
   .voce b{display:block;font-family:var(--font-display);font-size:22px;
     font-weight:700;color:var(--copper-light);letter-spacing:0;}
   .voce.buono b{color:var(--sage);}
   .voce.storto b{color:var(--alert);}
-  .spiega{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--brass);
+  .spiega{font-family:var(--font-body);font-size:var(--text-xs);color:var(--brass);
     line-height:1.6;flex-basis:100%;margin:0;}
   .miniatura{max-width:140px;border-radius:var(--radius-md);margin-top:var(--space-2);display:block;}
 `;

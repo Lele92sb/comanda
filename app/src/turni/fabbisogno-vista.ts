@@ -72,7 +72,7 @@ export class Fabbisogno extends LitElement {
     input[type=number]:focus{outline:var(--fuoco);outline-offset:var(--fuoco-stacco);border-color:var(--copper);}
     @media (pointer:coarse){ input[type=number]{min-height:var(--tocco-min);} }
 
-    .nota{font-family:var(--font-mono);font-size:11px;color:var(--brass);
+    .nota{font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       line-height:1.6;margin:0 0 var(--space-2);}
   `;
 

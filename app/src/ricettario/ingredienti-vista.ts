@@ -70,7 +70,7 @@ export class Ingredienti extends LitElement {
   static override styles = css`
     :host{display:block;font-family:var(--font-body);color:var(--paper);}
     *,*::before,*::after{box-sizing:border-box;}
-    .riga{font-family:var(--font-mono);font-size:11px;color:var(--brass);
+    .riga{font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);
       line-height:1.6;margin-top:3px;overflow-wrap:anywhere;}
     .riga.costo{color:var(--copper-light);}
   `;
@@ -164,7 +164,7 @@ export class SchedaIngrediente extends LitElement {
     }
     .conto .valore{font-family:var(--font-display);font-size:24px;font-weight:700;
       color:var(--copper-light);}
-    .conto .spiega{font-family:var(--font-mono);font-size:var(--text-xs);
+    .conto .spiega{font-family:var(--font-body);font-size:var(--text-xs);
       color:var(--brass);line-height:1.6;}
   `;
 

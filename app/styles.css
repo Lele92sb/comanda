@@ -109,7 +109,7 @@ header.top{
 }
 header.top .brand{font-family:var(--font-display);font-weight:700;font-size:26px;letter-spacing:0.3px;display:flex;align-items:baseline;gap:10px;}
 header.top .brand .mark{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--copper);transform:translateY(-2px);}
-header.top .sub{font-family:var(--font-mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--brass);margin-top:4px;}
+header.top .sub{font-family:var(--font-body);font-weight:600;font-size:var(--text-sm);color:var(--brass);margin-top:4px;}
 
 /* LA NAVIGAZIONE STA IN TRE POSTI, uno per ogni modo di usare l'app.
    Sotto 768px: in basso, dove arriva il pollice, come in ogni app che la
@@ -131,7 +131,7 @@ header.top .sub{font-family:var(--font-mono);font-size:11px;letter-spacing:1.5px
    fosse altro da vedere. */
 nav.tabs{display:flex;flex-wrap:wrap;gap:4px;padding:14px 20px 0;border-bottom:1px solid var(--line);
   position:sticky;top:0;z-index:30;background:var(--bg);}
-nav.tabs button{background:none;border:none;color:var(--brass);font-family:var(--font-mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:9px 12px 12px;white-space:nowrap;border-bottom:2px solid transparent;transition:color .15s, border-color .15s;}
+nav.tabs button{background:none;border:none;color:var(--brass);font-family:var(--font-body);font-weight:600;font-size:var(--text-sm);padding:9px 12px 12px;white-space:nowrap;border-bottom:2px solid transparent;transition:color .15s, border-color .15s;}
 nav.tabs button.active{color:var(--paper);border-bottom-color:var(--copper);}
 nav.tabs button:hover{color:var(--paper);}
 
@@ -146,7 +146,7 @@ nav.tabs button:hover{color:var(--paper);}
    si vedono tutte, e due righe su una schermata di impostazioni costano meno di
    una funzione che sembra non esserci. */
 nav.subtabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;}
-nav.subtabs button{background:var(--bg-elev);border:1px solid var(--line);color:var(--brass);font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.5px;text-transform:uppercase;padding:7px 12px;border-radius:20px;white-space:nowrap;}
+nav.subtabs button{background:var(--bg-elev);border:1px solid var(--line);color:var(--brass);font-family:var(--font-body);font-weight:600;font-size:10.5px;padding:7px 12px;border-radius:20px;white-space:nowrap;}
 nav.subtabs button.active{background:var(--copper);border-color:var(--copper);color:#1d1b18;font-weight:700;}
 
 main{padding:22px 20px;}
@@ -157,7 +157,7 @@ main{padding:22px 20px;}
 .subview.active{display:block;animation:fade .2s ease;}
 
 h2.section-title{font-family:var(--font-display);font-size:22px;font-weight:600;margin:0 0 4px;}
-p.section-sub{font-family:var(--font-mono);font-size:11px;color:var(--brass);letter-spacing:0.5px;margin:0 0 20px;}
+p.section-sub{font-family:var(--font-body);font-size:var(--text-sm);color:var(--brass);letter-spacing:0.5px;margin:0 0 20px;}
 
 /* Qui stava LA COMANDA DI CARTA — la carta chiara, lo strappo in cima, i
    conti, l'elenco dei componenti e i comandi scuri su chiaro: 24 righe, andate
@@ -166,32 +166,32 @@ p.section-sub{font-family:var(--font-mono);font-size:11px;color:var(--brass);let
    non compare piu' nessuna di quelle classi. */
 
 .panel{background:var(--bg-elev);border:1px solid var(--line);border-radius:6px;padding:16px;margin-bottom:14px;}
-.panel h3{margin:0 0 12px;font-family:var(--font-display);font-size:16px;font-weight:600;}
+.panel h3{margin:0 0 12px;font-family:var(--font-display);font-size:var(--text-lg);font-weight:600;}
 
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
 @media(max-width:560px){.grid2,.grid3{grid-template-columns:1fr;}}
 
-label{display:block;font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.5px;text-transform:uppercase;color:var(--brass);margin:10px 0 5px;}
+label{display:block;font-family:var(--font-body);font-weight:600;font-size:10.5px;color:var(--brass);margin:10px 0 5px;}
 input[type=text],input[type=number],input[type=date],input[type=tel],input[type=email],input[type=password],textarea,select{
-  width:100%;background:var(--bg-elev2);border:1px solid var(--line-strong);color:var(--paper);padding:9px 10px;border-radius:4px;font-size:13.5px;
+  width:100%;background:var(--bg-elev2);border:1px solid var(--line-strong);color:var(--paper);padding:9px 10px;border-radius:4px;font-size:var(--text-md);
 }
 textarea{resize:vertical;min-height:70px;}
 input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-offset:1px;}
 
-.btn{background:var(--copper);color:#1d1b18;border:none;font-weight:600;padding:10px 16px;border-radius:5px;font-size:13px;letter-spacing:0.2px;}
+.btn{background:var(--copper);color:#1d1b18;border:none;font-weight:600;padding:10px 16px;border-radius:5px;font-size:var(--text-md);letter-spacing:0.2px;}
 .btn:hover{background:var(--copper-light);}
 .btn.ghost{background:transparent;border:1px solid var(--line-strong);color:var(--paper);font-weight:500;}
 .btn.ghost:hover{border-color:var(--copper);}
-.btn.small{padding:6px 10px;font-size:11.5px;}
+.btn.small{padding:6px 10px;font-size:var(--text-sm);}
 .btn.full{width:100%;}
 
 .chip-toggle{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
-.chip-toggle button{border:1px solid var(--line-strong);background:transparent;color:var(--paper);font-family:var(--font-mono);font-size:10.5px;padding:5px 9px;border-radius:20px;}
+.chip-toggle button{border:1px solid var(--line-strong);background:transparent;color:var(--paper);font-family:var(--font-body);font-size:10.5px;padding:5px 9px;border-radius:20px;}
 .chip-toggle button.on{background:var(--copper);border-color:var(--copper);color:#1d1b18;font-weight:700;}
 
-.alert-box{background:var(--alert-soft);border:1px solid rgba(168,65,47,0.4);border-radius:6px;padding:12px 14px;margin-bottom:10px;font-size:13px;}
-.ok-box{background:var(--sage-soft);border:1px solid rgba(107,128,100,0.4);border-radius:6px;padding:12px 14px;margin-bottom:10px;font-size:13px;}
+.alert-box{background:var(--alert-soft);border:1px solid rgba(168,65,47,0.4);border-radius:6px;padding:12px 14px;margin-bottom:10px;font-size:var(--text-md);}
+.ok-box{background:var(--sage-soft);border:1px solid rgba(107,128,100,0.4);border-radius:6px;padding:12px 14px;margin-bottom:10px;font-size:var(--text-md);}
 
 /* ============================================================================
    LA GRIGLIA DEI TURNI E' UN COMPONENTE: <cmd-griglia-turni>.
@@ -213,22 +213,22 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 
 .period-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
 .period-modes{display:flex;gap:4px;}
-.period-modes button{background:var(--bg-elev);border:1px solid var(--line);color:var(--brass);font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.5px;text-transform:uppercase;padding:6px 12px;border-radius:20px;}
+.period-modes button{background:var(--bg-elev);border:1px solid var(--line);color:var(--brass);font-family:var(--font-body);font-weight:600;font-size:10.5px;padding:6px 12px;border-radius:20px;}
 .period-modes button.active{background:var(--copper);border-color:var(--copper);color:#1d1b18;font-weight:700;}
 .period-nav{display:flex;align-items:center;gap:6px;}
-.period-nav button{background:transparent;border:1px solid var(--line-strong);color:var(--paper);font-family:var(--font-mono);font-size:12px;padding:5px 10px;border-radius:5px;}
+.period-nav button{background:transparent;border:1px solid var(--line-strong);color:var(--paper);font-family:var(--font-body);font-size:var(--text-sm);padding:5px 10px;border-radius:5px;}
 .period-nav button:hover{border-color:var(--copper);}
-#period-label{font-family:var(--font-mono);font-size:12px;color:var(--copper-light);min-width:150px;text-align:center;text-transform:capitalize;}
+#period-label{font-family:var(--font-mono);font-size:var(--text-sm);color:var(--copper-light);min-width:150px;text-align:center;text-transform:capitalize;}
 
 /* Qui stavano la CONVERSAZIONE e le voci della BASE DI CONOSCENZA: 13 righe,
    andate dentro <cmd-chat> e <cmd-conoscenza>. */
 
-.empty{font-family:var(--font-mono);font-size:12px;color:var(--brass);border:1px dashed var(--line-strong);border-radius:6px;padding:18px;text-align:center;}
+.empty{font-family:var(--font-mono);font-size:var(--text-sm);color:var(--brass);border:1px dashed var(--line-strong);border-radius:6px;padding:18px;text-align:center;}
 
-.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--paper);color:var(--ink);padding:9px 16px;border-radius:20px;font-family:var(--font-mono);font-size:12px;box-shadow:0 6px 20px rgba(0,0,0,0.4);opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;z-index:100;}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--paper);color:var(--ink);padding:9px 16px;border-radius:20px;font-family:var(--font-mono);font-size:var(--text-sm);box-shadow:0 6px 20px rgba(0,0,0,0.4);opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;z-index:100;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
 
-.small-note{font-family:var(--font-mono);font-size:10.5px;color:var(--brass);margin-top:6px;line-height:1.6;}
+.small-note{font-family:var(--font-body);font-size:10.5px;color:var(--brass);margin-top:6px;line-height:1.6;}
 /* Qui stavano le regole della CAPIENZA, delle PARTITE IN ORDINE DI PRIORITA'
    e delle FRECCE CHE RIORDINANO — 47 righe, tolte perche' quelle schermate
    sono diventate componenti e si portano dietro il proprio stile dentro lo
@@ -245,9 +245,9 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .overlay .sheet{max-width:420px;margin:0 auto;}
 .overlay .logo{font-family:var(--font-display);font-weight:700;font-size:30px;display:flex;align-items:baseline;gap:10px;margin-bottom:4px;}
 .overlay .logo .mark{width:10px;height:10px;border-radius:50%;background:var(--copper);display:inline-block;transform:translateY(-3px);}
-.overlay .lead{font-family:var(--font-mono);font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--brass);margin:0 0 24px;}
-.gate-error{background:var(--alert-soft);border:1px solid rgba(168,65,47,0.4);border-radius:6px;padding:10px 12px;font-size:12.5px;margin-bottom:12px;}
-.gate-switch{background:none;border:none;color:var(--copper-light);font-family:var(--font-mono);font-size:11px;text-decoration:underline;padding:6px 0;}
+.overlay .lead{font-family:var(--font-body);font-weight:600;font-size:var(--text-sm);color:var(--brass);margin:0 0 24px;}
+.gate-error{background:var(--alert-soft);border:1px solid rgba(168,65,47,0.4);border-radius:6px;padding:10px 12px;font-size:var(--text-sm);margin-bottom:12px;}
+.gate-switch{background:none;border:none;color:var(--copper-light);font-family:var(--font-mono);font-size:var(--text-sm);text-decoration:underline;padding:6px 0;}
 
 #account-bar{display:none;justify-content:space-between;align-items:center;gap:var(--space-3);margin-top:var(--space-2);flex-wrap:wrap;}
 #account-bar .who{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--brass);display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;min-width:0;}
@@ -260,8 +260,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 
 #account-bar button{
   background:transparent;border:1px solid var(--line-strong);color:var(--brass);
-  font-family:var(--font-mono);font-size:10px;letter-spacing:0.5px;text-transform:uppercase;
-  padding:0 10px;border-radius:var(--radius-pill);
+  font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);padding:0 10px;border-radius:var(--radius-pill);
   /* Senza questo l'etichetta va a capo dentro il pulsante e la barra si
      sfascia: "Cambia cucina" diventava due righe dentro un bottone tondo. */
   white-space:nowrap;line-height:1;
@@ -281,7 +280,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
   display:inline-flex;align-items:center;gap:5px;padding:0 8px;max-width:220px;
 }
 #account-bar .ab-nome #ab-email{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-#account-bar .ab-nome .matita{opacity:0.5;font-size:11px;}
+#account-bar .ab-nome .matita{opacity:0.5;font-size:var(--text-sm);}
 #account-bar .ab-nome:hover{border-color:var(--line-strong);}
 #account-bar .ab-nome:hover .matita{opacity:1;}
 
@@ -305,7 +304,7 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
   header.top .sub{display:none;}
   #account-bar{gap:var(--space-2);margin-top:var(--space-2);}
   #account-bar button, #account-bar select, #account-bar .lingua-scelta{height:24px;}
-  #account-bar button{padding:0 8px;font-size:9.5px;}
+  #account-bar button{padding:0 8px;font-size:var(--text-xs);}
   #account-bar select{max-width:150px;}
   #account-bar .ab-nome{max-width:150px;}
 }
@@ -327,10 +326,8 @@ body.readonly main label.btn{opacity:0.45;}
    in cui si decide a quale ambiente affidare email e dati. */
 .badge-ambiente{
   display:inline-block;
-  font-family:var(--font-mono);
-  font-size:10px;
-  letter-spacing:1px;
-  text-transform:uppercase;
+  font-family:var(--font-body);
+  font-size:var(--text-xs);
   color:#1d1b18;
   background:var(--copper-light);
   padding:3px 8px;
@@ -366,12 +363,12 @@ body.readonly main label.btn{opacity:0.45;}
     flex:1 1 0; min-width:0;
     display:flex; flex-direction:column; align-items:center; gap:3px;
     padding:7px 2px 5px;
-    font-size:9px; letter-spacing:0.3px;
+    font-size:11px; letter-spacing:0.3px;
     border-bottom:0; border-top:2px solid transparent;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
   nav.tabs button::before{
-    content:attr(data-icona); font-size:17px; line-height:1;
+    content:attr(data-icona); font-size:var(--text-xl); line-height:1;
     font-family:'Apple Color Emoji','Segoe UI Emoji',sans-serif;
   }
   nav.tabs button.active{border-top-color:var(--copper); border-bottom-color:transparent;}
@@ -393,8 +390,7 @@ body.readonly main label.btn{opacity:0.45;}
 .tab-altro-sheet button{
   display:flex; align-items:center; gap:10px; width:100%;
   background:none; border:0; color:var(--paper);
-  font-family:var(--font-mono); font-size:12px; letter-spacing:1px; text-transform:uppercase;
-  padding:13px 4px; border-bottom:1px solid var(--line);
+  font-family:var(--font-body);font-weight:600; font-size:var(--text-sm); padding:13px 4px; border-bottom:1px solid var(--line);
 }
 .tab-altro-sheet button:last-child{border-bottom:0;}
 

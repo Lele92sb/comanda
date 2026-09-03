@@ -714,7 +714,7 @@ const GRUPPI: Gruppo[] = [
                          d.aperto = true;
                        }}>Prova: elimina una partita</cmd-bottone>
           <cmd-dialogo titolo="Eliminare la partita «Lavaggio»?">
-            <p style="margin:0 0 12px;font-size:13.5px;line-height:1.55">Verrà tolta da 2 tipi di turno (SP, P).
+            <p style="margin:0 0 12px;font-size:var(--text-md);line-height:1.55">Verrà tolta da 2 tipi di turno (SP, P).
               Verranno perse 4 righe di fabbisogno. I turni già assegnati nella griglia restano come sono.</p>
             <cmd-bottone slot="azioni" variante="fantasma"
                          @click=${(e: Event) => { ((e.target as HTMLElement).closest('cmd-dialogo') as HTMLElement & { aperto: boolean }).aperto = false; }}>Annulla</cmd-bottone>
@@ -762,7 +762,7 @@ const GRUPPI: Gruppo[] = [
         nota: 'E’ l’unico pezzo dell’app che non e’ scuro, ed e’ voluto: un piatto si guarda come si guarda una comanda sul passe. I bottoni qui dentro si ribaltano da soli — non ridefinendo i loro stili, ma i token per questo pezzo di albero.',
         contenuto: () => html`
           <cmd-comanda titolo="Fondo di vitello" categoria="resa 2 l · calo peso 40%" numero="SUB003">
-            <div style="font-size:13.5px;line-height:1.6">Ossa di vitello, sedano, carota, cipolla, vino rosso.</div>
+            <div style="font-size:var(--text-md);line-height:1.6">Ossa di vitello, sedano, carota, cipolla, vino rosso.</div>
             <cmd-bottone slot="comandi" misura="piccolo" variante="fantasma">Modifica</cmd-bottone>
             <cmd-bottone slot="comandi" misura="piccolo" variante="pericolo">Elimina</cmd-bottone>
           </cmd-comanda>`,
@@ -846,7 +846,7 @@ const GRUPPI: Gruppo[] = [
           <cmd-scheda titolo="Asparagi extra">
             <cmd-etichetta slot="stato" tono="allarme">prezzo mancante</cmd-etichetta>
             <cmd-etichetta slot="stato" tono="ok">resa stimata AI</cmd-etichetta>
-            <div style="font-family:var(--font-mono);font-size:11px;color:var(--brass);margin-top:3px">
+            <div style="font-family:var(--font-mono);font-size:var(--text-sm);color:var(--brass);margin-top:3px">
               Ortofrutta Rossi · € 9.500/kg acquisto · resa 62%</div>
             <cmd-bottone slot="azioni" misura="piccolo" variante="fantasma">Modifica</cmd-bottone>
             <cmd-bottone slot="azioni" misura="piccolo" variante="pericolo">Elimina</cmd-bottone>
@@ -1019,10 +1019,8 @@ const STILE = `
   .pagina{max-width:var(--pagina-larga);margin:0 auto;padding:var(--space-5) var(--space-4) 80px;}
   header.banco{border-bottom:1px solid var(--line);padding-bottom:var(--space-4);margin-bottom:var(--space-5);}
   header.banco h1{font-family:var(--font-display);font-size:28px;font-weight:700;margin:0;}
-  header.banco p{font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:1px;
-    text-transform:uppercase;color:var(--brass);margin:var(--space-2) 0 0;}
-  h2.gruppo{font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:1.5px;
-    text-transform:uppercase;color:var(--copper-light);margin:var(--space-5) 0 var(--space-3);
+  header.banco p{font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);color:var(--brass);margin:var(--space-2) 0 0;}
+  h2.gruppo{font-family:var(--font-body);font-weight:600;font-size:var(--text-sm);color:var(--copper-light);margin:var(--space-5) 0 var(--space-3);
     border-top:1px solid var(--line);padding-top:var(--space-4);}
   section.caso{margin-bottom:var(--space-5);}
   section.caso h3{font-family:var(--font-body);font-size:var(--text-md);font-weight:600;margin:0 0 var(--space-1);}
@@ -1034,10 +1032,9 @@ const STILE = `
   .testo{font-size:var(--text-md);line-height:1.6;margin:0;}
   .larghezze{display:flex;gap:var(--space-2);margin-top:var(--space-3);}
   .larghezze button{background:var(--bg-elev);border:1px solid var(--line);color:var(--brass);
-    font-family:var(--font-mono);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.5px;
-    padding:7px 12px;border-radius:var(--radius-pill);cursor:pointer;}
+    font-family:var(--font-body);font-weight:600;font-size:var(--text-xs);padding:7px 12px;border-radius:var(--radius-pill);cursor:pointer;}
   .larghezze button[aria-pressed="true"]{background:var(--copper);border-color:var(--copper);color:var(--ink);font-weight:700;}
-  .eco{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--sage);
+  .eco{font-family:var(--font-body);font-size:var(--text-xs);color:var(--sage);
     margin-top:var(--space-3);min-height:1.4em;}
 `;
 
