@@ -15,7 +15,7 @@ import { renderQuotas } from '../turni/quote.js';
 import { renderRichieste } from '../turni/richieste.js';
 import { renderCopiaConfig, renderServices, renderShiftTypes } from '../turni/servizi.js';
 import { renderStations } from '../turni/stazioni.js';
-import { renderWbStaffOptions, renderWbSummary, renderWbTips } from '../viste/benessere.js';
+import { renderBenessere } from '../viste/benessere.js';
 import { renderStaffList } from '../viste/brigata.js';
 import { renderDashboard } from '../viste/dashboard.js';
 import { renderMenuList } from '../viste/menu.js';
@@ -55,8 +55,7 @@ const NAV = [
   {id:'turni',      label:'Turni', icona:'📅',         render:()=>{ renderTurni(); renderOreExtra(); renderPubblicazione(); }},
   {id:'richieste',  label:'Richieste', icona:'✋',     render:()=>renderRichieste()},
   {id:'assistente', label:'Assistente AI', icona:'💬', soloChiModifica:true, render:()=>{ renderKB(); renderChat(); }},
-  {id:'benessere',  label:'Benessere', icona:'🌱',     soloChiModifica:true,
-   render:()=>{ renderWbStaffOptions(); renderWbSummary(); renderWbTips(); }},
+  {id:'benessere',  label:'Benessere', icona:'🌱',     soloChiModifica:true, render:()=>renderBenessere()},
   // Ultima voce, ed e' voluto: sono le cose che si impostano una volta. Chi
   // apre l'app ogni giorno cerca i turni, non il fabbisogno.
   {id:'impostazioni', label:'Impostazioni cucina', icona:'⚙', soloChiModifica:true, sezioni:[

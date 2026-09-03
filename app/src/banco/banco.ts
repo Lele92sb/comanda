@@ -63,6 +63,13 @@ import '../ricettario/fornitori-vista.ts';
 import type { FornitoreVista } from '../ricettario/fornitori-vista.ts';
 import '../ricettario/righe-vista.ts';
 import type { RigaRicetta } from '../ricettario/righe-vista.ts';
+import '../ds/avviso.ts';
+import '../ds/comanda.ts';
+import '../viste/dashboard-vista.ts';
+import '../viste/menu-vista.ts';
+import type { MenuVista } from '../viste/menu-vista.ts';
+import '../viste/benessere-vista.ts';
+import type { OreSettimana } from '../viste/benessere-vista.ts';
 
 interface Caso {
   id: string;
@@ -242,6 +249,24 @@ const RIGHE: RigaRicetta[] = [
 const SOTTORICETTE_SCELTA: Opzione[] = [
   { valore: 's1', etichetta: 'Fondo di vitello' },
   { valore: 's2', etichetta: 'Salsa verde' },
+];
+
+const MENU_VISTA: MenuVista[] = [
+  { id: 'm1', nome: 'Menu degustazione estivo', numero: '#001',
+    portate: [ { id: 'p1', nome: 'Asparagi e uovo', prezzo: 18 },
+               { id: 'p2', nome: 'Risotto alle erbe', prezzo: 22 },
+               { id: 'p3', nome: 'Branzino in crosta', prezzo: 28 } ],
+    costoTotale: 19.4, prezzoTotale: 68, foodCostMedio: 28.5, fuoriLinea: false },
+  /* Il secondo e' fuori linea, ed e' il caso che conta: un piatto per volta puo'
+     essere a posto e il menu completo no. */
+  { id: 'm2', nome: 'Menu di terra', numero: '#002',
+    portate: [ { id: 'p4', nome: 'Guanciale e cipolla', prezzo: 14 } ],
+    costoTotale: 5.6, prezzoTotale: 14, foodCostMedio: 40, fuoriLinea: true },
+];
+
+const SETTIMANA: OreSettimana[] = [
+  { nome: 'Lorenc', ore: 44, oltreSoglia: false },
+  { nome: 'Uddin', ore: 52.5, oltreSoglia: true },
 ];
 
 const GRUPPI: Gruppo[] = [
@@ -473,6 +498,77 @@ const GRUPPI: Gruppo[] = [
         contenuto: () => html`
           <cmd-scheda-persona .persona=${PERSONA_NUOVA} .stazioni=${[]}
                               .ruoli=${RUOLI} .membri=${[]} nuova></cmd-scheda-persona>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-avviso e cmd-comanda',
+    casi: [
+      {
+        id: 'avviso',
+        titolo: 'I tre toni',
+        nota: 'Non e’ un toast: il toast sparisce dopo due secondi e va bene per confermare, non per dire qualcosa che bisogna ancora fare. Un avviso resta finche’ resta la ragione.',
+        contenuto: () => html`
+          <cmd-avviso tono="allarme">3 piatti hanno un food cost reale sopra il 35%: Risotto, Branzino, Tiramisù.</cmd-avviso>
+          <cmd-avviso tono="ok">Nessun alert. Cucina in equilibrio.</cmd-avviso>
+          <cmd-avviso>I dati di questa cucina sono salvati sul tuo account e visibili a chi ne fa parte.</cmd-avviso>`,
+      },
+      {
+        id: 'comanda',
+        titolo: 'La carta strappata',
+        nota: 'E’ l’unico pezzo dell’app che non e’ scuro, ed e’ voluto: un piatto si guarda come si guarda una comanda sul passe. I bottoni qui dentro si ribaltano da soli — non ridefinendo i loro stili, ma i token per questo pezzo di albero.',
+        contenuto: () => html`
+          <cmd-comanda titolo="Fondo di vitello" categoria="resa 2 l · calo peso 40%" numero="SUB003">
+            <div style="font-size:13.5px;line-height:1.6">Ossa di vitello, sedano, carota, cipolla, vino rosso.</div>
+            <cmd-bottone slot="comandi" misura="piccolo" variante="fantasma">Modifica</cmd-bottone>
+            <cmd-bottone slot="comandi" misura="piccolo" variante="pericolo">Elimina</cmd-bottone>
+          </cmd-comanda>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-dashboard, cmd-menu, cmd-benessere — tre schermate intere',
+    casi: [
+      {
+        id: 'dashboard',
+        titolo: 'Con due allarmi',
+        nota: 'L’ordine e’ la sostanza: prima cosa non va, poi quanto c’e’ dentro l’app, poi chi lavora oggi — che e’ l’unica cosa che si guarda tutti i giorni.',
+        contenuto: () => html`
+          <cmd-dashboard
+            .avvisi=${['3 piatti hanno un food cost reale sopra il 35%: Risotto, Branzino, Tiramisù.',
+                       'Secondo il planning, Uddin e Rabby fanno ore extra rispetto al contratto.']}
+            .numeri=${[{ numero: 24, etichetta: 'Piatti in ricettario' },
+                       { numero: 9, etichetta: 'Sub-ricette' },
+                       { numero: 15, etichetta: 'Persone in brigata' },
+                       { numero: 3, etichetta: 'Menu attivi' }]}
+            .turniOggi=${[{ nome: 'Lorenc', turno: 'Spezzato · Pass (pranzo) / Primi (cena)' },
+                          { nome: 'Uddin', turno: 'Pranzo · Secondi' },
+                          { nome: 'Alessio', turno: 'Sera01 · Pass' }]}></cmd-dashboard>`,
+      },
+      {
+        id: 'dashboard-serena',
+        titolo: 'Quando non c’è niente da segnalare',
+        contenuto: () => html`
+          <cmd-dashboard .avvisi=${[]}
+            .numeri=${[{ numero: 0, etichetta: 'Piatti in ricettario' },
+                       { numero: 0, etichetta: 'Sub-ricette' },
+                       { numero: 0, etichetta: 'Persone in brigata' },
+                       { numero: 0, etichetta: 'Menu attivi' }]}
+            .turniOggi=${[]} giorno="giovedì 3 settembre"></cmd-dashboard>`,
+      },
+      {
+        id: 'menu',
+        titolo: 'Uno in linea e uno fuori',
+        contenuto: () => html`<cmd-menu .menu=${MENU_VISTA}></cmd-menu>`,
+      },
+      {
+        id: 'benessere',
+        titolo: 'Una persona oltre le 48 ore',
+        nota: 'La soglia non e’ nostra: e’ la media massima settimanale della direttiva europea. E’ scritto sotto, perche’ un numero rosso senza una ragione si impara a ignorare in una settimana.',
+        contenuto: () => html`
+          <cmd-benessere .persone=${[{ valore: 'a', etichetta: 'Lorenc' }, { valore: 'b', etichetta: 'Uddin' }]}
+                         .settimana=${SETTIMANA}
+                         .promemoria=${['Ruota chi apre e chi chiude: chi fa sempre il turno più lungo si esaurisce prima, anche se non lo dice.']}></cmd-benessere>`,
       },
     ],
   },

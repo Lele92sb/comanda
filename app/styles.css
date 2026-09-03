@@ -91,12 +91,12 @@
 /* Paragrafo discorsivo: le spiegazioni lunghe dentro i riquadri. */
 .prose{font-size:var(--text-md);line-height:1.6;}
 
-/* Riga di un elenco semplice (turni di oggi, ore per persona): etichetta a
-   sinistra, valore a destra, separate da una linea.
-   Il gap non è decorativo: su schermo stretto il valore va a capo e senza
-   spazio si attacca al nome — "MarcoP · Pranzo 9:00". */
-.list-row{display:flex;justify-content:space-between;gap:var(--space-3);
-  padding:var(--space-1) 0;border-bottom:1px solid var(--line);font-size:var(--text-md);}
+
+/* Qui stavano .list-row, .item-row e la griglia dei numeri della dashboard.
+   Se ne sono andate con le schermate che le usavano: turni di oggi, righe di
+   ricetta e i quattro riquadri della dashboard sono componenti, e si portano
+   dietro il proprio stile. Le regole della disposizione larga che le
+   riguardavano sono sparite con loro. */
 
 /* Codice da leggere o dettare a voce (invito, sigla). */
 .code-inline{font-family:var(--font-mono);font-size:15px;letter-spacing:2px;color:var(--copper-light);}
@@ -233,15 +233,6 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--copper);outline-
 .chip-toggle button{border:1px solid var(--line-strong);background:transparent;color:var(--paper);font-family:var(--font-mono);font-size:10.5px;padding:5px 9px;border-radius:20px;}
 .chip-toggle button.on{background:var(--copper);border-color:var(--copper);color:#1d1b18;font-weight:700;}
 
-.item-row{display:grid;grid-template-columns:auto 2fr 1fr 1fr auto;gap:6px;margin-bottom:6px;align-items:center;background:var(--bg-elev2);padding:6px;border-radius:5px;}
-.item-row select,.item-row input{padding:7px 8px;font-size:12px;}
-.item-row .rm{background:none;border:none;color:var(--alert);font-size:16px;padding:0 4px;}
-.item-row-cost{font-family:var(--font-mono);font-size:10px;color:var(--brass);grid-column:1/-1;margin-top:-2px;}
-
-.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:18px;}
-.stat{background:var(--bg-elev);border:1px solid var(--line);border-radius:6px;padding:14px;}
-.stat .n{font-family:var(--font-display);font-size:28px;font-weight:700;color:var(--copper-light);}
-.stat .l{font-family:var(--font-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:0.5px;color:var(--brass);margin-top:2px;}
 .alert-box{background:var(--alert-soft);border:1px solid rgba(168,65,47,0.4);border-radius:6px;padding:12px 14px;margin-bottom:10px;font-size:13px;}
 .ok-box{background:var(--sage-soft);border:1px solid rgba(107,128,100,0.4);border-radius:6px;padding:12px 14px;margin-bottom:10px;font-size:13px;}
 
@@ -726,15 +717,4 @@ body.readonly main label.btn{opacity:0.45;}
 
   /* La riga di lettura resta stretta anche quando la pagina e' larga. */
   .prose,p.small-note,p.section-sub{max-width:78ch;}
-
-  /* Anche le righe «etichetta a sinistra, valore a destra» si fermano: a 1200px
-     il nome e il turno finiscono ai due capi opposti dello schermo e per
-     leggerli insieme si muove la testa. «Alessio ... S1 · Sera01 · Pass» non e'
-     una riga, sono due cose lontane. */
-  .list-row{max-width:68ch;}
-
-  /* Con lo spazio che c'e', i numeri della dashboard stanno in fila invece che
-     a due a due: si leggono tutti in un colpo d'occhio, che e' il mestiere di
-     quel riquadro. */
-  .stat-grid{grid-template-columns:repeat(4,1fr);}
 }

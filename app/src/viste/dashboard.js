@@ -1,56 +1,77 @@
 import { lingua, t } from '../core/lingua.ts';
-import { CODE_LABEL, SERVICE_LABEL, SHIFT_CONFIG, esc, state } from '../core/state.js';
+import { CODE_LABEL, SERVICE_LABEL, SHIFT_CONFIG, state } from '../core/state.js';
 import { isoDate, parseISO, serviziDelCodice, stazioneDi, stazioniDi } from '../lib/logic.js';
 import { dishTotalCost } from '../ricettario/costi.js';
 import { weeklyExtraFromTurni } from '../turni/griglia.js';
-/* ============================= DASHBOARD ============================= */
-export function renderDashboard(){
-  const alertsEl = document.getElementById('dash-alerts');
-  const statsEl = document.getElementById('dash-stats');
-  const shiftsEl = document.getElementById('dash-shifts');
+import './dashboard-vista.ts';
+/* ============================= DASHBOARD ====================================
 
-  const highFc = state.recipes.filter(d=>{
-    const cost = dishTotalCost(d); const price = parseFloat(d.priceActual)||0;
-    if(!price) return false;
-    return (cost/price*100) > 35;
-  });
-  let alerts = '';
-  if(highFc.length) alerts += `<div class="alert-box">⚠ ${esc(t('{n} piatti hanno un food cost reale sopra il 35%: {elenco}.',
-    {n: highFc.length, elenco: highFc.map(r=>r.name).join(', ')}))}</div>`;
-  const overworked = weeklyExtraFromTurni().filter(o=>o.extra>0);
-  if(overworked.length) alerts += `<div class="alert-box">⚠ ${esc(t('Secondo il planning, {chi} fa ore extra rispetto al contratto.',
-    {chi: overworked.map(o=>o.name).join(', ')}))}</div>`;
-  if(!alerts) alerts = `<div class="ok-box">✓ ${esc(t('Nessun alert. Cucina in equilibrio.'))}</div>`;
-  alertsEl.innerHTML = alerts;
+   QUESTO FILE E' SOLO IL COLLANTE. Qui stanno le REGOLE — cos'e' un food cost
+   fuori linea, chi sta facendo ore oltre il contratto, come si legge la partita
+   di una giornata — e il componente riceve gia' le frasi da scrivere.
 
-  statsEl.innerHTML = `
-    <div class="stat"><div class="n">${state.recipes.length}</div><div class="l">${esc(t('Piatti in ricettario'))}</div></div>
-    <div class="stat"><div class="n">${state.subrecipes.length}</div><div class="l">${esc(t('Sub-ricette'))}</div></div>
-    <div class="stat"><div class="n">${state.staff.length}</div><div class="l">${esc(t('Persone in brigata'))}</div></div>
-    <div class="stat"><div class="n">${state.menus.length}</div><div class="l">${esc(t('Menu attivi'))}</div></div>
-  `;
+   La soglia del 35% e il resto possono cambiare senza toccare un pixel.
+   ========================================================================== */
 
-  const todayKey = isoDate(new Date());
-  // La partita si legge per SERVIZIO: chi a pranzo sta ai primi e a cena al pass
-  // fa due partite in una giornata, e "Turni di oggi" deve dirlo. Quando sono la
-  // stessa - cioe' quasi sempre - la riga resta identica a prima.
+/* La partita si legge per SERVIZIO: chi a pranzo sta ai primi e a cena al pass
+   fa due partite in una giornata, e «Turni di oggi» deve dirlo. Quando sono la
+   stessa — cioe' quasi sempre — la riga resta identica a prima. */
+function dettaglioPartite(cell){
   const nomeStazione = id => (state.stations.find(x=> x.id === id)||{}).name || '';
-  const dettaglio = cell => {
-    const partite = stazioniDi(cell, SHIFT_CONFIG());
-    if(partite.length <= 1) return partite.length ? ' · ' + nomeStazione(partite[0]) : '';
-    return ' · ' + (serviziDelCodice(cell.code, SHIFT_CONFIG())||[]).map(sv=>{
-      const n = nomeStazione(stazioneDi(cell, sv));
-      return n ? n + ' (' + SERVICE_LABEL(sv).toLowerCase() + ')' : null;
-    }).filter(Boolean).join(' / ');
-  };
-  const todayShifts = state.staff.map(s=>{
-    const cell = (state.shifts[s.id]||{})[todayKey];
-    return {name:s.name, code: cell? cell.code : '', dettaglio: cell? dettaglio(cell) : ''};
-  }).filter(x=>x.code);
-  shiftsEl.innerHTML = todayShifts.length
-    ? todayShifts.map(t=>
-        `<div class="list-row"><span>${esc(t.name)}</span><span class="mono text-accent">${esc(CODE_LABEL(t.code))}${esc(t.dettaglio)}</span></div>`
-      ).join('')
-    : `<div class="empty">${esc(t('Nessun turno assegnato per oggi ({giorno})',
-        {giorno: parseISO(todayKey).toLocaleDateString(lingua(), {weekday:'long', day:'numeric', month:'long'})}))}</div>`;
+  const partite = stazioniDi(cell, SHIFT_CONFIG());
+  if(partite.length <= 1) return partite.length ? ' · ' + nomeStazione(partite[0]) : '';
+  return ' · ' + (serviziDelCodice(cell.code, SHIFT_CONFIG())||[]).map(sv=>{
+    const n = nomeStazione(stazioneDi(cell, sv));
+    return n ? n + ' (' + SERVICE_LABEL(sv).toLowerCase() + ')' : null;
+  }).filter(Boolean).join(' / ');
+}
+
+function avvisi(){
+  const fuori = [];
+
+  // Food cost sopra il 35%: la soglia oltre la quale un piatto, per quanto
+  // buono, non paga la cucina che lo fa.
+  const costoAlto = state.recipes.filter(d=>{
+    const costo = dishTotalCost(d);
+    const prezzo = parseFloat(d.priceActual) || 0;
+    return prezzo ? (costo / prezzo * 100) > 35 : false;
+  });
+  if(costoAlto.length){
+    fuori.push(t('{n} piatti hanno un food cost reale sopra il 35%: {elenco}.',
+      { n: costoAlto.length, elenco: costoAlto.map(r => r.name).join(', ') }));
+  }
+
+  const oltreContratto = weeklyExtraFromTurni().filter(o => o.extra > 0);
+  if(oltreContratto.length){
+    fuori.push(t('Secondo il planning, {chi} fa ore extra rispetto al contratto.',
+      { chi: oltreContratto.map(o => o.name).join(', ') }));
+  }
+
+  return fuori;
+}
+
+let vista = null;
+
+export function renderDashboard(){
+  const el = document.getElementById('dash-panel');
+  if(!el) return;
+  if(!vista || !vista.isConnected){
+    vista = document.createElement('cmd-dashboard');
+    el.replaceChildren(vista);
+  }
+
+  const oggi = isoDate(new Date());
+  vista.avvisi = avvisi();
+  vista.numeri = [
+    { numero: state.recipes.length,    etichetta: t('Piatti in ricettario') },
+    { numero: state.subrecipes.length, etichetta: t('Sub-ricette') },
+    { numero: state.staff.length,      etichetta: t('Persone in brigata') },
+    { numero: state.menus.length,      etichetta: t('Menu attivi') },
+  ];
+  vista.turniOggi = state.staff.map(s=>{
+    const cell = (state.shifts[s.id] || {})[oggi];
+    return cell ? { nome: s.name, turno: CODE_LABEL(cell.code) + dettaglioPartite(cell) } : null;
+  }).filter(Boolean);
+  vista.giorno = parseISO(oggi).toLocaleDateString(lingua(),
+    { weekday:'long', day:'numeric', month:'long' });
 }

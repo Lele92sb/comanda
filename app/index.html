@@ -55,9 +55,11 @@
     <section class="view" id="view-dashboard">
       <h2 class="section-title" data-t>Dashboard</h2>
       <p class="section-sub" data-t>Il colpo d'occhio prima del servizio</p>
-      <div id="dash-alerts"></div>
-      <div class="stat-grid" id="dash-stats"></div>
-      <div class="panel"><h3 data-t>Turni di oggi</h3><div id="dash-shifts"></div></div>
+      <!-- Avvisi, numeri e turni di oggi stanno tutti dentro <cmd-dashboard>:
+           erano tre contenitori riempiti da tre stringhe diverse, e l'ordine
+           in cui comparivano dipendeva dall'ordine del markup invece che da
+           una decisione. -->
+      <div id="dash-panel"></div>
       <div class="panel">
         <h3 data-t>Backup dati</h3>
         <p class="small-note mt-0" id="backup-note" data-t>I dati restano salvati nel browser che stai usando ora. Se cambi browser, dispositivo, o svuoti la cache, li perdi — esporta un backup ogni tanto per stare tranquillo.</p>
@@ -277,18 +279,9 @@
     <section class="view" id="view-benessere">
       <h2 class="section-title" data-t>Benessere</h2>
       <p class="section-sub" data-t>Le ore in cucina si contano, non solo i coperti</p>
-      <div class="panel">
-        <h3 data-t>Registra una giornata (ore effettive)</h3>
-        <div class="grid2">
-          <select id="wb-staff"></select>
-          <input type="date" id="wb-date">
-        </div>
-        <label data-t>Ore lavorate</label>
-        <input type="number" id="wb-ore" min="0" max="20" step="0.5" placeholder="es. 10.5">
-        <button class="btn small mt-3" id="wb-add" data-t>Registra</button>
-      </div>
-      <div class="panel"><h3 data-t>Situazione settimanale (ore effettive registrate)</h3><div id="wb-summary"></div></div>
-      <div class="panel"><h3 data-t>Promemoria</h3><div class="small-note" id="wb-tips" style="font-size:12px;line-height:1.7;"></div></div>
+      <!-- Registrazione, riepilogo e promemoria stanno dentro <cmd-benessere>:
+           erano tre riquadri e tre funzioni di disegno per una schermata sola. -->
+      <div id="wb-panel"></div>
     </section>
 
     <!-- IMPOSTAZIONI CUCINA. Cinque cose che si impostano una volta e poi non
