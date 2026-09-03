@@ -1,0 +1,295 @@
+// ============================================================================
+// IL BANCO — ogni componente, in ogni stato, da solo.
+//
+// A COSA SERVE DAVVERO
+//
+// Finora per guardare un pulsante bisognava avviare l'app, entrare con un
+// account, scegliere una cucina, arrivare alla schermata giusta e avere i dati
+// giusti dentro. Cinque passaggi per vedere un bordo. E lo stato «mentre sta
+// lavorando» o «disabilitato e in errore» spesso non lo si vedeva mai, perche'
+// per farlo comparire serviva un guasto vero.
+//
+// Qui ogni stato e' una riga di codice. E' quello che permette a piu' persone
+// di lavorare sull'aspetto senza pestarsi i piedi, e a chi rivede il lavoro di
+// guardare una pagina sola invece di dodici schermate.
+//
+// E' ANCHE IL BANCO DI PROVA VISIVO. CLAUDE.md dice che i test non coprono
+// l'interfaccia, e che le due regressioni visive di questo progetto sono state
+// trovate confrontando schermate a mano. Ogni caso qui sotto ha un `data-caso`:
+// e' l'appiglio con cui scripts/prove-visive.mjs fotografa i componenti uno per
+// uno e confronta con le foto di riferimento. Un bordo che cambia da solo
+// adesso fa fallire una prova invece di arrivare in cucina.
+//
+// COME SI AGGIUNGE UN CASO: una voce in CASI. Nient'altro.
+// ============================================================================
+import { html, render, type TemplateResult } from 'lit';
+import './bottone.ts';
+import './campo.ts';
+import './riquadro.ts';
+import './scelta.ts';
+import './vuoto.ts';
+import type { Opzione } from './scelta.ts';
+
+interface Caso {
+  id: string;
+  titolo: string;
+  /** Cosa dimostra questo caso, e perche' esiste. */
+  nota?: string;
+  contenuto: () => TemplateResult;
+}
+
+interface Gruppo {
+  nome: string;
+  casi: Caso[];
+}
+
+const PARTITE: Opzione[] = [
+  { valore: 'pass', etichetta: 'Pass' },
+  { valore: 'antipasti', etichetta: 'Antipasti' },
+  { valore: 'primi', etichetta: 'Primi' },
+  { valore: 'secondi', etichetta: 'Secondi' },
+  { valore: 'insalate', etichetta: 'Insalate' },
+  { valore: 'lavaggio', etichetta: 'Lavaggio', disabilitata: true },
+];
+
+const GRUPPI: Gruppo[] = [
+  {
+    nome: 'cmd-bottone',
+    casi: [
+      {
+        id: 'bottone-varianti',
+        titolo: 'Le quattro varianti',
+        nota: 'Quattro significati, non quattro gusti. In una schermata ci va UNA sola azione principale.',
+        contenuto: () => html`
+          <div class="fila">
+            <cmd-bottone variante="principale">Genera turni</cmd-bottone>
+            <cmd-bottone variante="fantasma">Svuota</cmd-bottone>
+            <cmd-bottone variante="pericolo">Elimina</cmd-bottone>
+            <cmd-bottone variante="piano">Dettagli</cmd-bottone>
+          </div>`,
+      },
+      {
+        id: 'bottone-stati',
+        titolo: 'Sta lavorando, e non si puo’ premere',
+        nota: 'La rotellina prende il posto di un’icona: il bottone non cambia larghezza mentre lavora, cosi’ i comandi accanto non scappano sotto il dito.',
+        contenuto: () => html`
+          <div class="fila">
+            <cmd-bottone variante="principale" in-corso>Genero…</cmd-bottone>
+            <cmd-bottone variante="principale" disabilitato>Pubblica</cmd-bottone>
+            <cmd-bottone variante="fantasma" in-corso>Salvo…</cmd-bottone>
+            <cmd-bottone variante="fantasma" disabilitato>Revoca</cmd-bottone>
+          </div>`,
+      },
+      {
+        id: 'bottone-misure',
+        titolo: 'Misure e larghezza piena',
+        nota: 'Su un dispositivo a tocco l’altezza sale a 44px da sola: la regola guarda il puntatore, non la larghezza dello schermo.',
+        contenuto: () => html`
+          <div class="fila">
+            <cmd-bottone misura="piccolo" variante="fantasma">▲</cmd-bottone>
+            <cmd-bottone misura="piccolo" variante="fantasma">▼</cmd-bottone>
+            <cmd-bottone misura="piccolo" variante="pericolo">Elimina</cmd-bottone>
+          </div>
+          <div style="max-width:280px;margin-top:12px">
+            <cmd-bottone pieno variante="principale">Entra</cmd-bottone>
+          </div>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-scelta',
+    casi: [
+      {
+        id: 'scelta-chiusa',
+        titolo: 'Chiusa, scelta, vuota, spenta',
+        nota: 'Sostituisce il <select> nativo, che su Windows apre il menu grigio di sistema — l’unico pezzo di schermata che non ubbidiva ai token.',
+        contenuto: () => html`
+          <div class="griglia">
+            <cmd-scelta etichetta="Partita" .opzioni=${PARTITE} valore="primi"></cmd-scelta>
+            <cmd-scelta etichetta="Partita" .opzioni=${PARTITE} segnaposto="Nessuna partita"></cmd-scelta>
+            <cmd-scelta etichetta="Partita" .opzioni=${PARTITE} valore="pass" disabilitato></cmd-scelta>
+          </div>`,
+      },
+      {
+        id: 'scelta-dentro-campo',
+        titolo: 'Dentro un campo, con aiuto ed errore',
+        contenuto: () => html`
+          <div class="griglia">
+            <cmd-campo etichetta="Partita principale" aiuto="La prima conta piu’ delle altre: e’ dove la persona va per prima.">
+              <cmd-scelta .opzioni=${PARTITE} valore="secondi"></cmd-scelta>
+            </cmd-campo>
+            <cmd-campo etichetta="Partita" errore="Scegli una partita: senza, il generatore non assegna nessun turno.">
+              <cmd-scelta .opzioni=${PARTITE}></cmd-scelta>
+            </cmd-campo>
+          </div>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-campo',
+    casi: [
+      {
+        id: 'campo-nativi',
+        titolo: 'I controlli nativi restano nativi',
+        nota: 'Per testo, numeri e date il browser fa meglio di noi: tastiere, riempimento automatico, calendario di sistema. Il campo mette solo etichetta, aiuto ed errore — e li lega, cosa che il markup a mano non faceva mai.',
+        contenuto: () => html`
+          <div class="griglia">
+            <cmd-campo etichetta="Nome della partita" obbligatorio>
+              <input type="text" value="Antipasti">
+            </cmd-campo>
+            <cmd-campo etichetta="Ore settimanali" aiuto="Quelle del contratto, non quelle fatte.">
+              <input type="number" value="40">
+            </cmd-campo>
+            <cmd-campo etichetta="Email" errore="Questa email e’ gia’ collegata a un’altra persona della brigata.">
+              <input type="email" value="mario@ristorante.it">
+            </cmd-campo>
+            <cmd-campo etichetta="Note" aiuto="Le vede solo chi puo’ modificare.">
+              <textarea>Rientra dalle ferie il 12.</textarea>
+            </cmd-campo>
+          </div>`,
+      },
+      {
+        id: 'campo-orizzontale',
+        titolo: 'Etichetta a fianco',
+        nota: 'Per le righe fitte, dove l’etichetta sopra farebbe crescere la riga del doppio.',
+        contenuto: () => html`
+          <cmd-campo etichetta="Servono" orizzontale>
+            <input type="number" value="2">
+          </cmd-campo>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-riquadro',
+    casi: [
+      {
+        id: 'riquadro-semplice',
+        titolo: 'Titolo, sottotitolo, comandi',
+        contenuto: () => html`
+          <cmd-riquadro titolo="Ore extra del periodo"
+                        sottotitolo="Quanto si discosta ciascuno dal proprio contratto">
+            <cmd-bottone slot="azioni" variante="piano">Dettagli</cmd-bottone>
+            <p class="testo">Nessuno sopra il contratto in questa settimana.</p>
+          </cmd-riquadro>`,
+      },
+      {
+        id: 'riquadro-chiuso',
+        titolo: 'Comprimibile — chiuso e aperto',
+        nota: '«Per vedere i turni bisogna scorrere troppo». Un riquadro che si chiude tiene in pagina quello che serve ogni tanto senza pagarlo ogni giorno.',
+        contenuto: () => html`
+          <cmd-riquadro comprimibile titolo="Il conto della capienza"
+                        sottotitolo="98 servono · 96 coperti · 2 extra inevitabili">
+            <p class="testo">Il dettaglio per partita.</p>
+          </cmd-riquadro>
+          <cmd-riquadro comprimibile aperto titolo="Il conto della capienza"
+                        sottotitolo="98 servono · 96 coperti · 2 extra inevitabili">
+            <p class="testo">Il dettaglio per partita.</p>
+          </cmd-riquadro>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-vuoto',
+    casi: [
+      {
+        id: 'vuoto',
+        titolo: 'Quando non c’e’ ancora niente',
+        nota: 'Il vecchio riquadro diceva «Nessuna stazione ancora.» e finiva li’. Un vuoto senza il primo passo e’ un vicolo cieco con una scritta sopra.',
+        contenuto: () => html`
+          <cmd-vuoto simbolo="🍳" titolo="Nessuna partita"
+                     spiega="Le partite sono i posti della cucina: pass, antipasti, primi. Il generatore le usa per sapere dove serve qualcuno.">
+            <cmd-bottone variante="principale">Aggiungi la prima partita</cmd-bottone>
+          </cmd-vuoto>`,
+      },
+    ],
+  },
+];
+
+const STILE = `
+  body{margin:0;background:var(--bg);color:var(--paper);font-family:var(--font-body);}
+  .pagina{max-width:var(--pagina-larga);margin:0 auto;padding:var(--space-5) var(--space-4) 80px;}
+  header.banco{border-bottom:1px solid var(--line);padding-bottom:var(--space-4);margin-bottom:var(--space-5);}
+  header.banco h1{font-family:var(--font-display);font-size:28px;font-weight:700;margin:0;}
+  header.banco p{font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:1px;
+    text-transform:uppercase;color:var(--brass);margin:var(--space-2) 0 0;}
+  h2.gruppo{font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:1.5px;
+    text-transform:uppercase;color:var(--copper-light);margin:var(--space-5) 0 var(--space-3);
+    border-top:1px solid var(--line);padding-top:var(--space-4);}
+  section.caso{margin-bottom:var(--space-5);}
+  section.caso h3{font-family:var(--font-body);font-size:var(--text-md);font-weight:600;margin:0 0 var(--space-1);}
+  section.caso .nota{font-size:var(--text-sm);line-height:1.6;color:var(--brass);margin:0 0 var(--space-3);max-width:70ch;}
+  section.caso .palco{background:var(--bg-elev);border:1px solid var(--line);
+    border-radius:var(--radius-md);padding:var(--space-4);}
+  .fila{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;}
+  .griglia{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--space-3);}
+  .testo{font-size:var(--text-md);line-height:1.6;margin:0;}
+  .larghezze{display:flex;gap:var(--space-2);margin-top:var(--space-3);}
+  .larghezze button{background:var(--bg-elev);border:1px solid var(--line);color:var(--brass);
+    font-family:var(--font-mono);font-size:var(--text-xs);text-transform:uppercase;letter-spacing:0.5px;
+    padding:7px 12px;border-radius:var(--radius-pill);cursor:pointer;}
+  .larghezze button[aria-pressed="true"]{background:var(--copper);border-color:var(--copper);color:var(--ink);font-weight:700;}
+  .eco{font-family:var(--font-mono);font-size:var(--text-xs);color:var(--sage);
+    margin-top:var(--space-3);min-height:1.4em;}
+`;
+
+/* Le larghezze non sono decorazione del banco: quasi tutti i difetti di questa
+   app sono comparsi a 375px, e guardarli richiedeva rimpicciolire la finestra a
+   mano. Qui sono due bottoni. */
+const LARGHEZZE = [
+  { id: 'telefono', etichetta: 'Telefono 375', px: '375px' },
+  { id: 'largo', etichetta: 'Largo', px: '' },
+];
+
+let larghezza = 'largo';
+let eco = '';
+
+function disegna(): void {
+  const radice = document.getElementById('banco');
+  if (!radice) return;
+  render(html`
+    <div class="pagina">
+      <header class="banco">
+        <h1>Banco dei componenti</h1>
+        <p>Comanda design system · ogni pezzo, in ogni stato, da solo</p>
+        <div class="larghezze">
+          ${LARGHEZZE.map(l => html`
+            <button aria-pressed=${larghezza === l.id ? 'true' : 'false'}
+                    @click=${() => { larghezza = l.id; disegna(); }}>${l.etichetta}</button>`)}
+        </div>
+        <p class="eco">${eco}</p>
+      </header>
+
+      ${GRUPPI.map(g => html`
+        <h2 class="gruppo">${g.nome}</h2>
+        ${g.casi.map(c => html`
+          <section class="caso" data-caso=${c.id}>
+            <h3>${c.titolo}</h3>
+            ${c.nota ? html`<p class="nota">${c.nota}</p>` : ''}
+            <div class="palco" style=${larghezza === 'telefono' ? 'max-width:375px' : ''}>
+              ${c.contenuto()}
+            </div>
+          </section>`)}
+      `)}
+    </div>`, radice);
+}
+
+/* Gli eventi dei componenti si vedono qui: e' il modo piu' rapido di verificare
+   che un componente parli davvero con chi lo usa, invece di fidarsi. */
+document.addEventListener('cmd-cambio', (e: Event) => {
+  const d = (e as CustomEvent<{ valore: string }>).detail;
+  eco = 'cmd-cambio → ' + d.valore;
+  disegna();
+});
+document.addEventListener('cmd-apertura', (e: Event) => {
+  const d = (e as CustomEvent<{ aperto: boolean }>).detail;
+  eco = 'cmd-apertura → ' + (d.aperto ? 'aperto' : 'chiuso');
+  disegna();
+});
+
+// Il foglio del banco entra una volta sola: lit non aggiorna i binding dentro
+// un <style>, e rimetterlo a ogni disegno lo farebbe ricalcolare per niente.
+const foglio = document.createElement('style');
+foglio.textContent = STILE;
+document.head.appendChild(foglio);
+
+disegna();

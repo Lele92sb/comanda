@@ -1,0 +1,117 @@
+/* ============================================================================
+   COMANDA — I TOKEN.
+
+   Questo file e' la SORGENTE UNICA delle decisioni visive: colori, caratteri,
+   distanze, forme, tempi. Nient'altro nel progetto ha il diritto di scrivere
+   un colore o una distanza a mano.
+
+   Perche' sta in un file suo e non in styles.css: i componenti del design
+   system vivono dentro uno shadow DOM, dove le regole del foglio globale NON
+   entrano. Le variabili CSS invece SI' — ereditano oltre il confine. Quindi
+   i token sono l'unico linguaggio che parla in tutti e due i mondi, ed e'
+   l'unico che deve essere condiviso.
+
+   Regola pratica per chi arriva: se stai per scrivere `#b06b34` o `12px`
+   dentro un componente, fermati. O esiste gia' il token, o va aggiunto qui.
+   ============================================================================ */
+:root{
+  /* --- Colori -------------------------------------------------------------
+     La tavolozza e' quella di una cucina: il rame delle pentole, l'ottone
+     delle etichette, la carta della comanda, il verde salvia e il rosso del
+     richiamo. Non e' decorazione: sono cinque significati, e ognuno ha un
+     solo colore. */
+  --bg:#1d1b18;              /* il fondo, ghisa */
+  --bg-elev:#262320;         /* un riquadro sopra il fondo */
+  --bg-elev2:#2e2a25;        /* un riquadro dentro un riquadro */
+  --paper:#f3eee2;           /* il testo, e la carta della comanda */
+  --paper-dim:#e7e0cf;
+  --ink:#1d1b18;             /* testo sulla carta */
+  --copper:#b06b34;          /* l'azione principale */
+  --copper-light:#d38f57;    /* l'azione principale, accesa */
+  --copper-soft:rgba(176,107,52,0.16);
+  --brass:#8c7a4e;           /* testo di servizio, etichette */
+  --sage:#6b8064;            /* va bene */
+  --sage-soft:rgba(107,128,100,0.18);
+  --alert:#a8412f;           /* non va bene */
+  --alert-soft:rgba(168,65,47,0.18);
+  --line:rgba(243,238,226,0.12);
+  --line-strong:rgba(243,238,226,0.22);
+
+  /* --- Caratteri --- */
+  --font-display:'Fraunces',serif;
+  --font-mono:'Space Mono',monospace;
+  --font-body:'Inter',sans-serif;
+
+  /* --- Spaziature ---------------------------------------------------------
+     Una scala sola per tutta l'app. Prima esistevano margini da 4, 6, 8, 10,
+     12, 14 e 16px scelti caso per caso: sette misure per fare lo stesso
+     mestiere. Qui sono cinque, e ogni distanza nell'app ne usa una. */
+  --space-1:4px;
+  --space-2:8px;
+  --space-3:12px;
+  --space-4:16px;
+  --space-5:24px;
+
+  /* --- Forme --- */
+  --radius-sm:4px;
+  --radius-md:6px;
+  --radius-pill:20px;
+  --shadow-card:0 8px 24px rgba(0,0,0,0.35);
+  --shadow-float:0 6px 20px rgba(0,0,0,0.4);
+
+  /* --- Dimensioni del testo ---
+     xs = etichette e note in monospazio, sm = testo di servizio,
+     md = testo corrente, lg = titoli di riquadro. */
+  --text-xs:10.5px;
+  --text-sm:12px;
+  --text-md:13.5px;
+  --text-lg:16px;
+
+  /* --- Movimento ----------------------------------------------------------
+     NUOVI, e sono la ragione per cui l'app sembrava ferma: in 9.600 righe
+     c'era UNA sola animazione e due transizioni. Il movimento non e' un
+     vezzo — e' la risposta al tocco. Senza, chi preme non sa se ha premuto.
+
+     Tre tempi e basta:
+       istante = il tocco di un comando (si deve sentire, non vedere)
+       breve   = qualcosa che compare o sparisce
+       lungo   = qualcosa che si sposta o cambia forma
+     La curva e' sempre la stessa: parte svelta e si posa piano, come una
+     cosa che ha un peso. */
+  --tempo-istante:90ms;
+  --tempo-breve:160ms;
+  --tempo-lungo:260ms;
+  --curva:cubic-bezier(0.2,0.8,0.2,1);
+
+  /* --- Bersagli e fuoco ---------------------------------------------------
+     44px e' il minimo che si tocca con un dito senza sbagliare. Non e' un
+     numero scelto da noi: e' quello che Apple e Google misurano da anni, ed
+     e' la stessa soglia usata per la cella dei turni. Il contorno del fuoco
+     e' uno solo per tutta l'app, perche' chi naviga da tastiera deve
+     riconoscerlo sempre uguale. */
+  --tocco-min:44px;
+  --fuoco:2px solid var(--copper);
+  --fuoco-stacco:2px;
+
+  /* --- Larghezze ----------------------------------------------------------
+     `--colonna-lettura` e' la colonna da 900px di oggi: giusta per leggere.
+     `--pagina-larga` e' lo spazio che il gestore ha davvero sul PC, e che
+     oggi resta vuoto. Sono due misure diverse perche' servono a due mestieri
+     diversi, e tenerle separate e' cio' che permettera' di dare una vera
+     disposizione al desktop senza toccare le viste da telefono. */
+  --colonna-lettura:900px;
+  --pagina-larga:1400px;
+}
+
+/* Chi ha chiesto al sistema operativo di ridurre le animazioni le riceve
+   ridotte, ovunque, senza che nessun componente debba ricordarselo: i tempi
+   vanno a zero e tutto il resto resta identico. Non e' una gentilezza — per
+   chi soffre di vertigini o emicrania un movimento non richiesto e' un
+   sintomo. */
+@media (prefers-reduced-motion: reduce){
+  :root{
+    --tempo-istante:0ms;
+    --tempo-breve:0ms;
+    --tempo-lungo:0ms;
+  }
+}

@@ -1,55 +1,12 @@
 /* ============================================================================
-   Comanda — foglio di stile.
+   Comanda — foglio di stile dell'APPLICAZIONE.
 
-   Le variabili in :root sono i token del design system: colori, tipografia,
-   spessori. Cambiare un token qui cambia tutta l’app in un colpo solo.
+   I token (colori, caratteri, distanze, tempi) NON stanno piu' qui: stanno in
+   src/ds/tokens.css, perche' devono valere anche dentro i componenti del
+   design system, dove questo foglio non entra. Qui restano le utilita' e i
+   pezzi di interfaccia non ancora diventati componenti.
    ============================================================================ */
-:root{
-  --bg:#1d1b18;
-  --bg-elev:#262320;
-  --bg-elev2:#2e2a25;
-  --paper:#f3eee2;
-  --paper-dim:#e7e0cf;
-  --ink:#1d1b18;
-  --copper:#b06b34;
-  --copper-light:#d38f57;
-  --copper-soft:rgba(176,107,52,0.16);
-  --brass:#8c7a4e;
-  --sage:#6b8064;
-  --sage-soft:rgba(107,128,100,0.18);
-  --alert:#a8412f;
-  --alert-soft:rgba(168,65,47,0.18);
-  --line:rgba(243,238,226,0.12);
-  --line-strong:rgba(243,238,226,0.22);
-  --font-display:'Fraunces',serif;
-  --font-mono:'Space Mono',monospace;
-  --font-body:'Inter',sans-serif;
-
-  /* --- Spaziature ---------------------------------------------------------
-     Una scala sola per tutta l'app. Prima esistevano margini da 4, 6, 8, 10,
-     12, 14 e 16px scelti caso per caso: sette misure per fare lo stesso
-     mestiere. Qui sono cinque, e ogni distanza nell'app ne usa una. */
-  --space-1:4px;
-  --space-2:8px;
-  --space-3:12px;
-  --space-4:16px;
-  --space-5:24px;
-
-  /* --- Forme --- */
-  --radius-sm:4px;
-  --radius-md:6px;
-  --radius-pill:20px;
-  --shadow-card:0 8px 24px rgba(0,0,0,0.35);
-  --shadow-float:0 6px 20px rgba(0,0,0,0.4);
-
-  /* --- Dimensioni del testo ---
-     xs = etichette e note in monospazio, sm = testo di servizio,
-     md = testo corrente, lg = titoli di riquadro. */
-  --text-xs:10.5px;
-  --text-sm:12px;
-  --text-md:13.5px;
-  --text-lg:16px;
-}
+@import './src/ds/tokens.css';
 
 /* ============================================================================
    UTILITÀ

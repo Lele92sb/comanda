@@ -1,5 +1,9 @@
 import { defineConfig } from 'vite';
 import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const { version } = JSON.parse(readFileSync('./package.json', 'utf8'));
 
@@ -27,6 +31,18 @@ export default defineConfig({
   build: {
     outDir: '../dist',
     emptyOutDir: true,
+    // Due pagine, non una. banco.html e' il banco dei componenti: si apre a
+    // /banco.html e mostra ogni pezzo del design system in ogni stato, senza
+    // account, senza cucina e senza dati. Viene pubblicato con l'app apposta
+    // — chi ci lavora deve poterlo aprire dove l'app gira davvero, non solo
+    // sul proprio computer — e non pesa sull'app: e' un pacchetto separato,
+    // che nessuno scarica finche' non apre quell'indirizzo.
+    rollupOptions: {
+      input: {
+        app: resolve(__dirname, 'app/index.html'),
+        banco: resolve(__dirname, 'app/banco.html'),
+      },
+    },
     // Le mappe servono a leggere gli errori veri quando arriveranno dagli
     // utenti: senza, in produzione si vedono solo righe minificate.
     sourcemap: true,
