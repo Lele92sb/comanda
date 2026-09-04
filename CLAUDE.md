@@ -159,14 +159,29 @@ uno per commit — il messaggio di ognuno spiega cosa e perché.
 | 10 | modifiche in tempo reale | **da fare** — il canale è aperto solo sulle richieste, vedi sotto |
 | 3 | studio dei concorrenti | **da fare** (per ultimo, come chiesto) |
 
-**Il tempo reale sui DATI della cucina non è banale, e la ragione è una sola:**
-la lettura passa da `leggi_sezione()`, che REDIGE — toglie i prezzi a chi non
-li vede, i telefoni a chi non li vede, i turni non pubblicati. Il canale in
-tempo reale di Supabase non passa da lì: manderebbe la riga INTERA a chiunque
-possa leggere la tabella. Per questo `kitchen_data` non è nella pubblicazione e
-`kitchen_requests` sì. Chi affronterà il punto 10 deve partire da qui: serve
-un canale che notifichi il CAMBIAMENTO senza mandare il contenuto, e poi una
-rilettura da `leggi_sezione()`.
+**Il tempo reale sui DATI della cucina non è banale, e la ragione è precisa.**
+
+Realtime di Supabase rispetta RLS: manda una riga solo a chi potrebbe leggerla
+con una `select`. E su `kitchen_data` la `select` ce l'ha **solo il titolare**
+(`data_select`) — tutti gli altri passano da `leggi_sezione()`, che REDIGE:
+toglie i prezzi a chi non li vede, i telefoni a chi non li vede, i turni non
+pubblicati.
+
+Quindi abilitando Realtime su `kitchen_data` oggi **non si aprirebbe un buco**:
+semplicemente non funzionerebbe per nessuno tranne il titolare, cioè per
+nessuno di quelli a cui serve.
+
+**La trappola è il passo dopo**, ed è per questo che sta scritto qui: chi vede
+che «non arriva niente» è tentato di allargare `data_select` a tutti i membri.
+Quello sì che aprirebbe il buco — e in un modo che non si nota, perché tutto
+comincerebbe a funzionare benissimo. La redazione dei campi dentro un blob JSON
+RLS non la sa fare: filtra righe, non campi.
+
+Le due strade vere sono: un canale che porta solo «la sezione X è cambiata,
+versione N» (nessun dato, poi si rilegge da `leggi_sezione()`), oppure spezzare
+`kitchen_data` in tabelle vere con colonne — che è la stessa cosa che chiede la
+voce «Modello dati» qui sotto, e che regalerebbe il tempo reale come effetto
+collaterale.
 
 Le migrazioni da applicare a mano stanno in `supabase/migrazioni/`, numerate.
 `schema.sql` resta la fonte di verità per una cucina nuova; le migrazioni
