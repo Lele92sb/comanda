@@ -12,7 +12,7 @@
 --
 -- PERCHÉ ESISTE. Le protezioni si provavano a mano, con due account, e
 -- «avevo provato solo i due estremi» è la frase con cui è passato un buco.
--- Quarantuno prove che girano in un secondo si rifanno tutte, ogni volta,
+-- 51 prove che girano in un secondo si rifanno tutte, ogni volta,
 -- anche quelle che sembrano ovvie — soprattutto quelle.
 --
 -- COSA PROVA, e non è la stessa cosa che leggere le policy: le policy le ho
@@ -21,7 +21,7 @@
 -- persona — e si guarda cosa esce. È la stessa strada che farebbe qualcuno
 -- che prova ad aggirarle chiamando l'API a mano.
 --
--- Va lanciata DOPO le migrazioni da 01 a 07.
+-- Va lanciata DOPO le migrazioni da 01 a 09.
 -- ============================================================================
 
 begin;
@@ -33,7 +33,8 @@ begin
   select array_agg(t order by t) into mancanti
     from unnest(array['ingredienti','ingredienti_costi','persone','persone_personali',
                       'turni','giorni_pubblicati','piatti','piatti_costi',
-                      'fornitori','fatture_importate','importazioni']) t
+                      'fornitori','fatture_importate','importazioni',
+                      'tipi_turno','persone_costo']) t
    where to_regclass('public.' || t) is null;
   if mancanti is not null then
     raise exception 'Mancano le tabelle: %. Lancia prima le migrazioni da 02 a 07.',
@@ -75,7 +76,11 @@ end $fk$;
 -- provare solo i due estremi è come non provare.
 insert into kitchens (id, name, editor_vede_costi, editor_vede_personali, created_by) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Prova A — aperta',    true,  true,  '11111111-1111-1111-1111-111111111111'),
-  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'Prova B — riservata', false, false, '11111111-1111-1111-1111-111111111111');
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'Prova B — riservata', false, false, '11111111-1111-1111-1111-111111111111'),
+  -- La combinazione che conta per la tariffa oraria: chi può modificare vede i
+  -- COSTI ma non le PERSONE. Deve poter sapere quanto costa il servizio di
+  -- sabato senza sapere quanto guadagna Marco.
+  ('cccccccc-cccc-cccc-cccc-cccccccccccc', 'Prova C — costi sì, persone no', true, false, '11111111-1111-1111-1111-111111111111');
 
 insert into kitchen_members (kitchen_id, user_id, role, gestisce_richieste) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'owner',  false),
@@ -83,7 +88,9 @@ insert into kitchen_members (kitchen_id, user_id, role, gestisce_richieste) valu
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '44444444-4444-4444-4444-444444444444', 'viewer', false),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '55555555-5555-5555-5555-555555555555', 'editor', true),
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '11111111-1111-1111-1111-111111111111', 'owner',  false),
-  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '33333333-3333-3333-3333-333333333333', 'editor', false);
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '33333333-3333-3333-3333-333333333333', 'editor', false),
+  ('cccccccc-cccc-cccc-cccc-cccccccccccc', '11111111-1111-1111-1111-111111111111', 'owner',  false),
+  ('cccccccc-cccc-cccc-cccc-cccccccccccc', '77777777-7777-7777-7777-777777777777', 'editor', false);
 
 insert into kitchen_data (kitchen_id, key, value) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'knowledge', '"niente"'::jsonb);
 
@@ -91,7 +98,8 @@ insert into ingredienti (kitchen_id, id, name) values ('aaaaaaaa-aaaa-aaaa-aaaa-
 insert into ingredienti_costi (kitchen_id, id, price, supplier) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','i1', 8.20, 'Rossi'), ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','i1', 8.20, 'Rossi');
 
-insert into persone (kitchen_id, id, name) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','p1','Luca'), ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','p1','Luca');
+insert into persone (kitchen_id, id, name) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','p1','Luca'), ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','p1','Luca'), ('cccccccc-cccc-cccc-cccc-cccccccccccc','p1','Luca');
 insert into persone_personali (kitchen_id, id, phone, hours) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','p1','333111', 40), ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','p1','333111', 40);
 
@@ -103,6 +111,16 @@ insert into fatture_importate (kitchen_id, documento) values ('aaaaaaaa-aaaa-aaa
 insert into importazioni (kitchen_id, id, fornitore) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','im1','Rossi'), ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','im1','Rossi');
 
 -- Un giorno pubblicato e uno no: è tutta la prova del «sola lettura».
+-- La tariffa oraria: il dato più delicato dell'app.
+insert into persone_costo (kitchen_id, id, costo_orario) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','p1', 15), ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb','p1', 15), ('cccccccc-cccc-cccc-cccc-cccccccccccc','p1', 15);
+
+-- Un tipo di turno con delle ore, o il costo del lavoro sarebbe sempre zero e
+-- la prova passerebbe senza provare niente.
+insert into tipi_turno (kitchen_id, id, code, hours) values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','t1','P', 8), ('cccccccc-cccc-cccc-cccc-cccccccccccc','t1','P', 8);
+insert into turni (kitchen_id, staff_id, giorno, code) values ('cccccccc-cccc-cccc-cccc-cccccccccccc','p1','2026-01-01','P');
+
 insert into giorni_pubblicati (kitchen_id, giorno) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-01-01');
 insert into turni (kitchen_id, staff_id, giorno, code) values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','p1','2026-01-01','P'),
@@ -193,11 +211,25 @@ begin
   perform pg_temp.verifica('può modificare (A: vede tutto)', 'prova a darsi i costi da solo', '22222222-2222-2222-2222-222222222222', 'update kitchens set editor_vede_costi=true where id=''bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb''', 'negata', true);
   perform pg_temp.verifica('può modificare (A: vede tutto)', 'prova a approvare la richiesta di un altro', '22222222-2222-2222-2222-222222222222', 'update kitchen_requests set stato=''approvata'' where kitchen_id=''aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa''', 'negata', true);
   perform pg_temp.verifica('gestisce le richieste', 'prova a approvare la richiesta di un altro', '55555555-5555-5555-5555-555555555555', 'update kitchen_requests set stato=''approvata'' where kitchen_id=''aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa''', 'riuscita', true);
+
+  -- La tariffa oraria: serve vedere i costi E le persone, non uno dei due.
+  perform pg_temp.verifica('titolare', 'legge la tariffa oraria', '11111111-1111-1111-1111-111111111111', 'select count(*) from persone_costo where kitchen_id=''aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa''', '1', false);
+  perform pg_temp.verifica('può modificare (A: vede tutto)', 'legge la tariffa oraria', '22222222-2222-2222-2222-222222222222', 'select count(*) from persone_costo where kitchen_id=''aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa''', '1', false);
+  perform pg_temp.verifica('sola lettura', 'legge la tariffa oraria', '44444444-4444-4444-4444-444444444444', 'select count(*) from persone_costo where kitchen_id=''aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa''', '0', false);
+  perform pg_temp.verifica('può modificare (B: niente costi né personali)', 'legge la tariffa oraria', '33333333-3333-3333-3333-333333333333', 'select count(*) from persone_costo where kitchen_id=''bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb''', '0', false);
+  perform pg_temp.verifica('può modificare (C: costi sì, persone no)', 'legge la tariffa oraria', '77777777-7777-7777-7777-777777777777', 'select count(*) from persone_costo where kitchen_id=''cccccccc-cccc-cccc-cccc-cccccccccccc''', '0', false);
+  perform pg_temp.verifica('può modificare (C: costi sì, persone no)', 'prova a scrivere una tariffa oraria', '77777777-7777-7777-7777-777777777777', 'insert into persone_costo (kitchen_id,id,costo_orario) values (''cccccccc-cccc-cccc-cccc-cccccccccccc'',''p1'',99)', 'negata', true);
+  perform pg_temp.verifica('può modificare (B: niente costi né personali)', 'prova a scrivere una tariffa oraria', '33333333-3333-3333-3333-333333333333', 'insert into persone_costo (kitchen_id,id,costo_orario) values (''bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'',''p1'',99)', 'negata', true);
+
+  -- Ma il TOTALE del servizio sì: è il suo mestiere, e non rivela lo stipendio.
+  perform pg_temp.verifica('può modificare (C: costi sì, persone no)', 'legge il costo del servizio (solo il totale)', '77777777-7777-7777-7777-777777777777', 'select count(*) from costo_lavoro(''cccccccc-cccc-cccc-cccc-cccccccccccc'',''2026-01-01'',''2026-01-31'')', '1', false);
+  perform pg_temp.verifica('sola lettura', 'legge il costo del servizio', '44444444-4444-4444-4444-444444444444', 'select count(*) from costo_lavoro(''aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'',''2026-01-01'',''2026-01-31'')', 'ERRORE: non autorizzato', false);
+  perform pg_temp.verifica('estraneo', 'legge il costo del servizio di una cucina non sua', '66666666-6666-6666-6666-666666666666', 'select count(*) from costo_lavoro(''aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'',''2026-01-01'',''2026-01-31'')', 'ERRORE: non autorizzato', false);
 end $prove$;
 
 
 -- ---- Si rimette tutto com'era ----------------------------------------------
-delete from kitchens where id in ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
+delete from kitchens where id in ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'cccccccc-cccc-cccc-cccc-cccccccccccc');
 
 do $fk2$
 declare r record;
@@ -213,7 +245,7 @@ end $fk2$;
 insert into esiti (ruolo, cosa, atteso, ottenuto, esito)
 select '—', 'cucine di prova rimaste', '0', count(*)::text,
        case when count(*) = 0 then 'ok' else '*** GUARDA QUI ***' end
-  from kitchens where id in ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
+  from kitchens where id in ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'cccccccc-cccc-cccc-cccc-cccccccccccc');
 
 insert into esiti (ruolo, cosa, atteso, ottenuto, esito)
 select '—', 'vincoli verso auth.users rimessi',

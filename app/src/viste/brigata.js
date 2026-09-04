@@ -93,6 +93,9 @@ async function openStaffForm(existing){
   const s = existing || {};
   scheda = document.createElement('cmd-scheda-persona');
   scheda.nuova = !existing;
+  // Il costo orario vuole i due permessi insieme. Chi non li ha non vede il
+  // campo — e non lo vede VUOTO, che farebbe pensare a un dato perduto.
+  scheda.mostraTariffa = Cloud.vedeTariffe();
   scheda.ruoli = RUOLI;
   scheda.membri = membri;
   scheda.stazioni = state.stations.map(st => ({ id: st.id, nome: st.name }));
@@ -101,6 +104,7 @@ async function openStaffForm(existing){
     nome: s.name || '',
     ruolo: s.role || 'Cuoco',
     ore: s.hours || '',
+    costoOrario: s.costoOrario == null ? '' : String(s.costoOrario),
     telefono: s.phone || '',
     email: s.email || '',
     partite: (s.stations || []).slice(),
@@ -125,6 +129,12 @@ async function openStaffForm(existing){
       name: p.nome,
       role: p.ruolo,
       hours: p.ore,
+      // Chi non vede il campo non lo manda: senza questa riga, un salvataggio
+      // fatto da chi non ha i permessi manderebbe una stringa vuota e
+      // azzererebbe la tariffa. `salva_persone` non la scriverebbe comunque —
+      // ma due difese che dicono la stessa cosa sono meglio di una sola che
+      // qualcuno un giorno toglie.
+      ...(Cloud.vedeTariffe() ? { costoOrario: p.costoOrario } : {}),
       phone: p.telefono,
       email: p.email,
       stations: p.partite,

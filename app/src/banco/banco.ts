@@ -85,6 +85,8 @@ import { controllaContrasto } from './contrasto.ts';
 import '../ds/ricerca.ts';
 import '../ds/qr.ts';
 import '../ds/notifiche-vista.ts';
+import '../turni/costo-vista.ts';
+import type { RigaCostoGiorno } from '../turni/costo-vista.ts';
 import type { InvitoVista, MembroVista } from '../account/squadra-vista.ts';
 
 interface Caso {
@@ -149,13 +151,13 @@ const MEMBRI = [
 
 const PERSONA_PIENA: PersonaModifica = {
   id: 'lorenc', nome: 'Lorenc', ruolo: 'Chef de partie', ore: '49',
-  telefono: '333 1234567', email: 'lorenc@ristorante.it',
+  telefono: '333 1234567', email: 'lorenc@ristorante.it', costoOrario: '14,50',
   partite: ['pass', 'primi'], fuoriExtra: false, accountId: 'u1',
 };
 
 const PERSONA_NUOVA: PersonaModifica = {
   id: 'nuova', nome: '', ruolo: 'Cuoco', ore: '',
-  telefono: '', email: '', partite: [], fuoriExtra: false, accountId: '',
+  telefono: '', email: '', costoOrario: '', partite: [], fuoriExtra: false, accountId: '',
 };
 
 const CODICI: CodiceTurno[] = [
@@ -367,6 +369,23 @@ const DURATE = [
   { valore: '1', etichetta: '1 giorno' }, { valore: '7', etichetta: '7 giorni' },
   { valore: '14', etichetta: '14 giorni' }, { valore: 'mai', etichetta: 'senza scadenza' },
 ];
+
+/* Una settimana con un sabato che costa il doppio di un martedi': con numeri
+   tutti uguali le barre sarebbero tutte piene e non si vedrebbe se sono in
+   scala. Il totale delle righe fa 812 €, che e' il numero dell'esempio. */
+const COSTO_GIORNI: RigaCostoGiorno[] = [
+  { etichetta: 'mar 3', ore: '16.0h', costo: '€ 96,00',  quota: 0.34, completo: true,  weekend: false },
+  { etichetta: 'mer 4', ore: '24.0h', costo: '€ 144,00', quota: 0.51, completo: true,  weekend: false },
+  { etichetta: 'gio 5', ore: '24.0h', costo: '€ 144,00', quota: 0.51, completo: true,  weekend: false },
+  { etichetta: 'ven 6', ore: '26.0h', costo: '€ 156,00', quota: 0.55, completo: true,  weekend: false },
+  { etichetta: 'sab 7', ore: '47.0h', costo: '€ 282,00', quota: 1.00, completo: true,  weekend: true  },
+];
+
+/* Lo stesso periodo con un buco: il venerdi' ha lavorato qualcuno senza
+   tariffa, e la sua barra e' rigata perche' un giorno con un buco nei dati
+   non deve sembrare un giorno economico. */
+const COSTO_GIORNI_PARZIALE: RigaCostoGiorno[] = COSTO_GIORNI.map(g =>
+  g.etichetta === 'ven 6' ? { ...g, costo: '€ 96,00', quota: 0.34, completo: false } : g);
 
 const GRUPPI: Gruppo[] = [
   {
@@ -590,6 +609,15 @@ const GRUPPI: Gruppo[] = [
         contenuto: () => html`
           <cmd-scheda-persona .persona=${PERSONA_NUOVA} .stazioni=${STAZIONI_SCELTA}
                               .ruoli=${RUOLI} .membri=${[]} nuova></cmd-scheda-persona>`,
+      },
+      {
+        id: 'persona-tariffa',
+        titolo: 'Con il costo orario: due permessi accesi insieme',
+        nota: 'Il campo compare solo a chi vede i costi E i dati personali. E’ lo stato che nessuno guarderebbe mai, perche’ per vederlo nell’app servono due interruttori accesi insieme su una cucina vera: quanto guadagna un collega e’ la cosa che in una brigata non deve girare.',
+        contenuto: () => html`
+          <cmd-scheda-persona .persona=${PERSONA_PIENA} .stazioni=${STAZIONI_SCELTA}
+                              .ruoli=${RUOLI} .membri=${MEMBRI} ?nuova=${false}
+                              mostraTariffa></cmd-scheda-persona>`,
       },
       {
         id: 'persona-senza-stazioni',
@@ -1150,6 +1178,57 @@ const GRUPPI: Gruppo[] = [
         id: 'brigata-sola-lettura',
         titolo: 'Chi puo’ solo guardare',
         contenuto: () => html`<cmd-brigata solo-lettura .persone=${BRIGATA_VISTA}></cmd-brigata>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-costo-servizio — la domanda del lunedi\u2019 mattina',
+    casi: [
+      {
+        id: 'costo-pieno',
+        titolo: 'Il conto completo: 812 € di personale, 1.160 € da incassare',
+        nota: 'La riga grossa NON e\u2019 il costo: e\u2019 l\u2019incasso che serve a pagarlo. Sommare e basta direbbe 812, ma di ogni euro che entra 30 centesimi se ne vanno in merce — 348 € di differenza, e sempre per difetto. E\u2019 anche la cosa che nessun concorrente puo\u2019 dire: chi fa i turni non conosce il food cost, chi fa il food cost non sa cosa sia un turno.',
+        contenuto: () => html`
+          <cmd-costo-servizio costo="€ 812,00" ore="137.0h" pareggio="€ 1.160,00"
+                              foodCost="30%" .giorni=${COSTO_GIORNI}></cmd-costo-servizio>`,
+      },
+      {
+        id: 'costo-parziale',
+        titolo: 'Quando manca la tariffa di qualcuno',
+        nota: 'Il numero resta, dichiarato incompleto, e si dice CHI manca per nome. Toglierlo sarebbe peggio — meta\u2019 conto e\u2019 comunque meglio di nessun conto — ma lasciarlo muto sarebbe la cosa peggiore di tutte: un totale piu\u2019 basso del vero, in un riquadro che si chiama «quanto costa», non lo mette in dubbio nessuno. La barra del venerdi\u2019 e\u2019 rigata: un giorno con un buco nei dati non deve sembrare un giorno economico.',
+        contenuto: () => html`
+          <cmd-costo-servizio costo="€ 626,00" ore="137.0h" pareggio="€ 894,29"
+                              foodCost="30%" .giorni=${COSTO_GIORNI_PARZIALE}
+                              .senzaTariffa=${['Lorenc', 'Valerio']}></cmd-costo-servizio>`,
+      },
+      {
+        id: 'costo-senza-foodcost',
+        titolo: 'Senza food cost obiettivo: il pareggio non si dice',
+        nota: 'La riga grossa sparisce e resta una nota che spiega cosa manca. Mostrare 812 € al posto di 1.160 sembrerebbe una risposta e sarebbe quella sbagliata di sicuro — meglio non rispondere che rispondere per difetto a chi deve decidere quanto far pagare un menu.',
+        contenuto: () => html`
+          <cmd-costo-servizio costo="€ 812,00" ore="137.0h"
+                              .giorni=${COSTO_GIORNI}></cmd-costo-servizio>`,
+      },
+      {
+        id: 'costo-solo-totale',
+        titolo: 'Chi vede i costi ma non le persone',
+        nota: 'Due domande diverse — «quanto costa Marco» e «quanto costa sabato» — e la seconda si puo\u2019 rispondere senza rispondere alla prima. Qui il totale lo somma il database e le tariffe non arrivano mai al telefono: la nota in fondo dice perche\u2019 il dettaglio per persona non c\u2019e\u2019, invece di lasciarlo mancare in silenzio.',
+        contenuto: () => html`
+          <cmd-costo-servizio costo="€ 812,00" ore="137.0h" pareggio="€ 1.160,00"
+                              foodCost="30%" .giorni=${COSTO_GIORNI}
+                              soloTotale></cmd-costo-servizio>`,
+      },
+      {
+        id: 'costo-vuoto',
+        titolo: 'Il primo passo, non un vicolo cieco',
+        nota: 'Nessuna tariffa impostata. Il vuoto dice cosa fare e perche\u2019 vale la pena farlo.',
+        contenuto: () => html`<cmd-costo-servizio vuoto></cmd-costo-servizio>`,
+      },
+      {
+        id: 'costo-vuoto-lettura',
+        titolo: 'Vuoto, per chi non puo\u2019 impostarle',
+        nota: 'Lo stesso vuoto, ma senza mandare a fare una cosa che non si puo\u2019 fare: chi ha sola lettura non va invitato ad aprire la Brigata.',
+        contenuto: () => html`<cmd-costo-servizio vuoto soloLettura></cmd-costo-servizio>`,
       },
     ],
   },

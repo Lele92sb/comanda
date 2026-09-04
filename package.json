@@ -10,6 +10,7 @@
     "test": "node --experimental-strip-types --test tests/*.test.js",
     "typecheck": "tsc --noEmit",
     "lint:import": "node scripts/controlla-import.cjs",
+    "lint:token": "node scripts/controlla-token.cjs",
     "icone": "node scripts/genera-icone.cjs",
     "lint:lingue": "node scripts/controlla-lingue.cjs"
   },

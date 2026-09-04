@@ -53,6 +53,26 @@ Cloud.puoDecidereRichieste = function(){
   return Cloud.role === 'owner' || Cloud.gestisceRichieste === true;
 };
 
+/* Cosa mostrare, non cosa proteggere. Il titolare vede sempre tutto; chi puo'
+   modificare vede quello che il titolare ha acceso sulla riga della cucina.
+   A difendere ci sono le policy: qui si decide solo se disegnare un campo che
+   resterebbe comunque vuoto, e un campo vuoto senza spiegazione fa pensare a
+   un dato perso. */
+Cloud.vedeCosti = function(){
+  if(!CLOUD_ENABLED) return true;
+  if(Cloud.role === 'owner') return true;
+  return Cloud.role === 'editor' && Boolean(Cloud.kitchen && Cloud.kitchen.editor_vede_costi);
+};
+Cloud.vedePersonali = function(){
+  if(!CLOUD_ENABLED) return true;
+  if(Cloud.role === 'owner') return true;
+  return Cloud.role === 'editor' && Boolean(Cloud.kitchen && Cloud.kitchen.editor_vede_personali);
+};
+/* La tariffa oraria vuole TUTTI E DUE i permessi: e' un dato della persona ed
+   e' un dato economico, e un titolare che ha acceso «vede i dati personali»
+   per far gestire i turni non ha acconsentito a mostrare gli stipendi. */
+Cloud.vedeTariffe = function(){ return Cloud.vedeCosti() && Cloud.vedePersonali(); };
+
 // --------------------------------------------------------------------------
 // Avvio: in cloud crea il client e recupera la sessione già attiva (se c'è).
 // --------------------------------------------------------------------------
@@ -421,7 +441,7 @@ const SEZIONI_IN_TABELLA = {
   staff: elenco({
     tabella: 'persone', leggi: 'leggi_persone', salva: 'salva_persone',
     campi: ['name', 'role', 'hours', 'phone', 'email', 'puoFareExtra', 'userId',
-            'stations', 'weeklyQuota'],
+            'stations', 'weeklyQuota', 'costoOrario'],
     prepara: p => ({
       id: p.id, name: p.name || '', role: p.role || null,
       stations: p.stations || [], weeklyQuota: p.weeklyQuota || [],
@@ -429,6 +449,11 @@ const SEZIONI_IN_TABELLA = {
       phone: p.phone || null, email: p.email || null,
       hours: p.hours === '' || p.hours == null ? null : parseFloat(p.hours),
       userId: p.userId || null,
+      // La tariffa oraria: chi non ha i due permessi la riceve `null` e la
+      // rimanda `null`, e `salva_persone` non la tocca affatto. Fossero due
+      // controlli diversi — uno qui e uno la' — il giorno che divergono si
+      // azzererebbero le tariffe di tutti senza un errore.
+      costoOrario: p.costoOrario === '' || p.costoOrario == null ? null : parseFloat(p.costoOrario),
     }),
   }),
 
@@ -748,6 +773,27 @@ function chiaviIdentita(persona){
   if(tel.length >= 6) k.push('t:'+tel.slice(-9));
   return k;
 }
+/* Il costo del lavoro per chi vede i costi ma NON i dati personali: il
+   database somma e restituisce solo il totale per giorno, cosi' le tariffe non
+   arrivano mai al telefono di chi non deve vederle. Chi le vede non passa di
+   qui — le ha gia' e conta da solo, senza un giro di rete.
+
+   Torna `null` se la migrazione 09 non c'e' ancora: il riquadro non compare,
+   e il resto dell'app non se ne accorge. */
+Cloud.costoLavoro = async function(dal, al){
+  if(!CLOUD_ENABLED || !Cloud.kitchen) return null;
+  const { data, error } = await Cloud.client.rpc('costo_lavoro', {
+    p_kitchen: Cloud.kitchen.id, p_dal: dal, p_al: al,
+  });
+  if(error) return null;
+  return (data || []).map(r => ({
+    giorno: r.giorno,
+    ore: Number(r.ore) || 0,
+    costo: Number(r.costo) || 0,
+    completo: r.completo !== false,
+  }));
+};
+
 Cloud.identityKeys = chiaviIdentita;
 
 Cloud.impegniAltrove = async function(brigataLocale, dates){

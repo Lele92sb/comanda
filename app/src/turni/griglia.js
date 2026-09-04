@@ -1,6 +1,9 @@
 import { CODE_HOURS, CODE_LABEL, SERVICE_LABEL, SHIFT_CONFIG, TURNO_DEF, WORKING_CODES, esc, periodDates, periodLabel, periodMode, save, state } from '../core/state.js';
 import { assegnaStazione, dayName, isoDate, normalizzaCella, parseISO, serviziDelCodice, stazioneDi, stazioniDi } from '../lib/logic.js';
 import { Cloud } from '../lib/cloud.js';
+import { costoDelLavoro, foodCostMedio, incassoDiPareggio } from '../lib/costo-lavoro.js';
+import { soldi } from '../core/valuta.ts';
+import './costo-vista.ts';
 import { dataLunga } from '../core/lingua.ts';
 import { renderDashboard } from '../viste/dashboard.js';
 // fabbisogno.js importa da qui `coloreStazione`, e qui si importa `renderCapienza`
@@ -357,6 +360,10 @@ export function weeklyExtraFromTurni(){
 let vistaOre = null;
 
 export function renderOreExtra(){
+  // Attaccato qui apposta: e' lo stesso conto in un'altra unita' di misura, e
+  // sette punti di chiamata da tenere allineati sono sette modi di scordarne
+  // uno — con l'effetto che il costo resterebbe fermo al periodo di prima.
+  renderCostoServizio();
   const el = document.getElementById('ore-extra-table');
   if(!el) return;
   if(!vistaOre || !vistaOre.isConnected){
@@ -371,4 +378,95 @@ export function renderOreExtra(){
           : (r.under > 0 ? '−' + r.under.toFixed(1) + 'h sotto' : 'in linea'),
     classe: r.extra > 0 ? 'extra' : (r.under > 0 ? 'under' : ''),
   }));
+}
+
+
+// ============================================================================
+// QUANTO COSTA IL PERIODO, e quanto serve incassare per pagarlo.
+//
+// Vive attaccato alle ore extra e non in una schermata sua: e' lo stesso conto
+// guardato con un'altra unita' di misura — le stesse ore, moltiplicate per
+// quello che costano. Separarli vorrebbe dire due punti da tenere allineati e
+// un utente che deve cambiare scheda per capire perche' un numero e' quello.
+//
+// LE DUE STRADE, e il perche'. Chi vede le tariffe conta sul proprio telefono:
+// ha gia' tutto, e un giro di rete per rifare una moltiplicazione sarebbe solo
+// piu' lento. Chi vede i costi ma non le persone non ha le tariffe e non deve
+// averle: per lui somma il database e ne esce solo il totale. Due strade
+// perche' sono due domande diverse — «quanto costa Marco» e «quanto costa
+// sabato» — e la seconda si puo' rispondere senza rispondere alla prima.
+// ============================================================================
+let vistaCosto = null;
+
+export function renderCostoServizio(){
+  const el = document.getElementById('costo-servizio');
+  if(!el) return;
+
+  // A chi non vede i costi il riquadro non compare affatto. Mostrarlo vuoto
+  // sarebbe peggio: direbbe che c'e' un numero e che a lui non lo dicono.
+  if(!Cloud.vedeCosti()){ el.replaceChildren(); vistaCosto = null; return; }
+
+  if(!vistaCosto || !vistaCosto.isConnected){
+    vistaCosto = document.createElement('cmd-costo-servizio');
+    el.replaceChildren(vistaCosto);
+  }
+  vistaCosto.soloLettura = Cloud.enabled && !Cloud.canWrite();
+
+  const giorni = periodDates();
+  const foodPct = foodCostMedio(state.recipes || []);
+
+  if(Cloud.vedeTariffe()){
+    const r = costoDelLavoro({
+      giorni, turni: state.shifts, persone: state.staff, oreDi: CODE_HOURS,
+    });
+    mostra(r.perGiorno, r.ore, r.costo, r.senzaTariffa, foodPct, false,
+           state.staff.every(p => p.costoOrario == null || p.costoOrario === ''));
+    return;
+  }
+
+  // Chi vede i costi ma non le persone: il totale lo fa il database.
+  Cloud.costoLavoro(giorni[0], giorni[giorni.length - 1]).then(righe => {
+    if(!righe){ el.replaceChildren(); vistaCosto = null; return; }
+    const perGiorno = giorni.map(g => {
+      const r = righe.find(x => x.giorno === g);
+      return { giorno: g, ore: r ? r.ore : 0, costo: r ? r.costo : 0,
+               completo: r ? r.completo : true };
+    });
+    mostra(perGiorno,
+           perGiorno.reduce((n, g) => n + g.ore, 0),
+           perGiorno.reduce((n, g) => n + g.costo, 0),
+           // I nomi di chi non ha la tariffa non escono dal database, ed e'
+           // giusto cosi': sapere CHI sono e' gia' un dato sulle persone.
+           perGiorno.some(g => !g.completo) ? ['\u2014'] : [],
+           foodPct, true,
+           perGiorno.every(g => g.costo === 0));
+  });
+}
+
+function mostra(perGiorno, ore, costo, senzaTariffa, foodPct, soloTotale, vuoto){
+  if(!vistaCosto) return;
+  const massimo = perGiorno.reduce((m, g) => Math.max(m, g.costo), 0);
+  const pareggio = incassoDiPareggio(costo, foodPct);
+
+  vistaCosto.vuoto = vuoto;
+  vistaCosto.soloTotale = soloTotale;
+  vistaCosto.costo = soldi(costo);
+  vistaCosto.ore = ore.toFixed(1) + 'h';
+  vistaCosto.pareggio = pareggio === null ? '' : soldi(pareggio);
+  vistaCosto.foodCost = foodPct === null ? '' : foodPct.toFixed(0) + '%';
+  vistaCosto.senzaTariffa = senzaTariffa;
+  // Solo i giorni in cui si e' lavorato: una riga a zero per ogni riposo
+  // allungherebbe l'elenco senza dire niente.
+  vistaCosto.giorni = perGiorno.filter(g => g.ore > 0).map(g => {
+    const d = parseISO(g.giorno);
+    const nome = dayName(g.giorno);
+    return {
+      etichetta: nome + ' ' + d.getDate(),
+      ore: g.ore.toFixed(1) + 'h',
+      costo: soldi(g.costo),
+      quota: massimo > 0 ? g.costo / massimo : 0,
+      completo: g.completo,
+      weekend: nome === 'Sab' || nome === 'Dom',
+    };
+  });
 }

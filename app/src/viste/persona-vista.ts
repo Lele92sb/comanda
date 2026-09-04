@@ -27,6 +27,7 @@
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { t } from '../core/lingua.ts';
+import { simbolo } from '../core/valuta.ts';
 import '../ds/bottone.ts';
 import '../ds/campo.ts';
 import '../ds/chip.ts';
@@ -42,6 +43,8 @@ export interface PersonaModifica {
   nome: string;
   ruolo: string;
   ore: string;
+  /** Il costo ORARIO per l'azienda, come testo: il campo è un campo. */
+  costoOrario: string;
   telefono: string;
   email: string;
   /** Id delle partite, dalla principale in giu'. */
@@ -52,7 +55,7 @@ export interface PersonaModifica {
 }
 
 const VUOTA: PersonaModifica = {
-  id: '', nome: '', ruolo: 'Cuoco', ore: '', telefono: '', email: '',
+  id: '', nome: '', ruolo: 'Cuoco', ore: '', costoOrario: '', telefono: '', email: '',
   partite: [], fuoriExtra: false, accountId: '',
 };
 
@@ -65,6 +68,9 @@ export class SchedaPersona extends LitElement {
     nuova: { type: Boolean },
     bozza: { type: Object, state: true },
     errore: { type: String, state: true },
+    /* Il componente NON sa cosa siano i permessi: sa solo se questo campo va
+       disegnato. Chi lo sa e' il collante, e a difendere c'e' la policy. */
+    mostraTariffa: { type: Boolean },
     inseguita: { type: String, state: true },
   };
 
@@ -76,6 +82,7 @@ export class SchedaPersona extends LitElement {
   declare nuova: boolean;
   declare bozza: PersonaModifica;
   declare errore: string;
+  declare mostraTariffa: boolean;
   /** Quale partita ha appena cambiato posto, per rimetterle il fuoco addosso. */
   declare inseguita: string;
 
@@ -88,6 +95,7 @@ export class SchedaPersona extends LitElement {
     this.nuova = true;
     this.bozza = { ...VUOTA };
     this.errore = '';
+    this.mostraTariffa = false;
     this.inseguita = '';
   }
 
@@ -219,6 +227,7 @@ export class SchedaPersona extends LitElement {
         ...this.bozza,
         nome,
         telefono: this.bozza.telefono.trim(),
+        costoOrario: this.bozza.costoOrario.trim(),
         email: this.bozza.email.trim(),
         // L'ordine e' quello dell'elenco, e gli id sconosciuti tornano in coda.
         partite: this.partiteNote.concat(this.partiteOrfane),
@@ -307,6 +316,13 @@ export class SchedaPersona extends LitElement {
                    @input=${(e: Event) => this.scrivi('ore', (e.target as HTMLInputElement).value)}>
           </cmd-campo>
         </div>
+
+        ${this.mostraTariffa ? html`
+          <cmd-campo etichetta=${t('Costo orario ({valuta}/h)', { valuta: simbolo() })}
+                     aiuto=${t('Il costo pieno per l\'azienda, contributi compresi — non lo stipendio netto. Serve a sapere quanto costa un servizio e quanto bisogna incassare per pagarselo. Senza, il conto del periodo resta parziale e lo dice.')}>
+            <input type="number" min="0" step="0.01" .value=${this.bozza.costoOrario} placeholder="es. 14,50"
+                   @input=${(e: Event) => this.scrivi('costoOrario', (e.target as HTMLInputElement).value)}>
+          </cmd-campo>` : nothing}
 
         <div class="due">
           <cmd-campo etichetta=${t('Numero di cellulare')}>

@@ -37,6 +37,10 @@ jobs:
       # Un simbolo usato ma non importato non lo vede ne' il compilatore ne'
       # il bundler: esplode solo a schermo, davanti a chi usa l'app.
       - run: npm run lint:import
+      # Un token che non esiste non lo segnala nessuno: tsc non guarda dentro
+      # un template css``, la build lo copia, e il browser applica il valore
+      # iniziale e va avanti. Restano le barre invisibili e le parole attaccate.
+      - run: npm run lint:token
       # La build fa da controllo strutturale: un import verso un simbolo che
       # non esiste piu' ferma qui il rilascio, non davanti all'utente.
       - run: npm run build
