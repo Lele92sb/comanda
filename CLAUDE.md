@@ -9,7 +9,7 @@ del personale, assistente AI. Italiano e inglese.
 npm ci          # richiede Node >= 22.6 (i test caricano moduli .ts direttamente)
 npm run dev     # sviluppo, ricarica a caldo — le funzioni server NON girano
 npm run preview # build + wrangler: come in produzione, funzioni server comprese
-npm test        # 197 test
+npm test        # 233 test
 npm run typecheck
 npm run lint:import
 npm run lint:lingue  # quanto coprono i dizionari (non blocca)
@@ -154,10 +154,10 @@ uno per commit — il messaggio di ognuno spiega cosa e perché.
 | 9 | quello che sembra cliccabile lo è | fatto |
 | 12 | dashboard | fatto |
 | 11 | permesso per le richieste altrui | codice fatto, migrazione applicata |
-| 5 | notifiche | **da fare** |
-| 13 | iscrizione con QR e link | **da fare** |
-| 10 | modifiche in tempo reale | **da fare** — il canale è aperto solo sulle richieste, vedi sotto |
-| 3 | studio dei concorrenti | **da fare** (per ultimo, come chiesto) |
+| 5 | notifiche | fatto |
+| 13 | iscrizione con QR e link | fatto |
+| 10 | modifiche in tempo reale | fatto — ha richiesto di spezzare il modello dati, vedi `supabase/PIANO-modello-dati.md` |
+| 3 | studio dei concorrenti | fatto — vedi `CONCORRENTI.md` |
 
 **Il tempo reale sui DATI della cucina non è banale, e la ragione è precisa.**
 
@@ -195,10 +195,10 @@ servono a chi ce l'ha già.
   `SUPABASE_SECRET_KEY`, `ANTHROPIC_API_KEY`): senza, le tre funzioni AI
   rispondono "servizio non configurato". Tutto il resto funziona.
 
-- **Modello dati**: ogni sezione è un blob JSON riscritto per intero a ogni
-  salvataggio. A 5.000 ingredienti sono 620 KB per cambiare un prezzo. Il
-  momento in cui va affrontato: oltre ~500 ingredienti per cucina, o due
-  persone che modificano insieme.
+- ~~**Modello dati**~~: **fatto**. Le sezioni sono tabelle vere, si scrive solo
+  quello che cambia, e la riservatezza sta nella FORMA dei dati — quello che
+  una persona non deve vedere sta in una tabella che quella persona non legge.
+  Il perché e come sta in `supabase/PIANO-modello-dati.md`.
 - **Fonti fatture automatiche**: l'interfaccia `FonteFatture` è pronta. Il
   cassetto fiscale non espone API a terzi — si passa da un gestionale
   (Fatture in Cloud, Aruba, TeamSystem) o da un intermediario accreditato.
