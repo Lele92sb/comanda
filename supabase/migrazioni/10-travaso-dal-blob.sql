@@ -42,7 +42,15 @@ declare
   n_blob integer;
   n_tab  bigint;
 begin
-  if public.my_role(p_kitchen) <> 'owner' then
+  -- SI LANCIA DALLA CONSOLE, e li' `auth.uid()` e' nullo: non c'e' nessun
+  -- gettone, la sessione e' `postgres`. Un controllo scritto solo come
+  -- «devi essere il titolare» bloccherebbe proprio l'unico posto da cui questa
+  -- funzione ha senso.
+  --
+  -- Quindi: senza gettone si passa — ma allora a difendere e' il fatto che
+  -- NESSUN grant esce da qui, quindi ci arriva solo chi ha gia' le chiavi del
+  -- database. Col gettone, invece, deve essere il titolare.
+  if auth.uid() is not null and public.my_role(p_kitchen) is distinct from 'owner' then
     raise exception 'solo il titolare';
   end if;
 
@@ -82,7 +90,6 @@ begin
   end loop;
 end;
 $$;
-grant execute on function public.confronta_blob_e_tabelle(uuid) to authenticated;
 
 
 -- ---- 2. Il travaso ---------------------------------------------------------
@@ -105,7 +112,15 @@ declare
   n_tab    bigint;
   quante   integer;
 begin
-  if public.my_role(p_kitchen) <> 'owner' then
+  -- SI LANCIA DALLA CONSOLE, e li' `auth.uid()` e' nullo: non c'e' nessun
+  -- gettone, la sessione e' `postgres`. Un controllo scritto solo come
+  -- «devi essere il titolare» bloccherebbe proprio l'unico posto da cui questa
+  -- funzione ha senso.
+  --
+  -- Quindi: senza gettone si passa — ma allora a difendere e' il fatto che
+  -- NESSUN grant esce da qui, quindi ci arriva solo chi ha gia' le chiavi del
+  -- database. Col gettone, invece, deve essere il titolare.
+  if auth.uid() is not null and public.my_role(p_kitchen) is distinct from 'owner' then
     raise exception 'solo il titolare';
   end if;
 
@@ -156,7 +171,6 @@ begin
   end loop;
 end;
 $$;
-grant execute on function public.travasa_dal_blob(uuid, boolean) to authenticated;
 
 
 -- ============================================================================
@@ -175,6 +189,10 @@ grant execute on function public.travasa_dal_blob(uuid, boolean) to authenticate
 --   select * from public.confronta_blob_e_tabelle('<id cucina>');
 --
 -- L'id della cucina: select id, name from public.kitchens;
+--
+-- NON hanno grant, ed e' voluto: sono due funzioni da console, non da app.
+-- Un travaso si fa una volta sola e guardando i numeri; dietro un pulsante
+-- diventerebbe una cosa che qualcuno preme per vedere che succede.
 --
 -- I TURNI RESTANO FUORI, ed e' voluto. Nel blob sono indicizzati per nome del
 -- giorno o per data a seconda di quanto sono vecchi, e `migrateData` nel
