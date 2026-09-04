@@ -59,14 +59,40 @@ export function uguali(a, b, campi){
   return (campi || []).every(c => stessoValore(a[c], b[c]));
 }
 
+function eVuoto(v){
+  if(v === null || v === undefined || v === '') return true;
+  if(Array.isArray(v)) return v.length === 0;
+  if(typeof v === 'object') return Object.keys(v).length === 0;
+  return false;
+}
+
 function stessoValore(x, y){
   // Vuoto, nullo e non definito sono la stessa cosa: un campo mai compilato e
   // un campo svuotato non sono due stati diversi per chi guarda.
-  const vuotoX = x === null || x === undefined || x === '';
-  const vuotoY = y === null || y === undefined || y === '';
+  //
+  // E fra i vuoti ci sono anche la LISTA VUOTA e l'OGGETTO VUOTO. Una ricetta
+  // senza allergeni arriva dal database come `[]` e dal client a volte come
+  // `undefined`: senza questa riga risulterebbe cambiata a ogni giro, e ogni
+  // salvataggio riscriverebbe tutte le ricette che non hanno allergeni — cioe'
+  // quasi tutte.
+  const vuotoX = eVuoto(x), vuotoY = eVuoto(y);
   if(vuotoX || vuotoY) return vuotoX && vuotoY;
 
   if(typeof x === 'boolean' || typeof y === 'boolean') return !!x === !!y;
+
+  // LISTE E OGGETTI si confrontano per contenuto. Senza questo ramo,
+  // `String([{...}])` da' «[object Object]» per QUALUNQUE contenuto: due
+  // ricette con componenti completamente diversi risulterebbero uguali, e i
+  // componenti non si salverebbero MAI. Nessun errore, nessun segnale: si
+  // scrive una ricetta, l'app dice «salvato», e dentro non c'e' niente.
+  //
+  // Si usa JSON, e per queste liste e' giusto: l'ordine E' il dato — le
+  // portate di un menu degustazione, le righe di una ricetta, i gruppi di
+  // turni in ordine di preferenza. Due ordini diversi sono due cose diverse.
+  if(typeof x === 'object' || typeof y === 'object'){
+    try{ return JSON.stringify(x) === JSON.stringify(y); }
+    catch(e){ return false; }   // riferimenti circolari: meglio riscrivere che perdere
+  }
 
   const nx = Number(x), ny = Number(y);
   if(Number.isFinite(nx) && Number.isFinite(ny)) return nx === ny;

@@ -161,3 +161,27 @@ test('mappe mancanti non fanno esplodere niente', () => {
   assert.deepEqual(differenzeCelle(undefined, { p1: { '2026-09-01': cella('P') } }).daTogliere,
                    [{ staff_id: 'p1', giorno: '2026-09-01' }]);
 });
+
+test('le liste si confrontano per CONTENUTO, non come «[object Object]»', () => {
+  // Senza questo, `String([{...}])` dà «[object Object]» per qualunque
+  // contenuto: due ricette con componenti completamente diversi risulterebbero
+  // uguali, e i componenti non si salverebbero MAI. Nessun errore, nessun
+  // segnale: si scrive una ricetta, l'app dice «salvato», e dentro è vuota.
+  const A = { id: 'r1', items: [{ kind: 'ingredient', refId: 'i1', qty: 1 }] };
+  const B = { id: 'r1', items: [{ kind: 'ingredient', refId: 'i9', qty: 5 }] };
+  assert.equal(uguali(A, B, ['items']), false, 'componenti diversi = riga cambiata');
+  assert.equal(uguali(A, { ...A }, ['items']), true);
+  assert.equal(differenze([B], [A], ['items']).daScrivere.length, 1);
+});
+
+test('l\'ordine di una lista È un cambiamento', () => {
+  // Le portate di un menu degustazione hanno una sequenza, e cambiarla è
+  // cambiare il menu.
+  const prima = [{ id: 'm1', recipeIds: ['a', 'b', 'c'] }];
+  const dopo  = [{ id: 'm1', recipeIds: ['c', 'b', 'a'] }];
+  assert.equal(differenze(dopo, prima, ['recipeIds']).daScrivere.length, 1);
+});
+
+test('una lista vuota e una lista mancante sono la stessa cosa', () => {
+  assert.equal(uguali({ id: 'x', allergens: [] }, { id: 'x' }, ['allergens']), true);
+});

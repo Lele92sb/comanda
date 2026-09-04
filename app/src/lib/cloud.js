@@ -340,85 +340,89 @@ const CAMPI_INGREDIENTE = ['name', 'unit', 'price', 'supplier', 'yieldPct', 'yie
 const CAMPI_PERSONA = ['name', 'role', 'hours', 'phone', 'email', 'puoFareExtra', 'userId',
                        'stations', 'weeklyQuota'];
 
+/* UNA SEZIONE-ELENCO, descritta invece che scritta.
+
+   Cinque sezioni su sette hanno la stessa identica forma: si leggono con una
+   RPC, si confrontano su un elenco di campi, si salvano in blocco, e le righe
+   sparite si cancellano. Scriverle cinque volte vorrebbe dire cinque posti in
+   cui aggiustare la stessa cosa — e alla sesta, quando la forma sara' diventata
+   familiare, qualcuno ne scrivera' una che sembra uguale e non lo e'.
+
+   Cosi' ogni sezione e' una riga, e cosa fa si legge tutto insieme. */
+function elenco({ tabella, leggi, salva, campi, prepara }){
+  return {
+    async leggi(){
+      const { data, error } = await Cloud.client.rpc(leggi, { p_kitchen: Cloud.kitchen.id });
+      if(error) throw error;
+      return data || [];
+    },
+    async scrivi(nuovi, precedenti){
+      const { daScrivere, daTogliere } = differenze(nuovi, precedenti, campi);
+
+      if(daScrivere.length){
+        // UNA chiamata sola, anche per cinquanta righe: importando una fattura
+        // ne nascono anche cinquanta insieme, e cinquanta chiamate in fila su
+        // un telefono col wifi che balla sono venti secondi di schermata ferma.
+        const { error } = await Cloud.client.rpc(salva, {
+          p_kitchen: Cloud.kitchen.id,
+          p_righe: prepara ? daScrivere.map(prepara) : daScrivere,
+        });
+        if(error) throw error;
+      }
+
+      for(const id of daTogliere){
+        const { error } = await Cloud.client.from(tabella)
+          .delete().eq('kitchen_id', Cloud.kitchen.id).eq('id', id);
+        if(error) throw error;
+      }
+      return true;
+    },
+  };
+}
+
 const SEZIONI_IN_TABELLA = {
-  ingredients: {
-    async leggi(){
-      const { data, error } = await Cloud.client.rpc('leggi_ingredienti',
-        { p_kitchen: Cloud.kitchen.id });
-      if(error) throw error;
-      // `yieldPct` e `price` arrivano come numeri: l'app li ha sempre trattati
-      // come stringhe o numeri indifferentemente (`parseFloat` dappertutto),
-      // quindi non c'e' niente da convertire.
-      return data || [];
-    },
-    /* Scrive SOLO quello che e' cambiato. E' il punto di tutto questo lavoro:
-       prima ogni salvataggio riscriveva l'elenco intero — a 5.000 ingredienti,
-       620 KB per cambiare un prezzo. Il confronto sta in `lib/differenze.js`,
-       dove ha dei test: la prima versione era qui dentro e sbagliava proprio
-       il caso piu' comune. */
-    async scrivi(nuovi, precedenti){
-      const { daScrivere, daTogliere } = differenze(nuovi, precedenti, CAMPI_INGREDIENTE);
+  ingredients: elenco({
+    tabella: 'ingredienti', leggi: 'leggi_ingredienti', salva: 'salva_ingredienti',
+    campi: ['name', 'unit', 'price', 'supplier', 'yieldPct', 'yieldEstimated'],
+    prepara: i => ({
+      id: i.id, name: i.name || '', unit: i.unit || 'kg',
+      yieldPct: parseFloat(i.yieldPct) || 100,
+      yieldEstimated: !!i.yieldEstimated,
+      price: i.price === '' || i.price == null ? null : parseFloat(i.price),
+      supplier: i.supplier || null,
+    }),
+  }),
 
-      if(daScrivere.length){
-        // UNA chiamata sola, anche per cinquanta. Importando una fattura
-        // elettronica ne nascono anche cinquanta insieme, e cinquanta chiamate
-        // in fila su un telefono col wifi che balla sono venti secondi di
-        // schermata ferma.
-        const { error } = await Cloud.client.rpc('salva_ingredienti', {
-          p_kitchen: Cloud.kitchen.id,
-          p_righe: daScrivere.map(i => ({
-            id: i.id, name: i.name || '', unit: i.unit || 'kg',
-            yieldPct: parseFloat(i.yieldPct) || 100,
-            yieldEstimated: !!i.yieldEstimated,
-            price: i.price === '' || i.price == null ? null : parseFloat(i.price),
-            supplier: i.supplier || null,
-          })),
-        });
-        if(error) throw error;
-      }
+  staff: elenco({
+    tabella: 'persone', leggi: 'leggi_persone', salva: 'salva_persone',
+    campi: ['name', 'role', 'hours', 'phone', 'email', 'puoFareExtra', 'userId',
+            'stations', 'weeklyQuota'],
+    prepara: p => ({
+      id: p.id, name: p.name || '', role: p.role || null,
+      stations: p.stations || [], weeklyQuota: p.weeklyQuota || [],
+      puoFareExtra: p.puoFareExtra !== false,
+      phone: p.phone || null, email: p.email || null,
+      hours: p.hours === '' || p.hours == null ? null : parseFloat(p.hours),
+      userId: p.userId || null,
+    }),
+  }),
 
-      for(const id of daTogliere){
-        const { error } = await Cloud.client.from('ingredienti')
-          .delete().eq('kitchen_id', Cloud.kitchen.id).eq('id', id);
-        if(error) throw error;
-      }
-      return true;
-    },
-  },
+  subrecipes: elenco({
+    tabella: 'sub_ricette', leggi: 'leggi_sub_ricette', salva: 'salva_sub_ricette',
+    campi: ['name', 'yieldQty', 'yieldUnit', 'notes', 'photo', 'items'],
+  }),
 
-  staff: {
-    async leggi(){
-      const { data, error } = await Cloud.client.rpc('leggi_persone',
-        { p_kitchen: Cloud.kitchen.id });
-      if(error) throw error;
-      return data || [];
-    },
-    async scrivi(nuovi, precedenti){
-      const { daScrivere, daTogliere } = differenze(nuovi, precedenti, CAMPI_PERSONA);
+  recipes: elenco({
+    tabella: 'piatti', leggi: 'leggi_piatti', salva: 'salva_piatti',
+    campi: ['name', 'category', 'portionG', 'steps', 'prepMin', 'notes', 'photo',
+            'priceActual', 'foodCostTargetPct', 'items', 'allergens'],
+  }),
 
-      if(daScrivere.length){
-        const { error } = await Cloud.client.rpc('salva_persone', {
-          p_kitchen: Cloud.kitchen.id,
-          p_righe: daScrivere.map(p => ({
-            id: p.id, name: p.name || '', role: p.role || null,
-            stations: p.stations || [], weeklyQuota: p.weeklyQuota || [],
-            puoFareExtra: p.puoFareExtra !== false,
-            phone: p.phone || null, email: p.email || null,
-            hours: p.hours === '' || p.hours == null ? null : parseFloat(p.hours),
-            userId: p.userId || null,
-          })),
-        });
-        if(error) throw error;
-      }
+  menus: elenco({
+    tabella: 'menu', leggi: 'leggi_menu', salva: 'salva_menu',
+    campi: ['name', 'recipeIds'],
+  }),
 
-      for(const id of daTogliere){
-        const { error } = await Cloud.client.from('persone')
-          .delete().eq('kitchen_id', Cloud.kitchen.id).eq('id', id);
-        if(error) throw error;
-      }
-      return true;
-    },
-  },
 
   /* I TURNI hanno una forma loro: non un elenco, ma la mappa
      {personaId: {giorno: cella}} che l'app usa da sempre. Il database tiene
