@@ -380,6 +380,30 @@ function elenco({ tabella, leggi, salva, campi, prepara }){
   };
 }
 
+/* ALCUNE SEZIONI NON SONO ELENCHI: sono un oggetto solo.
+   Il fabbisogno, le impostazioni della cucina, dove finiscono le ore che
+   avanzano. Non hanno righe da confrontare — si leggono e si riscrivono
+   interi, come prima, perche' sono piccoli e perche' non c'e' niente da
+   guadagnare a spezzarli. Il guadagno era nelle collezioni. */
+function oggetto({ leggi, salva, vuoto }){
+  return {
+    async leggi(){
+      const { data, error } = await Cloud.client.rpc(leggi, { p_kitchen: Cloud.kitchen.id });
+      if(error) throw error;
+      return data ?? vuoto;
+    },
+    async scrivi(valore){
+      const { error } = await Cloud.client.rpc(salva, {
+        p_kitchen: Cloud.kitchen.id, p_dati: valore ?? vuoto,
+      });
+      if(error) throw error;
+      return true;
+    },
+    // Non c'e' un confronto da fare: si riscrive e basta.
+    copia: v => (v == null ? v : JSON.parse(JSON.stringify(v))),
+  };
+}
+
 const SEZIONI_IN_TABELLA = {
   ingredients: elenco({
     tabella: 'ingredienti', leggi: 'leggi_ingredienti', salva: 'salva_ingredienti',
@@ -422,6 +446,72 @@ const SEZIONI_IN_TABELLA = {
     tabella: 'menu', leggi: 'leggi_menu', salva: 'salva_menu',
     campi: ['name', 'recipeIds'],
   }),
+
+  suppliers: elenco({
+    tabella: 'fornitori', leggi: 'leggi_fornitori', salva: 'salva_fornitori',
+    campi: ['name', 'piva', 'phone', 'email', 'address'],
+  }),
+
+  invoiceHistory: elenco({
+    tabella: 'importazioni', leggi: 'leggi_importazioni', salva: 'salva_importazioni',
+    campi: ['fornitore', 'etichetta', 'quando', 'creati', 'aggiornati'],
+  }),
+
+  stations: elenco({
+    tabella: 'partite', leggi: 'leggi_partite', salva: 'salva_partite',
+    campi: ['name', 'copreAnche'],
+  }),
+
+  services: elenco({
+    tabella: 'servizi', leggi: 'leggi_servizi', salva: 'salva_servizi',
+    campi: ['name'],
+  }),
+
+  shiftTypes: elenco({
+    tabella: 'tipi_turno', leggi: 'leggi_tipi_turno', salva: 'salva_tipi_turno',
+    campi: ['code', 'label', 'hours', 'services'],
+  }),
+
+  wellbeing: elenco({
+    tabella: 'ore_registrate', leggi: 'leggi_ore_registrate', salva: 'salva_ore_registrate',
+    campi: ['staffId', 'date', 'ore'],
+  }),
+
+  staffingNeeds: oggetto({
+    leggi: 'leggi_fabbisogno', salva: 'salva_fabbisogno', vuoto: {},
+  }),
+
+  impostazioni: oggetto({
+    leggi: 'leggi_impostazioni', salva: 'salva_impostazioni', vuoto: { valuta: 'EUR' },
+  }),
+
+  eccedenzaOre: oggetto({
+    leggi: 'leggi_eccedenza', salva: 'salva_eccedenza', vuoto: { modo: 'auto', giorni: [] },
+  }),
+
+  /* Le impronte delle fatture gia' importate: un elenco di stringhe, non di
+     righe con un id. Si manda intero — sono al massimo qualche centinaio, e
+     confrontarle una per una costerebbe piu' del mandarle. */
+  importedInvoices: {
+    async leggi(){
+      const { data, error } = await Cloud.client
+        .from('fatture_importate').select('documento')
+        .eq('kitchen_id', Cloud.kitchen.id);
+      if(error) throw error;
+      return (data || []).map(r => r.documento);
+    },
+    async scrivi(documenti){
+      const { error } = await Cloud.client.rpc('salva_fatture_importate', {
+        p_kitchen: Cloud.kitchen.id, p_documenti: documenti || [],
+      });
+      if(error) throw error;
+      return true;
+    },
+    // Un elenco di STRINGHE: la copia generica le sbriciolerebbe in oggetti
+    // di lettere ({0:'d',1:'o',...}). Non farebbe danno — qui il confronto
+    // non si usa — ma sarebbe una trappola per chi legge dopo.
+    copia: v => [...(v || [])],
+  },
 
 
   /* I TURNI hanno una forma loro: non un elenco, ma la mappa
@@ -486,6 +576,7 @@ const SEZIONI_IN_TABELLA = {
       if(error) throw error;
       return true;
     },
+    copia: v => [...(v || [])],   // date, non righe: vedi `importedInvoices`
   },
 };
 
