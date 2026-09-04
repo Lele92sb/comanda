@@ -151,8 +151,12 @@ async function generateRandomShifts(){
   // Misurato sulla sua cucina: prospetti diversi da 6 su 20 a 12 su 12,
   // persone con tre spezzati di fila da 5,00 a 0,00, copertura invariata.
   // Costa 104 millisecondi: lui aveva messo in conto cinque secondi.
+  // `punteggio`, `bozzeProvate` e `punteggioPeggiore` il motore li restituiva
+  // gia': servono a rispondere alla domanda che si fa chi guarda un prospetto
+  // con dei buchi — «si poteva fare di meglio?». Finora nessuno li leggeva.
   const { newShifts, shortfalls, extras, nonPianificabili, quotaNonSpesa,
-          eccedenzeCollocate } = generaMigliore(state.staff, state.staffingNeeds,
+          eccedenzeCollocate, punteggio, bozzeProvate,
+          punteggioPeggiore } = generaMigliore(state.staff, state.staffingNeeds,
     {config: refreshShiftConfig(), dates: daGenerare, constraints, stazioni: state.stations, eccedenza,
      // I turni gia' salvati servono al motore per un motivo solo: se il periodo
      // taglia una settimana a meta', deve sapere quante ore quella persona ha
@@ -175,141 +179,116 @@ async function generateRandomShifts(){
   save('shifts');
   renderTurni(); renderOreExtra(); renderPubblicazione(); renderDashboard();
 
+  // ==========================================================================
+  // IL DETTAGLIO: UNA RIGA PER FATTO, E RESTA CHIUSO.
+  //
+  // Prima ogni fatto era un paragrafo che spiegava anche il perche' del
+  // perche'. Erano spiegazioni giuste — servivano quando quelle regole erano
+  // nuove — ma lette ogni volta diventano una pagina da scorrere per arrivare
+  // ai turni. Parole dello chef, due volte: «sono molto invadenti», e poi
+  // «riassumerli e non aprirli in automatico».
+  //
+  // Quindi: una riga per fatto, il numero davanti, i nomi fra parentesi. Il
+  // «come si risolve» resta solo dove c'e' davvero una decisione da prendere,
+  // cioe' sui posti scoperti. Il resto e' cronaca, e la cronaca si legge se
+  // uno la cerca.
+  // ==========================================================================
   const logEl = document.getElementById('generate-log');
-  let html = '';
-  if(extras.length){
-    const byPerson = {};
-    extras.forEach(ex=>{ byPerson[ex.staffName] = (byPerson[ex.staffName]||0)+1; });
-    html += `<div class="alert-box">Il fabbisogno impostato supera le quote della brigata: ${extras.length} turni EXTRA (oltre quota) sono stati assegnati per coprire comunque le postazioni — ` +
-      Object.entries(byPerson).map(([name,n])=>`${esc(name)} (+${n})`).join(', ') +
-      `. Sono segnati con "extra" nella griglia qui sotto.</div>`;
-  }
+  const righe = [];
+  const grave = [];
+  const conta = (elenco, chiave) => {
+    const per = {};
+    elenco.forEach(x => { per[x[chiave]] = (per[x[chiave]] || 0) + 1; });
+    return Object.entries(per).map(([nome, n2]) => `${esc(nome)} (+${n2})`).join(', ');
+  };
+
   if(shortfalls.length){
-    const byDay = {};
-    let quantiRinunciatari = 0;
-    shortfalls.forEach(sf=>{
-      const st = state.stations.find(x=>x.id===sf.stationId);
-      const key = dataCorta(parseISO(sf.day));
+    const nScop = shortfalls.reduce((n2, x) => n2 + (x.missing || 1), 0);
+    let conRinuncia = 0;
+    const per = shortfalls.map(sf => {
+      const st = state.stations.find(x => x.id === sf.stationId);
       const spenti = rinunciatariPer(sf, constraints);
-      if(spenti.length) quantiRinunciatari++;
-      byDay[key] = byDay[key] || [];
-      byDay[key].push(`${esc(SERVICE_LABEL(sf.service))} · ${st?esc(st.name):'—'} (mancano ${sf.missing}) — ` +
-        (spenti.length
-          ? `chi poteva coprirla ha i turni extra spenti: <b>${spenti.map(esc).join(', ')}</b>`
-          : `nessun qualificato era libero quel giorno`));
+      if(spenti.length) conRinuncia++;
+      return `${esc(dataCorta(parseISO(sf.day)))} ${esc(SERVICE_LABEL(sf.service))}·${st ? esc(st.name) : '—'}` +
+             (sf.missing > 1 ? ` ×${sf.missing}` : '') +
+             (spenti.length ? ` <i>(extra spenti: ${spenti.map(esc).join(', ')})</i>` : '');
     });
-    html += `<div class="alert-box">⚠ Anche assegnando turni extra, restano postazioni scoperte:<br>` +
-      Object.entries(byDay).map(([day,lines])=>`<b>${day}</b>: ${lines.join('<br>')}`).join('<br>') +
-      `</div><p class="small-note">Per risolvere: ` +
-      (quantiRinunciatari ? `chiedi a chi ha spento "può fare turni extra" nella sua scheda, oppure ` : '') +
-      `aggiungi personale qualificato per quella stazione, o abbassa il fabbisogno richiesto.</p>`;
+    grave.push(`<b>${nScop} post${nScop > 1 ? 'i scoperti' : 'o scoperto'}</b> — ${per.join(' · ')}`);
+    grave.push(`<span class="come">Per coprirli: ` +
+      (conRinuncia ? `riaccendi «può fare turni extra» a chi l\'ha spento, ` : '') +
+      `aggiungi qualcuno su quella partita, o abbassa il fabbisogno.</span>`);
   }
-  const nAltrove = Object.values(altrove).reduce((n,g)=>n+Object.keys(g).length, 0);
-  let premessa = '';
-  if(nonPianificabili.length){
-    // Senza questo, chi non ha stazioni si ritrova una fila di R nella griglia
-    // e sembra un difetto del generatore invece di una conseguenza.
-    const nomi = nonPianificabili.map(p=> esc(p.staffName)).join(', ');
-    premessa += `<div class="alert-box">Il generatore non ha dato turni a ${nomi}: ${nonPianificabili.length>1?'non hanno':'non ha'} nessuna stazione assegnata, e un turno senza stazione non copre nessun servizio — conterebbe nelle ore ma non coprirebbe niente. ` +
-      `Nella griglia ${nonPianificabili.length>1?'restano visibili, marcati':'resta visibile, marcato'} con un pallino vuoto: i turni si assegnano a mano, oppure si assegnano le stazioni nella scheda della persona.</div>`;
-  }
-  if(settimaneSalte.length){
-    const q = settimaneSalte.map(k=> giornoMese(parseISO(k)));
-    premessa += `<div class="ok-box">${settimaneSalte.length === 1 ? 'La settimana' : 'Le settimane'} del ${esc(q.join(', '))} ${settimaneSalte.length === 1 ? 'era già completa' : 'erano già complete'} e ${settimaneSalte.length === 1 ? 'non è stata rifatta' : 'non sono state rifatte'}: sta a cavallo del periodo, e rifarne solo una parte avrebbe richiesto turni oltre quota per rimettere in piedi un equilibrio che era già a posto. Se la vuoi diversa, rigenerala dalla vista settimana.</div>`;
+  if(extras.length){
+    righe.push(`${extras.length} turn${extras.length > 1 ? 'i' : 'o'} <b>extra</b> oltre quota — ${conta(extras, 'staffName')}`);
   }
   if(eccedenzeCollocate && eccedenzeCollocate.length){
-    // Tenuta SEPARATA dai turni extra, e non e' pignoleria: un extra e' oltre
-    // la quota e costa di piu', un'eccedenza e' dentro la quota ed e' gia'
-    // pagata. Metterle nella stessa riga vorrebbe dire far credere allo chef
-    // di spendere soldi che ha gia' speso.
-    const perTesta = {};
-    eccedenzeCollocate.forEach(e=>{ perTesta[e.staffName] = (perTesta[e.staffName]||0)+1; });
+    // Restano distinte dagli extra: un extra costa in piu', un'eccedenza e'
+    // dentro la quota ed e' gia' pagata. Confonderle vuol dire far credere
+    // allo chef di spendere soldi che ha gia' speso.
     const dove = (eccedenza.modo === 'giorni' && eccedenza.giorni && eccedenza.giorni.length)
-      ? `sui giorni che hai scelto (${eccedenza.giorni.join(', ')})`
-      : "sui giorni dove il servizio preme di più";
-    premessa += `<div class="ok-box">${eccedenzeCollocate.length} or${eccedenzeCollocate.length>1?'e':'a'} di contratto collocat${eccedenzeCollocate.length>1?'e':'a'} ${dove} — ` +
-      Object.entries(perTesta).map(([nome,n2])=>`${esc(nome)} (+${n2})`).join(', ') +
-      `. Non sono turni extra: stanno dentro la quota di queste persone, le stavi gia' pagando.</div>`;
+      ? `sui giorni scelti` : `dove il servizio preme`;
+    righe.push(`${eccedenzeCollocate.length} or${eccedenzeCollocate.length > 1 ? 'e' : 'a'} di contratto collocate ${dove} (dentro quota, già pagate) — ${conta(eccedenzeCollocate, 'staffName')}`);
+  }
+  if(nonPianificabili.length){
+    righe.push(`Senza turni perché senza partita — ${nonPianificabili.map(x => esc(x.staffName)).join(', ')}`);
   }
   if(quotaNonSpesa && quotaNonSpesa.length){
-    // Da quando il generatore non rabbocca piu' i turni che non servono,
-    // qualcuno puo' chiudere la settimana sotto le ore contrattuali. E' un
-    // numero vero — prima il pareggio si otteneva assegnando turni che non
-    // coprivano nessun servizio — ma senza questa riga sembra un difetto.
-    // DUE MOTIVI DIVERSI, e confonderli costa tempo a chi legge. Il primo:
-    // il fabbisogno non chiedeva quei turni, e allora c'e' una decisione da
-    // prendere. Il secondo: la settimana e' tagliata dal bordo del periodo e
-    // non e' ancora finita, e allora non c'e' niente da fare — si assegneranno
-    // quando si genera il resto. Lo chef ha visto «43 turni non assegnati
-    // perche' non servono» su un mese e ha dovuto chiedere se erano i giorni
-    // mancanti: erano quelli, e la frase glielo nascondeva.
-    const bordo = quotaNonSpesa.filter(q=> q.motivo === 'settimana incompleta');
-    const veri  = quotaNonSpesa.filter(q=> q.motivo !== 'settimana incompleta');
-    const somma = g => g.reduce((n2,q)=> n2+q.turni, 0);
-    const elenco = g => g.map(q=> `${esc(q.staffName)} (${q.turni})`).join(', ');
-    if(bordo.length){
-      // I giorni della prima e dell'ultima settimana che restano fuori dal
-      // periodo: sono quelli che spiegano il numero.
-      const fuori = [];
-      const primo = parseISO(dates[0]), ultimo = parseISO(dates[dates.length-1]);
-      for(let k=1;k<=6;k++){
-        const d = new Date(primo); d.setDate(primo.getDate()-k);
-        if(d.getDay() === 0) break;                       // domenica: settimana finita
-        fuori.unshift(dataCorta(d));
-      }
-      for(let k=1;k<=6;k++){
-        const d = new Date(ultimo); d.setDate(ultimo.getDate()+k);
-        fuori.push(dataCorta(d));
-        if(d.getDay() === 0) break;                       // arrivati a domenica
-      }
-      const n1 = somma(bordo);
-      premessa += `<div class="ok-box">${n1} turn${n1>1?'i':'o'} appartengono a settimane che il periodo taglia a metà, e verranno assegnat${n1>1?'i':'o'} quando genererai anche i giorni che mancano` +
-        (fuori.length ? ` — ${esc(fuori.join(', '))}` : '') + `. ` +
-        `La settimana è sempre lunedì-domenica: finché non è intera le ore non si possono chiudere. Non c'è niente da sistemare.</div>`;
-    }
+    const bordo = quotaNonSpesa.filter(q => q.motivo === 'settimana incompleta');
+    const veri  = quotaNonSpesa.filter(q => q.motivo !== 'settimana incompleta');
+    const somma = g => g.reduce((n2, q) => n2 + q.turni, 0);
+    const chi   = g => g.map(q => `${esc(q.staffName)} (${q.turni})`).join(', ');
     if(veri.length){
-      const n2 = somma(veri);
-      premessa += `<div class="ok-box">${n2} turn${n2>1?'i':'o'} di quota non ${n2>1?'sono stati':'è stato'} assegnat${n2>1?'i':'o'}: il fabbisogno impostato non ${n2>1?'li':'lo'} chiedeva — ${elenco(veri)}. ` +
-        `Nella colonna Ore queste persone risultano sotto le ore contrattuali, ed è corretto: prima il conto tornava perché l'app assegnava turni che non coprivano nessun servizio. ` +
-        `Se devono comunque lavorare, alza il fabbisogno di quel servizio oppure assegna i turni a mano.</div>`;
+      righe.push(`${somma(veri)} turni di quota non assegnati, il fabbisogno non li chiedeva — ${chi(veri)}`);
     }
+    if(bordo.length){
+      // Questa NON e' una cosa da sistemare, ed e' l'unica riga che ha bisogno
+      // di dirlo: lo chef aveva letto «43 turni non assegnati» su un mese e
+      // aveva dovuto chiedere se erano i giorni mancanti. Erano quelli.
+      righe.push(`${somma(bordo)} turni appartengono a settimane che il periodo taglia: si assegnano generando anche i giorni mancanti`);
+    }
+  }
+  if(settimaneSalte.length){
+    righe.push(`${settimaneSalte.length === 1 ? 'Settimana' : 'Settimane'} del ${esc(settimaneSalte.map(k => giornoMese(parseISO(k))).join(', '))} già complete, non rifatte`);
   }
   if(nRichieste){
-    premessa += `<div class="ok-box">Rispettate le richieste approvate: ${nRichieste} giorni vincolati su ${nPersoneRichieste} person${nPersoneRichieste>1?'e':'a'}.</div>`;
+    righe.push(`${nRichieste} giorni vincolati da richieste approvate, su ${nPersoneRichieste} person${nPersoneRichieste > 1 ? 'e' : 'a'} — tutte rispettate`);
   }
+  const nAltrove = Object.values(altrove).reduce((n2, g) => n2 + Object.keys(g).length, 0);
   if(nAltrove){
-    const nomi = [...new Set(Object.values(altrove).flatMap(g=>Object.values(g)))];
-    premessa += `<div class="ok-box">${nAltrove} giorni lasciati liberi: quelle persone lavorano in un'altra cucina (${nomi.map(esc).join(', ')}).</div>`;
+    const nomi = [...new Set(Object.values(altrove).flatMap(g => Object.values(g)))];
+    righe.push(`${nAltrove} giorni liberi: lavorano in un\'altra cucina (${nomi.map(esc).join(', ')})`);
   }
-  html = premessa + html;
-  if(!extras.length && !shortfalls.length){
-    html += `<div class="ok-box">✓ Fabbisogno coperto per tutti i servizi, tutti i giorni, senza bisogno di turni extra.</div>`;
+
+  // SI POTEVA FARE DI MEGLIO? La domanda che si fa chi guarda un prospetto con
+  // dei buchi, e finora l'app aveva la risposta senza dirla: `generaMigliore`
+  // disegna venti bozze, ne aggiusta ognuna con quattrocento scambi, le
+  // punteggia e tiene la migliore. Se la peggiore e la migliore valgono uguale
+  // vuol dire che non c'era niente da esplorare — i vincoli decidono tutto — e
+  // allora non e' un prospetto sfortunato: e' l'unico che le regole permettono.
+  if(punteggio && bozzeProvate > 1){
+    righe.push(punteggioPeggiore === punteggio.totale
+      ? `${bozzeProvate} prospetti provati, tutti equivalenti: con queste quote, questo fabbisogno e queste richieste non c\'è margine — è il meglio ottenibile`
+      : `Il migliore di ${bozzeProvate} prospetti provati`);
   }
-  // UNA RIGA, e il resto dietro un clic.
-  //
-  // Le informazioni erano giuste ma il posto no: cinque riquadri uno sotto
-  // l'altro, e per arrivare ai turni bisognava scorrere mezza pagina. Parole
-  // dello chef: "sono molto invadenti e per vedere i turni bisogna scorrere
-  // troppo".
-  // Quello che non puo' aspettare — un buco da coprire — resta scritto anche
-  // a riepilogo chiuso: e' l'unica cosa che chiede una decisione oggi.
-  // UNA RIGA, e il resto dietro un clic.
-  //
-  // Le informazioni erano giuste ma il posto no: cinque riquadri uno sotto
-  // l'altro, e per arrivare ai turni bisognava scorrere mezza pagina. Parole
-  // dello chef: "sono molto invadenti e per vedere i turni bisogna scorrere
-  // troppo".
-  // Quello che non puo' aspettare — un buco da coprire — resta scritto anche
-  // a riepilogo chiuso: e' l'unica cosa che chiede una decisione oggi, e per
-  // questo va davanti a tutto, col «!» che il componente legge come «rosso».
-  logEl.innerHTML = html;
+
+  if(!grave.length && !righe.length){
+    righe.push(`✓ Fabbisogno coperto ovunque, senza turni extra`);
+  }
+
+  const voce = (r, cl) => `<li${cl ? ' class="' + cl + '"' : ''}>${r}</li>`;
+  logEl.innerHTML = (grave.length || righe.length)
+    ? '<ul class="esiti">' + grave.map(r => voce(r, 'grave')).join('') +
+      righe.map(r => voce(r, '')).join('') + '</ul>'
+    : '';
+
+  // RESTA CHIUSO, SEMPRE. Stamattina l'avevo fatto aprire da solo quando c'era
+  // un buco: sembrava servizievole ed era il contrario di quello che era stato
+  // chiesto due volte. Il numero dei posti scoperti si legge gia' nella riga
+  // di riepilogo, in rosso, senza aprire niente — e quello basta a sapere che
+  // c'e' da guardare.
+  logEl.classList.add('hidden');
 
   const nScoperti = shortfalls.reduce((n2,x)=> n2 + (x.missing||1), 0);
-  // Il dettaglio si apre insieme al riepilogo: sono la stessa cosa vista da
-  // due distanze, e tenerli separati vuol dire due stati da tenere allineati.
-  const nQuoteDaDecidere = (quotaNonSpesa || [])
-    .filter(q => q.motivo !== 'settimana incompleta').length;
-  logEl.classList.toggle('hidden', nScoperti === 0 && nQuoteDaDecidere === 0);
   const voci = [];
   if(nScoperti) voci.push(`!${nScoperti} post${nScoperti>1?'i scoperti':'o scoperto'}`);
   if(extras.length) voci.push(`${extras.length} extra`);
@@ -328,15 +307,7 @@ async function generateRandomShifts(){
     // quella e' l'unica cosa che chiede una decisione oggi, e chiederla dietro
     // un pulsante vuol dire che il messaggio in basso resta l'unica cosa che
     // si vede, e quello passa in tre secondi e non si clicca.
-    // Si apre anche quando qualcuno chiude la settimana sotto le sue ore: e'
-    // esattamente la domanda che si fa chi guarda («perche' Marco fa 32 ore e
-    // non 40?»), e la risposta e' li' dentro, scritta per nome. Non si apre
-    // per le settimane tagliate dal bordo del periodo: quelle si sistemano da
-    // sole generando il resto, e aprire ogni volta vorrebbe dire un riquadro
-    // sempre aperto, cioe' di nuovo cinque riquadri invadenti.
-    const quoteDaDecidere = (quotaNonSpesa || [])
-      .filter(q => q.motivo !== 'settimana incompleta').length;
-    riass.aperto = nScoperti > 0 || quoteDaDecidere > 0;
+    riass.aperto = false;
   }
 
   // Il messaggio che passa dice COSA e' successo, non «vedi i dettagli»: i
