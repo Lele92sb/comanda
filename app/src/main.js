@@ -1,7 +1,8 @@
 import { afterSignIn, gateEl, gateRender, humanError, renderAccountBar, screenBlocked, screenSignIn } from './account/accesso.js';
-import { esc, loadAll, state, toast } from './core/state.js';
+import { esc, loadAll, ricarica, state, toast } from './core/state.js';
 import { Cloud } from './lib/cloud.js';
-import { initTabs } from './ui/tabs.js';
+import { initTabs, switchTab } from './ui/tabs.js';
+import { ascolta } from './lib/tempo-reale.js';
 import { aggiornaNotificheDalServer, renderNotifiche } from './viste/notifiche.js';
 // Punto di ingresso. Molti moduli registrano i propri ascoltatori quando
 // vengono caricati: qui vengono importati tutti, nello stesso ordine in cui
@@ -95,6 +96,20 @@ export async function startApp(){
     : t('I dati restano salvati nel browser che stai usando ora. Se cambi browser, dispositivo, o svuoti la cache, li perdi — esporta un backup ogni tanto per stare tranquillo.');
 
   initTabs();
+
+  /* IL TEMPO REALE. Da qui in poi, quello che cambia sul telefono di un altro
+     si vede qui senza ricaricare.
+
+     Si rilegge la sezione e si ridisegna la scheda aperta — non si tocca
+     quella su cui non si sta guardando: ridisegnare una schermata che qualcuno
+     ha davanti mentre ci scrive dentro e' il modo piu' veloce di fargli
+     perdere quello che stava facendo. */
+  ascolta(async sezioni => {
+    await ricarica(sezioni);
+    const aperta = document.querySelector('nav.tabs button.active')?.dataset.tab;
+    if(aperta) switchTab(aperta);
+    renderNotifiche();
+  });
 }
 
 Cloud.onConflict = function(key){

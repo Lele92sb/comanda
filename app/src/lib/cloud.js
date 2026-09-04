@@ -15,6 +15,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { COMANDA_CONFIG as cfg } from './config.js';
 import { differenze, differenzeCelle } from './differenze.js';
+import { segnaScritturaMia } from './tempo-reale.js';
 
 const CLOUD_ENABLED = !!(cfg.SUPABASE_URL && cfg.SUPABASE_PUBLIC_KEY);
 
@@ -618,6 +619,12 @@ async function cloudGet(key){
 async function cloudSet(key, value){
   const tab = SEZIONI_IN_TABELLA[key];
   if(tab){
+    // «Questa la sto scrivendo io»: il proprio salvataggio torna indietro dal
+    // server come evento, e rileggere in quel momento sovrascriverebbe quello
+    // che si sta scrivendo — il cursore che salta, il campo che si svuota a
+    // meta'. Si segna PRIMA, perche' l'evento puo' arrivare mentre la
+    // scrittura e' ancora in volo.
+    segnaScritturaMia(key);
     const ok = await tab.scrivi(value, ULTIMA_LETTURA[key] ?? (tab.copia ? {} : []));
     if(ok) ULTIMA_LETTURA[key] = tab.copia ? tab.copia(value) : (value || []).map(r => ({ ...r }));
     return ok;

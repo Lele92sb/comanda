@@ -84,6 +84,25 @@ export async function loadAll(){
   applicaImpostazioni();
 }
 
+/* Rilegge SOLO le sezioni indicate. La usa il tempo reale: quando cambia
+   qualcosa sul telefono di un altro arriva l'elenco delle sezioni toccate, e
+   si rilegge quello e nient'altro.
+
+   Si RILEGGE invece di applicare il contenuto dell'evento, ed e' la scelta che
+   tiene: un evento puo' arrivare fuori ordine o non arrivare affatto se la
+   rete cade per un attimo, e ricostruire lo stato pezzo per pezzo vorrebbe
+   dire uno stato che diverge in silenzio. Rileggendo si passa sempre dalle
+   funzioni che REDIGONO, quindi non c'e' un secondo percorso da tenere sicuro. */
+export async function ricarica(sezioni){
+  for(const k of sezioni || []){
+    if(!STORE_KEYS.includes(k)) continue;
+    const v = await storageGet(k);
+    if(v !== null) state[k] = v;
+  }
+  migrateData();
+  applicaImpostazioni();
+}
+
 /* Porta nei moduli che le usano le impostazioni appena lette. La valuta e' la
    prima: `core/valuta.ts` non se la va a prendere da solo apposta — cosi' non
    dipende da `state` e si puo' provare dentro Node, senza browser. */
