@@ -77,6 +77,19 @@ create policy persone_costo_delete on public.persone_costo
 -- `security invoker`, quindi la policy di `persone_costo` si applica anche
 -- qui, e a chi non spetta la colonna esce `null` da sola. Un solo punto in cui
 -- la regola è scritta, e non due che possono divergere.
+--
+-- IL `DROP` NON È PIGRIZIA, È OBBLIGATORIO. `leggi_persone` esiste già dalla
+-- migrazione 03 con dieci colonne, e qui ne restituisce undici: Postgres non
+-- lascia cambiare il tipo di ritorno con un `create or replace` e si ferma con
+-- «cannot change return type of existing function». Vale ogni volta che a una
+-- funzione di lettura si aggiunge una colonna — cioè ogni volta che i dati
+-- crescono, cioè spesso.
+--
+-- E il `grant` dopo non è una ripetizione: il drop si porta via anche i
+-- permessi, e senza rimetterlo la funzione resterebbe lì, giusta e muta, con
+-- l'app che riceve «permission denied» su una brigata che prima leggeva.
+drop function if exists public.leggi_persone(uuid);
+
 create or replace function public.leggi_persone(p_kitchen uuid)
 returns table (
   id text, name text, role text, stations jsonb, "weeklyQuota" jsonb,
