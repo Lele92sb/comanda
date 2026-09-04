@@ -193,6 +193,18 @@ versione N» (nessun dato, poi si rilegge da `leggi_sezione()`), oppure spezzare
 voce «Modello dati» qui sotto, e che regalerebbe il tempo reale come effetto
 collaterale.
 
+**Le migrazioni creano le tabelle, NON ci travasano i dati.** Per una cucina
+nuova va bene. Per una che i dati ce li aveva e'' successo questo, il 4
+settembre 2026 su DeRoma: la tabella nasce vuota, l''app smette di ripiegare sul
+blob (ripiega solo se la tabella NON ESISTE, non se e'' vuota), e la cucina
+appare vuota — 289 ingredienti e quindici persone spariti dallo schermo senza
+un errore. Chi la usa pensa di dover ricominciare e ricrea qualcosa a mano, e
+da li'' le due copie divergono. Il blob resta intero, ma nessuno lo sa.
+
+La riparazione e'' la migrazione `10-travaso-dal-blob.sql`, che prima CONFRONTA
+e non tocca niente, e travasa solo dove la tabella e'' vuota se non le si dice
+altro. Il blob non si cancella: e'' l''unica copia di prima.
+
 Le migrazioni da applicare a mano stanno in `supabase/migrazioni/`, numerate.
 `schema.sql` resta la fonte di verità per una cucina nuova; le migrazioni
 servono a chi ce l'ha già.
