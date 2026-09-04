@@ -107,10 +107,12 @@ security definer
 set search_path = public
 as $$
 declare
-  r        record;
-  dati     jsonb;
-  n_tab    bigint;
-  quante   integer;
+  r         record;
+  dati      jsonb;
+  n_tab     bigint;
+  quante    integer;
+  titolare  uuid;
+  claim_pre text;
 begin
   -- SI LANCIA DALLA CONSOLE, e li' `auth.uid()` e' nullo: non c'e' nessun
   -- gettone, la sessione e' `postgres`. Un controllo scritto solo come
@@ -123,6 +125,33 @@ begin
   if auth.uid() is not null and public.my_role(p_kitchen) is distinct from 'owner' then
     raise exception 'solo il titolare';
   end if;
+
+  -- SI TRAVASA PER CONTO DEL TITOLARE, e senza questo pezzo il travaso
+  -- riuscirebbe a meta' SENZA DIRLO.
+  --
+  -- `salva_ingredienti` scrive i prezzi solo `if vede_costi(...)`, e
+  -- `salva_persone` i telefoni solo `if vede_personali(...)`. Sono controlli
+  -- di CODICE, non policy: guardano `auth.uid()`. Dalla console non c'e'
+  -- nessun gettone, quindi `my_role` e' nullo, quindi tutte e due rispondono
+  -- «no» — e sarebbero arrivati 289 ingredienti senza un prezzo e quindici
+  -- persone senza un telefono, con la funzione che restituisce allegramente
+  -- «289 righe travasate».
+  --
+  -- Quindi ci si mette il gettone del titolare, che e' anche la verita' di
+  -- quello che sta succedendo: questi dati erano suoi e tornano suoi. E'
+  -- `set_local`, quindi vale solo dentro questa transazione.
+  select user_id into titolare
+    from public.kitchen_members
+   where kitchen_id = p_kitchen and role = 'owner'
+   order by created_at limit 1;
+
+  if titolare is null then
+    raise exception 'questa cucina non ha un titolare: non saprei per conto di chi scrivere';
+  end if;
+
+  claim_pre := current_setting('request.jwt.claims', true);
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', titolare, 'role', 'authenticated')::text, true);
 
   for r in
     select * from (values
@@ -169,6 +198,8 @@ begin
                   else 'travasata' end;
     return next;
   end loop;
+
+  perform set_config('request.jwt.claims', coalesce(claim_pre, ''), true);
 end;
 $$;
 
@@ -198,6 +229,23 @@ $$;
 -- giorno o per data a seconda di quanto sono vecchi, e `migrateData` nel
 -- browser sa distinguerli; qui no. Un prospetto si rigenera in un minuto, una
 -- data sbagliata su sessanta celle si scopre a servizio cominciato.
+--
+-- CONTROLLA CHE SIANO ARRIVATI ANCHE I PREZZI, non solo le righe:
+--
+--   select count(*) as ingredienti,
+--          count(*) filter (where c.price is not null) as con_prezzo
+--     from public.ingredienti i
+--     left join public.ingredienti_costi c using (kitchen_id, id)
+--    where i.kitchen_id = '<id cucina>';
+--
+--   select count(*) as persone,
+--          count(*) filter (where d.phone is not null or d.hours is not null) as con_dati
+--     from public.persone p
+--     left join public.persone_personali d using (kitchen_id, id)
+--    where p.kitchen_id = '<id cucina>';
+--
+-- Se le righe ci sono ma i prezzi no, il gettone del titolare non ha fatto il
+-- suo lavoro: e' l'unico modo in cui questo travaso puo' riuscire a meta'.
 --
 -- E IL BLOB NON SI CANCELLA. Resta li' finche' non si e' sicuri: e' l'unica
 -- copia dei dati di prima, e finora e' anche l'unica cosa che ha funzionato.
