@@ -54,6 +54,11 @@ export async function caricaRichieste(){
    Legge quello che c'e' GIA' in memoria e non va in rete: la dashboard si
    ridisegna a ogni entrata nella scheda, e una lettura di rete a ogni entrata
    si sentirebbe. Chi vuole il dato fresco chiama prima `caricaRichieste()`. */
+/* Tutte quelle che il server ci ha mandato. Le notifiche le guardano per
+   capire cosa e' cambiato: il filtro su chi vede cosa l'ha gia' fatto il
+   database (policy `requests_select`), qui arriva solo il permesso. */
+export function tutteLeRichieste(){ return RICHIESTE; }
+
 export function richiesteInAttesa(){
   return RICHIESTE.filter(r => r.stato === 'in_attesa');
 }

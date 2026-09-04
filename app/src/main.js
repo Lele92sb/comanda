@@ -2,6 +2,7 @@ import { afterSignIn, gateEl, gateRender, humanError, renderAccountBar, screenBl
 import { esc, loadAll, state, toast } from './core/state.js';
 import { Cloud } from './lib/cloud.js';
 import { initTabs } from './ui/tabs.js';
+import { aggiornaNotificheDalServer, renderNotifiche } from './viste/notifiche.js';
 // Punto di ingresso. Molti moduli registrano i propri ascoltatori quando
 // vengono caricati: qui vengono importati tutti, nello stesso ordine in cui
 // stavano nel file unico, perché nessun pulsante resti muto.
@@ -84,6 +85,11 @@ export async function startApp(){
   traduciMarkup();          // le viste sono nel markup: si traducono qui
   document.body.classList.toggle('readonly', Cloud.enabled && !Cloud.canWrite());
   renderAccountBar();
+  // La campanella si monta subito con quello che c'e' gia' in memoria, e le
+  // richieste arrivano dopo senza far aspettare nessuno: una campanella che
+  // compare in ritardo si nota, una che compare vuota e si riempie no.
+  renderNotifiche();
+  aggiornaNotificheDalServer();
   document.getElementById('backup-note').textContent = Cloud.enabled
     ? t('I dati di questa cucina sono salvati sul tuo account e visibili a chi ne fa parte. Il backup serve a portarteli via quando vuoi, o a passare da una cucina all\'altra.')
     : t('I dati restano salvati nel browser che stai usando ora. Se cambi browser, dispositivo, o svuoti la cache, li perdi — esporta un backup ogni tanto per stare tranquillo.');

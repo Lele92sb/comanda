@@ -84,6 +84,7 @@ import '../account/squadra-vista.ts';
 import { controllaContrasto } from './contrasto.ts';
 import '../ds/ricerca.ts';
 import '../ds/qr.ts';
+import '../ds/notifiche-vista.ts';
 import type { InvitoVista, MembroVista } from '../account/squadra-vista.ts';
 
 interface Caso {
@@ -703,6 +704,38 @@ const GRUPPI: Gruppo[] = [
         nota: 'E’ il caso che si dimentica sempre. Non puo’ mandare niente, e la schermata deve dirgli perche’ e a chi chiedere — invece di mostrargli un modulo che non funziona.',
         contenuto: () => html`
           <cmd-richieste .servizi=${[]} .richieste=${[]}></cmd-richieste>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-notifiche',
+    casi: [
+      {
+        id: 'notifiche',
+        titolo: 'Con qualcosa da leggere, e senza niente',
+        nota: 'Un numero, non un punto: «tre richieste» e «una richiesta» sono due giornate diverse, e saperlo prima di aprire cambia se apri adesso o dopo il servizio. Ci arrivano TRE sole cose, e tutte e tre chiedono qualcosa a qualcuno — la tentazione di far suonare la campanella per tutto finisce con nessuno che la guarda piu’. Si svuota aprendola: aprire E’ l’atto di aver letto, e un elenco che si svuota solo se lo svuoti diventa una lista di cose da fare che nessuno fa.',
+        contenuto: () => html`
+          <div style="display:flex;gap:24px;align-items:center">
+            <cmd-notifiche
+              .voci=${[
+                { testo: 'Marco ha mandato una richiesta.', dove: 'richieste' },
+                { testo: 'La tua richiesta è stata approvata.', dove: 'richieste' },
+                { testo: 'Sono stati pubblicati 7 giorni di turni: la brigata li vede.', dove: 'turni' },
+              ]}
+              @notifiche-apri=${(e: Event) => { (e.currentTarget as HTMLElement & { aperto: boolean }).aperto = true; }}
+              @notifiche-chiudi=${(e: Event) => { (e.currentTarget as HTMLElement & { aperto: boolean }).aperto = false; }}
+              @notifiche-vai=${(e: CustomEvent<{ dove: string }>) => { eco = 'porta a: ' + e.detail.dove; disegna(); }}
+            ></cmd-notifiche>
+            <cmd-notifiche .voci=${[]}
+              vuotoSpiega="Qui compaiono le richieste che arrivano, quelle che vengono decise, e i turni appena pubblicati."
+              @notifiche-apri=${(e: Event) => { (e.currentTarget as HTMLElement & { aperto: boolean }).aperto = true; }}
+              @notifiche-chiudi=${(e: Event) => { (e.currentTarget as HTMLElement & { aperto: boolean }).aperto = false; }}
+            ></cmd-notifiche>
+            <cmd-notifiche .voci=${Array.from({ length: 14 }, (_x, i) => ({ testo: 'Richiesta numero ' + (i + 1), dove: 'richieste' }))}
+              @notifiche-apri=${(e: Event) => { (e.currentTarget as HTMLElement & { aperto: boolean }).aperto = true; }}
+              @notifiche-chiudi=${(e: Event) => { (e.currentTarget as HTMLElement & { aperto: boolean }).aperto = false; }}
+            ></cmd-notifiche>
+          </div>`,
       },
     ],
   },
