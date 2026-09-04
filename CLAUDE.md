@@ -30,6 +30,12 @@ invisibili e le parole attaccate. È successo scrivendo `<cmd-costo-servizio>`:
 dieci token immaginati, tutti plausibili, nessuno esistente. Da lì
 `lint:token`.
 
+**La build va guardata, e il suo ESITO non va mascherato.** `npm run build |
+grep error` esce con SUCCESSO proprio quando trova un errore: il codice di
+uscita è quello del grep, non quello della build. È così che è finito in un
+commit un file che non compilava, con i cinque controlli apparentemente verdi.
+Se si filtra l'output, l'uscita si guarda a parte.
+
 **La build va guardata, non solo lanciata.** `tsc` non controlla i `.js`, e il
 controllo degli import non vede i nomi doppi: una funzione importata che si
 chiama come una locale la trova SOLO la build, e a quel punto la locale chiama

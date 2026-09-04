@@ -263,6 +263,15 @@ export class GrigliaTurni extends LitElement {
        scorrere: sul telefono la vista mese e' larga 1904px in 302. */
     .shift-nav{display:flex;align-items:center;justify-content:center;
       gap:var(--space-2);margin-bottom:var(--space-2);}
+    /* «hidden» DA SOLO NON BASTA, e qui e' costato due frecce fantasma.
+       L'attributo vale «display:none» per via del foglio di stile del browser,
+       cioe' con la specificita' di un tipo di elemento: qualunque regola di
+       classe che dichiari un display lo batte. «aggiornaFrecce» faceva
+       «nav.hidden = true» quando la settimana ci stava tutta e non c'era
+       niente da scorrere — e le frecce restavano li', con in mezzo i 130px di
+       «min-width» riservati a un'etichetta vuota. Sembrava che mancasse un
+       dato; mancava invece la ragione per mostrarle. */
+    .shift-nav[hidden]{display:none;}
     .shift-nav button{background:transparent;border:1px solid var(--line-strong);color:var(--paper);
       font-family:var(--font-body);font-weight:600;font-size:var(--text-sm);line-height:1;padding:8px 14px;
       border-radius:var(--radius-sm);cursor:pointer;}
