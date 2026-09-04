@@ -53,10 +53,21 @@ export class Chip extends Elemento {
     :host([acceso]) button:hover:not(:disabled){background:var(--copper-light);border-color:var(--copper-light);}
   `];
 
+  /* NON SI ACCENDE DA SOLO. Dice cosa vorrebbe diventare, e aspetta.
+     Prima faceva `this.acceso = !this.acceso` e poi avvisava. Sembra
+     comodo — un chip che funziona anche da solo — ma qui NESSUNO lo usa da
+     solo: tutti gli danno `?acceso` dall'esterno, perche' lo stato vero sta
+     nei dati (l'allergene e' nell'elenco? il modo scelto e' questo?).
+     Con due padroni si rompe, e in un modo che sembra un difetto della
+     schermata: Lit non riscrive una proprieta' che secondo lui non e'
+     cambiata, quindi dopo che il chip si e' acceso da solo Lit non lo
+     rispegne piu'. Sui tre modi delle «ore che avanzano» — che sono
+     alternativi — restavano accesi tutti e tre insieme.
+     L'evento porta il valore DESIDERATO, cosi' chi lo usa come interruttore
+     legge `detail.acceso` e sa gia' cosa fare. */
   private premuto(): void {
     if (this.disabilitato) return;
-    this.acceso = !this.acceso;
-    this.emetti('cmd-chip', { acceso: this.acceso });
+    this.emetti('cmd-chip', { acceso: !this.acceso });
   }
 
   override render(): TemplateResult {

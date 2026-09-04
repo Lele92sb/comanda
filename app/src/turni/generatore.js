@@ -299,14 +299,9 @@ async function generateRandomShifts(){
   const riass = montaRiepilogo();
   if(riass){
     riass.voci = voci;
-    riass.conDettagli = Boolean(html);
-    // SI APRE DA SOLO QUANDO C'E' UN BUCO DA COPRIRE.
-    //
-    // «Una riga e il resto dietro un clic» vale quando e' andato tutto bene:
-    // li' il riquadro chiuso e' un riassunto. Con dei posti scoperti no —
-    // quella e' l'unica cosa che chiede una decisione oggi, e chiederla dietro
-    // un pulsante vuol dire che il messaggio in basso resta l'unica cosa che
-    // si vede, e quello passa in tre secondi e non si clicca.
+    riass.conDettagli = Boolean(grave.length || righe.length);
+    // RESTA CHIUSO, SEMPRE: il numero dei posti scoperti si legge gia' nella
+    // riga qui sopra, in rosso, senza aprire niente.
     riass.aperto = false;
   }
 
