@@ -24,6 +24,42 @@
 -- canale eredita le stesse regole delle letture, e sono le regole giuste.
 -- ============================================================================
 
+-- ---- Prima di tutto: ci sono tutte? ---------------------------------------
+-- Lanciata fuori ordine, questa migrazione fallirebbe con «relation
+-- public.sub_ricette does not exist» — vero ma inutile: non dice quale pezzo
+-- manca ne' cosa lanciare. Un errore deve dire cosa fare.
+do $$
+declare mancanti text[];
+begin
+  select array_agg(m order by m) into mancanti from (
+    select distinct case
+      when t in ('ingredienti','ingredienti_costi')          then '02-ingredienti'
+      when t in ('persone','persone_personali')              then '03-brigata'
+      when t in ('turni','giorni_pubblicati')                then '04-turni'
+      when t in ('sub_ricette','piatti','piatti_costi','menu') then '05-ricettario'
+      when t in ('fornitori','importazioni')                 then '06-fornitori-e-fatture'
+      else '07-configurazione-e-benessere'
+    end as m
+    from unnest(array[
+      'ingredienti', 'ingredienti_costi',
+      'persone', 'persone_personali',
+      'turni', 'giorni_pubblicati',
+      'sub_ricette', 'piatti', 'piatti_costi', 'menu',
+      'fornitori', 'importazioni',
+      'partite', 'servizi', 'tipi_turno', 'fabbisogno',
+      'ore_registrate', 'impostazioni_cucina'
+    ]) t
+    where to_regclass('public.' || t) is null
+  ) x;
+
+  if mancanti is not null then
+    raise exception
+      'Manca ancora: %. Vanno lanciate in ordine, questa per ultima.',
+      array_to_string(mancanti, ', ');
+  end if;
+end $$;
+
+
 do $$
 declare t text;
 begin

@@ -56,20 +56,53 @@ alter table public.importazioni      enable row level security;
 
 -- Tre tabelle, una regola sola: chi vede i costi. E per scriverle non basta
 -- poter modificare — «non si scrive ciò che non si può leggere».
-do $$
-declare t text;
-begin
-  foreach t in array array['fornitori', 'fatture_importate', 'importazioni'] loop
-    execute format('drop policy if exists %I on public.%I', t || '_select', t);
-    execute format('create policy %I on public.%I for select using (public.vede_costi(kitchen_id))', t || '_select', t);
-    execute format('drop policy if exists %I on public.%I', t || '_insert', t);
-    execute format('create policy %I on public.%I for insert with check (public.can_write(kitchen_id) and public.vede_costi(kitchen_id))', t || '_insert', t);
-    execute format('drop policy if exists %I on public.%I', t || '_update', t);
-    execute format('create policy %I on public.%I for update using (public.can_write(kitchen_id) and public.vede_costi(kitchen_id)) with check (public.can_write(kitchen_id) and public.vede_costi(kitchen_id))', t || '_update', t);
-    execute format('drop policy if exists %I on public.%I', t || '_delete', t);
-    execute format('create policy %I on public.%I for delete using (public.can_write(kitchen_id) and public.vede_costi(kitchen_id))', t || '_delete', t);
-  end loop;
-end $$;
+drop policy if exists fornitori_select on public.fornitori;
+create policy fornitori_select on public.fornitori
+  for select using (public.vede_costi(kitchen_id));
+
+drop policy if exists fornitori_insert on public.fornitori;
+create policy fornitori_insert on public.fornitori
+  for insert with check (public.can_write(kitchen_id) and public.vede_costi(kitchen_id));
+
+drop policy if exists fornitori_update on public.fornitori;
+create policy fornitori_update on public.fornitori
+  for update using (public.can_write(kitchen_id) and public.vede_costi(kitchen_id)) with check (public.can_write(kitchen_id) and public.vede_costi(kitchen_id));
+
+drop policy if exists fornitori_delete on public.fornitori;
+create policy fornitori_delete on public.fornitori
+  for delete using (public.can_write(kitchen_id) and public.vede_costi(kitchen_id));
+
+drop policy if exists fatture_importate_select on public.fatture_importate;
+create policy fatture_importate_select on public.fatture_importate
+  for select using (public.vede_costi(kitchen_id));
+
+drop policy if exists fatture_importate_insert on public.fatture_importate;
+create policy fatture_importate_insert on public.fatture_importate
+  for insert with check (public.can_write(kitchen_id) and public.vede_costi(kitchen_id));
+
+drop policy if exists fatture_importate_update on public.fatture_importate;
+create policy fatture_importate_update on public.fatture_importate
+  for update using (public.can_write(kitchen_id) and public.vede_costi(kitchen_id)) with check (public.can_write(kitchen_id) and public.vede_costi(kitchen_id));
+
+drop policy if exists fatture_importate_delete on public.fatture_importate;
+create policy fatture_importate_delete on public.fatture_importate
+  for delete using (public.can_write(kitchen_id) and public.vede_costi(kitchen_id));
+
+drop policy if exists importazioni_select on public.importazioni;
+create policy importazioni_select on public.importazioni
+  for select using (public.vede_costi(kitchen_id));
+
+drop policy if exists importazioni_insert on public.importazioni;
+create policy importazioni_insert on public.importazioni
+  for insert with check (public.can_write(kitchen_id) and public.vede_costi(kitchen_id));
+
+drop policy if exists importazioni_update on public.importazioni;
+create policy importazioni_update on public.importazioni
+  for update using (public.can_write(kitchen_id) and public.vede_costi(kitchen_id)) with check (public.can_write(kitchen_id) and public.vede_costi(kitchen_id));
+
+drop policy if exists importazioni_delete on public.importazioni;
+create policy importazioni_delete on public.importazioni
+  for delete using (public.can_write(kitchen_id) and public.vede_costi(kitchen_id));
 
 
 create or replace function public.leggi_fornitori(p_kitchen uuid)

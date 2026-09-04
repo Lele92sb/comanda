@@ -95,20 +95,85 @@ alter table public.impostazioni_cucina enable row level security;
 -- Tutte con la stessa regola: le legge ogni membro, le scrive chi può
 -- modificare. Le ore registrate sono l'eccezione: le legge chi può modificare,
 -- perché sono ore di lavoro di una persona e non servono a leggere un turno.
-do $$
-declare t text;
-begin
-  foreach t in array array['partite', 'servizi', 'tipi_turno', 'fabbisogno', 'impostazioni_cucina'] loop
-    execute format('drop policy if exists %I on public.%I', t || '_select', t);
-    execute format('create policy %I on public.%I for select using (public.my_role(kitchen_id) is not null)', t || '_select', t);
-    execute format('drop policy if exists %I on public.%I', t || '_insert', t);
-    execute format('create policy %I on public.%I for insert with check (public.can_write(kitchen_id))', t || '_insert', t);
-    execute format('drop policy if exists %I on public.%I', t || '_update', t);
-    execute format('create policy %I on public.%I for update using (public.can_write(kitchen_id)) with check (public.can_write(kitchen_id))', t || '_update', t);
-    execute format('drop policy if exists %I on public.%I', t || '_delete', t);
-    execute format('create policy %I on public.%I for delete using (public.can_write(kitchen_id))', t || '_delete', t);
-  end loop;
-end $$;
+drop policy if exists partite_select on public.partite;
+create policy partite_select on public.partite
+  for select using (public.my_role(kitchen_id) is not null);
+
+drop policy if exists partite_insert on public.partite;
+create policy partite_insert on public.partite
+  for insert with check (public.can_write(kitchen_id));
+
+drop policy if exists partite_update on public.partite;
+create policy partite_update on public.partite
+  for update using (public.can_write(kitchen_id)) with check (public.can_write(kitchen_id));
+
+drop policy if exists partite_delete on public.partite;
+create policy partite_delete on public.partite
+  for delete using (public.can_write(kitchen_id));
+
+drop policy if exists servizi_select on public.servizi;
+create policy servizi_select on public.servizi
+  for select using (public.my_role(kitchen_id) is not null);
+
+drop policy if exists servizi_insert on public.servizi;
+create policy servizi_insert on public.servizi
+  for insert with check (public.can_write(kitchen_id));
+
+drop policy if exists servizi_update on public.servizi;
+create policy servizi_update on public.servizi
+  for update using (public.can_write(kitchen_id)) with check (public.can_write(kitchen_id));
+
+drop policy if exists servizi_delete on public.servizi;
+create policy servizi_delete on public.servizi
+  for delete using (public.can_write(kitchen_id));
+
+drop policy if exists tipi_turno_select on public.tipi_turno;
+create policy tipi_turno_select on public.tipi_turno
+  for select using (public.my_role(kitchen_id) is not null);
+
+drop policy if exists tipi_turno_insert on public.tipi_turno;
+create policy tipi_turno_insert on public.tipi_turno
+  for insert with check (public.can_write(kitchen_id));
+
+drop policy if exists tipi_turno_update on public.tipi_turno;
+create policy tipi_turno_update on public.tipi_turno
+  for update using (public.can_write(kitchen_id)) with check (public.can_write(kitchen_id));
+
+drop policy if exists tipi_turno_delete on public.tipi_turno;
+create policy tipi_turno_delete on public.tipi_turno
+  for delete using (public.can_write(kitchen_id));
+
+drop policy if exists fabbisogno_select on public.fabbisogno;
+create policy fabbisogno_select on public.fabbisogno
+  for select using (public.my_role(kitchen_id) is not null);
+
+drop policy if exists fabbisogno_insert on public.fabbisogno;
+create policy fabbisogno_insert on public.fabbisogno
+  for insert with check (public.can_write(kitchen_id));
+
+drop policy if exists fabbisogno_update on public.fabbisogno;
+create policy fabbisogno_update on public.fabbisogno
+  for update using (public.can_write(kitchen_id)) with check (public.can_write(kitchen_id));
+
+drop policy if exists fabbisogno_delete on public.fabbisogno;
+create policy fabbisogno_delete on public.fabbisogno
+  for delete using (public.can_write(kitchen_id));
+
+drop policy if exists impostazioni_cucina_select on public.impostazioni_cucina;
+create policy impostazioni_cucina_select on public.impostazioni_cucina
+  for select using (public.my_role(kitchen_id) is not null);
+
+drop policy if exists impostazioni_cucina_insert on public.impostazioni_cucina;
+create policy impostazioni_cucina_insert on public.impostazioni_cucina
+  for insert with check (public.can_write(kitchen_id));
+
+drop policy if exists impostazioni_cucina_update on public.impostazioni_cucina;
+create policy impostazioni_cucina_update on public.impostazioni_cucina
+  for update using (public.can_write(kitchen_id)) with check (public.can_write(kitchen_id));
+
+drop policy if exists impostazioni_cucina_delete on public.impostazioni_cucina;
+create policy impostazioni_cucina_delete on public.impostazioni_cucina
+  for delete using (public.can_write(kitchen_id));
 
 drop policy if exists ore_select on public.ore_registrate;
 create policy ore_select on public.ore_registrate

@@ -91,21 +91,57 @@ alter table public.menu         enable row level security;
 -- ---- 5. Le policy ----------------------------------------------------------
 -- Ricette, piatti e menu li legge ogni membro: servono per cucinare. I costi
 -- dei piatti no.
+--
+-- Sono scritte per esteso, non generate da un ciclo con `format()`: una policy
+-- e' una REGOLA DI SICUREZZA, e si deve poter leggere com'e' e trovare con una
+-- ricerca. Dodici righe in piu' valgono una cosa in meno di cui fidarsi.
+drop policy if exists sub_ricette_select on public.sub_ricette;
+create policy sub_ricette_select on public.sub_ricette
+  for select using (public.my_role(kitchen_id) is not null);
 
-do $$
-declare t text;
-begin
-  foreach t in array array['sub_ricette', 'piatti', 'menu'] loop
-    execute format('drop policy if exists %I on public.%I', t || '_select', t);
-    execute format('create policy %I on public.%I for select using (public.my_role(kitchen_id) is not null)', t || '_select', t);
-    execute format('drop policy if exists %I on public.%I', t || '_insert', t);
-    execute format('create policy %I on public.%I for insert with check (public.can_write(kitchen_id))', t || '_insert', t);
-    execute format('drop policy if exists %I on public.%I', t || '_update', t);
-    execute format('create policy %I on public.%I for update using (public.can_write(kitchen_id)) with check (public.can_write(kitchen_id))', t || '_update', t);
-    execute format('drop policy if exists %I on public.%I', t || '_delete', t);
-    execute format('create policy %I on public.%I for delete using (public.can_write(kitchen_id))', t || '_delete', t);
-  end loop;
-end $$;
+drop policy if exists sub_ricette_insert on public.sub_ricette;
+create policy sub_ricette_insert on public.sub_ricette
+  for insert with check (public.can_write(kitchen_id));
+
+drop policy if exists sub_ricette_update on public.sub_ricette;
+create policy sub_ricette_update on public.sub_ricette
+  for update using (public.can_write(kitchen_id)) with check (public.can_write(kitchen_id));
+
+drop policy if exists sub_ricette_delete on public.sub_ricette;
+create policy sub_ricette_delete on public.sub_ricette
+  for delete using (public.can_write(kitchen_id));
+
+drop policy if exists piatti_select on public.piatti;
+create policy piatti_select on public.piatti
+  for select using (public.my_role(kitchen_id) is not null);
+
+drop policy if exists piatti_insert on public.piatti;
+create policy piatti_insert on public.piatti
+  for insert with check (public.can_write(kitchen_id));
+
+drop policy if exists piatti_update on public.piatti;
+create policy piatti_update on public.piatti
+  for update using (public.can_write(kitchen_id)) with check (public.can_write(kitchen_id));
+
+drop policy if exists piatti_delete on public.piatti;
+create policy piatti_delete on public.piatti
+  for delete using (public.can_write(kitchen_id));
+
+drop policy if exists menu_select on public.menu;
+create policy menu_select on public.menu
+  for select using (public.my_role(kitchen_id) is not null);
+
+drop policy if exists menu_insert on public.menu;
+create policy menu_insert on public.menu
+  for insert with check (public.can_write(kitchen_id));
+
+drop policy if exists menu_update on public.menu;
+create policy menu_update on public.menu
+  for update using (public.can_write(kitchen_id)) with check (public.can_write(kitchen_id));
+
+drop policy if exists menu_delete on public.menu;
+create policy menu_delete on public.menu
+  for delete using (public.can_write(kitchen_id));
 
 drop policy if exists piatti_costi_select on public.piatti_costi;
 create policy piatti_costi_select on public.piatti_costi
