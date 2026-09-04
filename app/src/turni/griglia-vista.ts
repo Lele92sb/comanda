@@ -516,6 +516,23 @@ export class GrigliaTurni extends LitElement {
     clearTimeout(this.attesa);
   }
 
+  /* QUI SI SCRIVE A MANO DENTRO IL DOM DI LIT, ed e' voluto: quanto testo ci
+     sta in una cella si sa solo DOPO aver disegnato, misurandolo. Ma i due
+     span che si riempiono qui — `.nome-persona` e `.ct-nome-stazione` — nel
+     template sono VUOTI, e non per distrazione.
+
+     Un `${...}` dentro uno span fa nascere due nodi commento invisibili: sono
+     i segnaposto con cui Lit ritrova quel pezzo la volta dopo. Scrivere
+     `textContent` li cancella, e al secondo aggiornamento Lit non trova piu'
+     il suo posto: «This ChildPart has no parentNode». L'errore arriva a meta'
+     di `updated()`, quindi salta anche quello che viene dopo — le frecce di
+     scorrimento smettono di aggiornarsi — e da li' in poi quel pezzo di
+     template e' morto: se una persona cambiasse nome, la griglia mostrerebbe
+     ancora il vecchio.
+
+     Il dato quindi sta negli attributi `data-`, che sono di Lit e restano
+     giusti, e il testo lo mette questo codice. Chi legge il template vede uno
+     span vuoto e potrebbe pensare a una dimenticanza: non lo e'. */
   override updated(): void {
     const tab = this.tabella;
     if (!tab) return;
@@ -547,11 +564,11 @@ export class GrigliaTurni extends LitElement {
               ? html`<span class="ct-nome-stazione"
                        data-stazione=${c.stazione.id} data-nome=${c.stazione.nome}
                        data-stazione2=${c.stazione2.id} data-nome2=${c.stazione2.nome}
-                     >${c.stazione.nome}/${c.stazione2.nome}</span>`
+                     ></span>`
               : c.stazione
                 ? html`<span class="ct-nome-stazione"
                          data-stazione=${c.stazione.id} data-nome=${c.stazione.nome}
-                       >${c.stazione.nome}</span>`
+                       ></span>`
                 : nothing}
           </span>
         </button>
@@ -587,7 +604,7 @@ export class GrigliaTurni extends LitElement {
             ${repeat(this.righe, r => r.id, r => html`
               <tr>
                 <td class="name ${r.senzaStazioni ? 'senza-stazioni' : ''}" title=${r.titolo}>
-                  <i class="ct-pallino vuoto" aria-hidden="true"></i><span class="nome-persona" data-nome=${r.nome}>${r.nome}</span>
+                  <i class="ct-pallino vuoto" aria-hidden="true"></i><span class="nome-persona" data-nome=${r.nome}></span>
                 </td>
                 ${repeat(r.celle, c => c.giorno, (c, i) => this.cella(r, c, this.giorni[i] as GiornoVista))}
                 <td class="ore ore-col" title=${r.ore.titolo}>
