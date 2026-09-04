@@ -27,6 +27,7 @@ import '../ds/etichetta.ts';
 import '../ds/interruttore.ts';
 import '../ds/riquadro.ts';
 import '../ds/scelta.ts';
+import '../ds/qr.ts';
 import type { Opzione } from '../ds/scelta.ts';
 
 export interface MembroVista {
@@ -151,6 +152,12 @@ export class Squadra extends LitElement {
       text-overflow:ellipsis;
     }
     input.link:focus{outline:var(--fuoco);outline-offset:var(--fuoco-stacco);}
+
+    /* Il QR sta centrato e staccato: e' un gesto diverso dal copiare un link,
+       e due gesti attaccati si scambiano. */
+    .qr{display:flex;flex-direction:column;align-items:center;gap:var(--space-1);
+      margin-top:var(--space-4);}
+    .qr .nota{text-align:center;margin:0;}
 
     .invito{
       background:var(--bg-elev2);border-radius:var(--radius-md);
@@ -310,7 +317,16 @@ export class Squadra extends LitElement {
                          @click=${() => this.manda('invito-copia', { link: this.linkInvito(this.codiceNuovo) })}
             >${t('Copia')}</cmd-bottone>
           </div>
-          <p class="nota">${t('Mandalo a chi deve entrare: tocca il link e il codice è già scritto. Il codice qui sopra serve se glielo detti a voce.')}</p>` : nothing}
+          <p class="nota">${t('Mandalo a chi deve entrare: tocca il link e il codice è già scritto. Il codice qui sopra serve se glielo detti a voce.')}</p>
+          <!-- IL QR E' PER QUANDO SIETE NELLA STESSA STANZA. Il colloquio si
+               fa in cucina, non su WhatsApp: si gira lo schermo, l'altro
+               inquadra, ed e' dentro. Nessun messaggio da mandare, nessun
+               numero di telefono da chiedere. -->
+          <div class="qr">
+            <cmd-qr testo=${this.linkInvito(this.codiceNuovo)} lato=${160}
+                    erroreTesto=${t('Il codice è troppo lungo per un QR.')}></cmd-qr>
+            <p class="nota">${t('Oppure fallo inquadrare: siete già uno davanti all\'altro.')}</p>
+          </div>` : nothing}
 
         ${this.inviti.length ? html`
           <p class="nota" style="margin-top:var(--space-4)">${t('Codici ancora validi')}</p>

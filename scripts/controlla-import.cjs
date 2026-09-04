@@ -194,7 +194,14 @@ for (const f of FILE.filter(x => x.endsWith('.js'))) {
 // puo' usare. Una cartella che non compare qui non e' ancora vincolata.
 // `null` in `pacchetti` vuol dire "qualsiasi pacchetto".
 const CONFINI = {
-  ds:   { dentro: [],      pacchetti: ['lit'] },
+  // `qrcode-generator` è la SOLA eccezione al «ds/ importa solo lit», e la
+  // ragione è che un QR non si scrive a mano: dietro ci sono la codifica dei
+  // dati e la correzione d'errore Reed-Solomon, e un generatore scritto in
+  // casa e sbagliato non dà un QR brutto — dà un QR che la fotocamera non
+  // legge, e te ne accorgi in cucina con qualcuno che non riesce a entrare.
+  // Pesa 10 kB, non ha dipendenze sue, è MIT. Un'eccezione con la ragione
+  // scritta si può discutere; una senza non la toglie più nessuno.
+  ds:   { dentro: [],      pacchetti: ['lit', 'qrcode-generator'] },
   lib:  { dentro: [],      pacchetti: ['@supabase/supabase-js', 'node-forge', 'fast-xml-parser'] },
   // core puo' scendere in lib/ (il motore) e in ds/ (i componenti). ds/ e' una
   // foglia che non sa niente di Comanda: importarla e' scendere, non salire.

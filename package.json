@@ -22,7 +22,8 @@
     "@supabase/supabase-js": "^2.112.4",
     "fast-xml-parser": "^5.11.1",
     "lit": "^3.3.3",
-    "node-forge": "^1.4.0"
+    "node-forge": "^1.4.0",
+    "qrcode-generator": "^2.0.4"
   },
   "type": "module",
   "engines": {

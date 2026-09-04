@@ -83,6 +83,7 @@ import type { CucinaVista } from '../account/accesso-vista.ts';
 import '../account/squadra-vista.ts';
 import { controllaContrasto } from './contrasto.ts';
 import '../ds/ricerca.ts';
+import '../ds/qr.ts';
 import type { InvitoVista, MembroVista } from '../account/squadra-vista.ts';
 
 interface Caso {
@@ -702,6 +703,29 @@ const GRUPPI: Gruppo[] = [
         nota: 'E’ il caso che si dimentica sempre. Non puo’ mandare niente, e la schermata deve dirgli perche’ e a chi chiedere — invece di mostrargli un modulo che non funziona.',
         contenuto: () => html`
           <cmd-richieste .servizi=${[]} .richieste=${[]}></cmd-richieste>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-qr',
+    casi: [
+      {
+        id: 'qr',
+        titolo: 'Il codice da far inquadrare',
+        nota: 'NON segue il tema, ed e’ voluto: un QR lo legge una fotocamera, e le fotocamere si aspettano scuro su chiaro. Chiaro su scuro molti telefoni lo leggono, ma non tutti, e non c’e’ modo di accorgersene prima che qualcuno resti fuori. Sta su carta bianca sempre, come <cmd-comanda>. Il bordo bianco intorno non e’ un margine: e’ la «zona di quiete», quattro moduli previsti dallo standard, senza i quali il lettore non trova dove comincia il disegno. Prova a inquadrarlo col telefono: deve aprire il link.',
+        contenuto: () => html`
+          <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">
+            <cmd-qr testo="https://staging.comanda-bwj.pages.dev/#invito=ABCD2345" lato=${160}></cmd-qr>
+            <cmd-qr testo="https://staging.comanda-bwj.pages.dev/#invito=ABCD2345" lato=${96}></cmd-qr>
+          </div>`,
+      },
+      {
+        id: 'qr-limiti',
+        titolo: 'Vuoto, e troppo lungo',
+        nota: 'Senza testo non disegna niente invece di disegnare un quadrato vuoto che sembra un guasto. Con un testo che non ci sta in nessuna versione del formato NON disegna un QR sbagliato — uno che la fotocamera non legge sarebbe peggio di nessuno — e lo dice, mentre il link accanto resta comunque copiabile.',
+        contenuto: () => html`
+          <cmd-qr testo="" lato=${120}></cmd-qr>
+          <cmd-qr testo=${'x'.repeat(3000)} lato=${120}></cmd-qr>`,
       },
     ],
   },
