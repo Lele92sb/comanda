@@ -25,7 +25,7 @@
 // nello standard vale quattro moduli: senza, il lettore non trova dove
 // comincia il disegno. Sembra un margine, non lo e'.
 // ============================================================================
-import { LitElement, html, svg, css, nothing, type TemplateResult } from 'lit';
+import { LitElement, html, svg, css, type TemplateResult } from 'lit';
 import qr from 'qrcode-generator';
 
 export class Qr extends LitElement {

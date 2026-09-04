@@ -256,7 +256,51 @@ for (const f of FILE) {
   }
 }
 
+/* ============================================================================
+   IMPORT MORTI: importati e mai usati.
+
+   Non e' pulizia. E' un SINTOMO, e la prima volta ha rivelato un difetto vero:
+   in `griglia.js` erano importati `esc`, `periodLabel` e `periodMode` e non li
+   chiamava piu' nessuno. Il motivo era che nel diventare un componente la
+   griglia aveva smesso di scrivere il titolo del periodo — quello fra le due
+   frecce — e per settimane le frecce hanno spostato un periodo senza nome,
+   con uno spazio vuoto al posto delle date. Niente errori, ovviamente: un
+   import inutile non disturba nessuno.
+
+   Il controllo di sopra guarda il caso opposto (usato ma non importato), che
+   esplode subito a schermo. Questo guarda quello che non esplode mai.
+
+   Si contano solo gli import NOMINALI. `import './cosa.ts'` senza nomi serve a
+   registrare un componente ed e' giusto che non compaia da nessuna parte.
+   ============================================================================ */
+for (const f of FILE) {
+  const testo = fs.readFileSync(f, 'utf8');
+  for (const m of testo.matchAll(/^import\s*\{([^}]+)\}\s*from/gm)) {
+    for (const pezzo of m[1].split(',')) {
+      const nome = pezzo.split(' as ').pop().replace(/\btype\b/, '').trim();
+      if (!nome) continue;
+      // Quante volte compare in tutto il file, meno la riga dell'import.
+      // NIENTE `\b`: non vale per le lettere accentate, e la prima versione di
+      // questo controllo ha dichiarato morta `èRigaDiServizio` che era usata
+      // due righe sotto — davanti alla `è` c'era una parentesi, e per `\b` una
+      // lettera accentata non e' una lettera. Un controllo che segnala il
+      // falso smette di essere letto, e allora tanto vale non averlo.
+      // Qui si guarda che intorno al nome non ci sia un altro carattere da
+      // identificatore, accenti compresi.
+      const bordo = '[A-Za-z0-9_$\\u00C0-\\u024F]';
+      const scappato = nome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const usi = (testo.match(
+        new RegExp('(?<!' + bordo + ')' + scappato + '(?!' + bordo + ')', 'g')) || []).length - 1;
+      if (usi > 0) continue;
+      console.log('  MORTO    ' + normalizza(f).replace('app/src/', '') +
+                  '  importa  ' + nome + '  e non lo usa mai' +
+                  '  —  o serviva a qualcosa che si e\' perso, o va tolto');
+      problemi++;
+    }
+  }
+}
+
 console.log(problemi
   ? problemi + ' problemi'
-  : 'import a posto e confini rispettati (' + FILE.length + ' moduli)');
+  : 'import a posto, confini rispettati, niente di morto (' + FILE.length + ' moduli)');
 process.exit(problemi ? 1 : 0);

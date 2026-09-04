@@ -57,6 +57,19 @@ simbolo usato ma non importato non lo vede né il compilatore né il bundler,
 esplode solo a schermo. È successo quattro volte prima che quel controllo
 esistesse.
 
+Lo stesso controllo guarda anche il caso opposto — **importato e mai usato** —
+che non esplode mai, e per questo è peggio. In `griglia.js` erano importati
+`esc`, `periodLabel` e `periodMode` senza che nessuno li chiamasse: il motivo
+era che nel diventare un componente la griglia aveva smesso di scrivere il
+titolo del periodo, e da allora le due frecce spostavano una settimana senza
+nome, con uno spazio vuoto al posto delle date. **Un import morto non è
+sporcizia: è il segno che qualcosa si è perso.**
+
+E il confine di parola non si scrive `\b`: la prima versione di quel controllo
+dichiarava morta `èRigaDiServizio`, che era usata due righe sotto — davanti
+alla `è` c'era una parentesi, e per `\b` una lettera accentata non è una
+lettera. Un controllo che segnala il falso smette di essere letto.
+
 Lo stesso controllo fa ora anche da **guardiano dei confini**, e la tabella sta
 in cima a `scripts/controlla-import.cjs`:
 

@@ -1,4 +1,4 @@
-import { CODE_HOURS, CODE_LABEL, SERVICE_LABEL, SHIFT_CONFIG, TURNO_DEF, WORKING_CODES, esc, periodDates, periodLabel, periodMode, save, state } from '../core/state.js';
+import { CODE_HOURS, CODE_LABEL, SERVICE_LABEL, SHIFT_CONFIG, TURNO_DEF, WORKING_CODES, periodDates, periodLabel, save, state } from '../core/state.js';
 import { assegnaStazione, dayName, isoDate, normalizzaCella, parseISO, serviziDelCodice, stazioneDi, stazioniDi } from '../lib/logic.js';
 import { Cloud } from '../lib/cloud.js';
 import { costoDelLavoro, foodCostMedio, incassoDiPareggio } from '../lib/costo-lavoro.js';
@@ -300,7 +300,24 @@ function legendaDa(dates){
   return voci;
 }
 
+/* CHE SETTIMANA STO GUARDANDO.
+   Fra le due frecce c'era uno spazio vuoto: `<span id="period-label">` sta
+   nel markup da sempre, `periodLabel()` esiste e funziona, ma nessuno le
+   metteva insieme — l'aggiornamento si e' perso quando la griglia e' diventata
+   un componente, e da allora le frecce spostavano un periodo che non aveva
+   nome. Le date nella griglia lo dicono a chi le legge riga per riga; il
+   titolo lo dice a colpo d'occhio, ed e' quello che serve per sapere se stai
+   guardando questa settimana o la prossima.
+
+   L'ha trovato l'import morto: `periodLabel` era importata e mai chiamata.
+   Da li' il controllo in `lint:import`. */
+function aggiornaEtichettaPeriodo(){
+  const el = document.getElementById('period-label');
+  if(el) el.textContent = periodLabel();
+}
+
 export function renderTurni(){
+  aggiornaEtichettaPeriodo();
   const el = document.getElementById('turni-panel');
   if(!el) return;
   if(!state.staff.length){

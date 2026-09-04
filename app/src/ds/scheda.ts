@@ -12,7 +12,7 @@
 // su uno schermo stretto i comandi scendono sotto invece di schiacciare il
 // nome a due lettere.
 // ============================================================================
-import { html, css, nothing, type TemplateResult } from 'lit';
+import { html, css, type TemplateResult } from 'lit';
 import { Elemento } from './base.ts';
 
 export class Scheda extends Elemento {
