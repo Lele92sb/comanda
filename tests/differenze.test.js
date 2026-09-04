@@ -92,3 +92,72 @@ test('svuotare l\'elenco toglie tutto', () => {
   assert.deepEqual(d.daScrivere, []);
   assert.deepEqual(d.daTogliere, ['a', 'b']);
 });
+
+/* ===================== LE CELLE DEI TURNI ===================== */
+
+import { differenzeCelle } from '../app/src/lib/differenze.js';
+
+const cella = (code, stations = {}) => ({ code, stations });
+
+test('cambiando UNA cella si scrive una riga sola', () => {
+  // È il gesto più frequente dell'app: correggere a mano un turno che il
+  // generatore ha messo. Prima riscriveva il prospetto di tutti.
+  const prima = { p1: { '2026-09-01': cella('P'), '2026-09-02': cella('R') },
+                  p2: { '2026-09-01': cella('SP') } };
+  const dopo = JSON.parse(JSON.stringify(prima));
+  dopo.p1['2026-09-02'] = cella('SP');
+  const d = differenzeCelle(dopo, prima);
+  assert.equal(d.daScrivere.length, 1);
+  assert.deepEqual(d.daScrivere[0], { staff_id: 'p1', giorno: '2026-09-02', code: 'SP', stations: {} });
+  assert.deepEqual(d.daTogliere, []);
+});
+
+test('svuotare una cella la CANCELLA, non la salva vuota', () => {
+  // «—» in una casella è l'assenza di un turno, non un turno di tipo niente.
+  const prima = { p1: { '2026-09-01': cella('P') } };
+  const d = differenzeCelle({ p1: { '2026-09-01': cella('') } }, prima);
+  assert.deepEqual(d.daScrivere, []);
+  assert.deepEqual(d.daTogliere, [{ staff_id: 'p1', giorno: '2026-09-01' }]);
+});
+
+test('svuotare una cella già vuota non scrive niente', () => {
+  // Su un prospetto mensile appena sfiorato sarebbero seicento scritture per
+  // niente.
+  const d = differenzeCelle({ p1: { '2026-09-01': cella('') } },
+                            { p1: { '2026-09-01': cella('') } });
+  assert.deepEqual(d.daScrivere, []);
+  assert.deepEqual(d.daTogliere, []);
+});
+
+test('le partite per servizio contano nel confronto', () => {
+  const prima = { p1: { '2026-09-01': cella('SP', { pranzo: 's1', cena: 's1' }) } };
+  const dopo  = { p1: { '2026-09-01': cella('SP', { pranzo: 's1', cena: 's2' }) } };
+  assert.equal(differenzeCelle(dopo, prima).daScrivere.length, 1);
+});
+
+test('le stesse partite scritte in ordine diverso NON sono un cambiamento', () => {
+  // JSON.stringify direbbe diversi due oggetti uguali con le chiavi in ordine
+  // diverso, e li riscriverebbe tutti a ogni giro.
+  const prima = { p1: { '2026-09-01': cella('SP', { pranzo: 's1', cena: 's2' }) } };
+  const dopo  = { p1: { '2026-09-01': cella('SP', { cena: 's2', pranzo: 's1' }) } };
+  assert.deepEqual(differenzeCelle(dopo, prima).daScrivere, []);
+});
+
+test('una persona tolta si porta via le sue celle', () => {
+  const prima = { p1: { '2026-09-01': cella('P') }, p2: { '2026-09-01': cella('R') } };
+  const d = differenzeCelle({ p1: { '2026-09-01': cella('P') } }, prima);
+  assert.deepEqual(d.daTogliere, [{ staff_id: 'p2', giorno: '2026-09-01' }]);
+});
+
+test('un prospetto generato da zero scrive tutte le celle piene', () => {
+  const dopo = { p1: { '2026-09-01': cella('P'), '2026-09-02': cella(''), '2026-09-03': cella('R') } };
+  const d = differenzeCelle(dopo, {});
+  assert.deepEqual(d.daScrivere.map(x => x.code), ['P', 'R'], 'la vuota non si scrive');
+  assert.deepEqual(d.daTogliere, []);
+});
+
+test('mappe mancanti non fanno esplodere niente', () => {
+  assert.deepEqual(differenzeCelle(null, null), { daScrivere: [], daTogliere: [] });
+  assert.deepEqual(differenzeCelle(undefined, { p1: { '2026-09-01': cella('P') } }).daTogliere,
+                   [{ staff_id: 'p1', giorno: '2026-09-01' }]);
+});

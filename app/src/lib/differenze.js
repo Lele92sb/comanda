@@ -73,3 +73,77 @@ function stessoValore(x, y){
 
   return String(x) === String(y);
 }
+
+/* ============================================================================
+   LE CELLE DEI TURNI sono fatte diversamente, e vogliono un confronto loro.
+
+   Non sono un elenco di righe con un `id`: sono una mappa annidata,
+   `{personaId: {giorno: cella}}`. E hanno una regola in più che gli elenchi non
+   hanno: una cella VUOTA non è una cella con dentro il vuoto — è una cella che
+   non c'è. Un prospetto mezzo compilato non deve costare righe quanto uno
+   pieno, e «— » in una casella è l'assenza di un turno, non un turno di tipo
+   niente.
+   ============================================================================ */
+
+/** Vero se questa cella non contiene un turno. */
+function vuota(c){ return !c || !c.code; }
+
+/**
+ * Cosa scrivere e cosa cancellare, passando da una mappa di celle all'altra.
+ *
+ * Restituisce righe piatte — `{staff_id, giorno, code, stations}` — perché è
+ * la forma in cui vanno nel database, e ricomporre la mappa è mestiere di chi
+ * legge, non di chi confronta.
+ */
+export function differenzeCelle(nuove, precedenti){
+  const daScrivere = [], daTogliere = [];
+  const prima = precedenti || {}, dopo = nuove || {};
+
+  for(const staffId of Object.keys(dopo)){
+    for(const [giorno, cella] of Object.entries(dopo[staffId] || {})){
+      const vecchia = (prima[staffId] || {})[giorno];
+      if(vuota(cella)){
+        // Si cancella solo se PRIMA c'era qualcosa: cancellare una cella già
+        // inesistente sarebbe una scrittura per niente, e su un prospetto
+        // mensile appena sfiorato sarebbero seicento scritture per niente.
+        if(!vuota(vecchia)) daTogliere.push({ staff_id: staffId, giorno });
+        continue;
+      }
+      if(stessaCella(cella, vecchia)) continue;
+      daScrivere.push({
+        staff_id: staffId, giorno,
+        code: cella.code,
+        stations: cella.stations || {},
+      });
+    }
+  }
+
+  // Le celle sparite dalla mappa: una persona tolta dalla brigata, un giorno
+  // uscito dal periodo.
+  for(const staffId of Object.keys(prima)){
+    for(const [giorno, vecchia] of Object.entries(prima[staffId] || {})){
+      if(vuota(vecchia)) continue;
+      if((dopo[staffId] || {})[giorno] === undefined){
+        daTogliere.push({ staff_id: staffId, giorno });
+      }
+    }
+  }
+
+  return { daScrivere, daTogliere };
+}
+
+function stessaCella(a, b){
+  if(vuota(a) || vuota(b)) return vuota(a) && vuota(b);
+  if(a.code !== b.code) return false;
+  // Le partite per servizio: poche chiavi, e l'ordine non conta. Si
+  // confrontano una per una invece di affidarsi a JSON.stringify, che direbbe
+  // diversi due oggetti uguali scritti in ordine diverso — e li riscriverebbe
+  // tutti a ogni giro.
+  const sa = a.stations || {}, sb = b.stations || {};
+  const chiavi = new Set([...Object.keys(sa), ...Object.keys(sb)]);
+  for(const k of chiavi){
+    const x = sa[k] || null, y = sb[k] || null;
+    if(x !== y) return false;
+  }
+  return true;
+}

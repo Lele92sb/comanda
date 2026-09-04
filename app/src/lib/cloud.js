@@ -14,7 +14,7 @@
 // ============================================================================
 import { createClient } from '@supabase/supabase-js';
 import { COMANDA_CONFIG as cfg } from './config.js';
-import { differenze } from './differenze.js';
+import { differenze, differenzeCelle } from './differenze.js';
 
 const CLOUD_ENABLED = !!(cfg.SUPABASE_URL && cfg.SUPABASE_PUBLIC_KEY);
 
@@ -419,6 +419,70 @@ const SEZIONI_IN_TABELLA = {
       return true;
     },
   },
+
+  /* I TURNI hanno una forma loro: non un elenco, ma la mappa
+     {personaId: {giorno: cella}} che l'app usa da sempre. Il database tiene
+     righe piatte — una per cella — e qui si ricompone. */
+  shifts: {
+    async leggi(){
+      const { data, error } = await Cloud.client.rpc('leggi_turni',
+        { p_kitchen: Cloud.kitchen.id });
+      if(error) throw error;
+      const mappa = {};
+      for(const r of data || []){
+        (mappa[r.staff_id] = mappa[r.staff_id] || {})[r.giorno] =
+          { code: r.code, stations: r.stations || {} };
+      }
+      return mappa;
+    },
+    async scrivi(nuove, precedenti){
+      const { daScrivere, daTogliere } = differenzeCelle(nuove, precedenti);
+      if(!daScrivere.length && !daTogliere.length) return true;
+      // Una chiamata sola: dopo una generazione mensile ne cambiano seicento
+      // insieme, e una chiamata per cella sarebbe l'unica cosa peggiore del
+      // blob di prima.
+      const { error } = await Cloud.client.rpc('salva_turni', {
+        p_kitchen: Cloud.kitchen.id,
+        p_celle: daScrivere,
+        p_da_togliere: daTogliere,
+      });
+      if(error) throw error;
+      return true;
+    },
+    /* La mappa e' annidata: una copia piatta non basterebbe, perche' i secondi
+       livelli resterebbero condivisi con `state` e cambierebbero sotto — e il
+       confronto della volta dopo direbbe «niente e' cambiato». */
+    copia(m){
+      const c = {};
+      for(const [id, giorni] of Object.entries(m || {})){
+        c[id] = {};
+        for(const [g, cella] of Object.entries(giorni || {})){
+          c[id][g] = { code: cella.code, stations: { ...(cella.stations || {}) } };
+        }
+      }
+      return c;
+    },
+  },
+
+  publishedShifts: {
+    async leggi(){
+      const { data, error } = await Cloud.client
+        .from('giorni_pubblicati').select('giorno')
+        .eq('kitchen_id', Cloud.kitchen.id).order('giorno');
+      if(error) throw error;
+      return (data || []).map(r => r.giorno);
+    },
+    async scrivi(giorni){
+      // Si manda l'insieme intero, ed e' quello che sono: «adesso i pubblicati
+      // sono questi». Toglierne uno e aggiungerne un altro sono lo stesso
+      // gesto, e sono al massimo una trentina di date.
+      const { error } = await Cloud.client.rpc('salva_giorni_pubblicati', {
+        p_kitchen: Cloud.kitchen.id, p_giorni: giorni || [],
+      });
+      if(error) throw error;
+      return true;
+    },
+  },
 };
 
 /* L'ultima lettura, per sezione: serve a `scrivi` per sapere cos'e' cambiato.
@@ -428,9 +492,13 @@ const ULTIMA_LETTURA = {};
 async function cloudGet(key){
   const tab = SEZIONI_IN_TABELLA[key];
   if(tab){
-    const righe = await tab.leggi();
-    ULTIMA_LETTURA[key] = righe.map(r => ({ ...r }));
-    return righe;
+    const letto = await tab.leggi();
+    // La copia serve a confrontare il PROSSIMO salvataggio con quello che c'era
+    // davvero. Senza, `ULTIMA_LETTURA` punterebbe agli stessi oggetti di
+    // `state`: cambiandoli l'app cambierebbe anche il termine di paragone, e il
+    // confronto direbbe sempre «niente e' cambiato».
+    ULTIMA_LETTURA[key] = tab.copia ? tab.copia(letto) : (letto || []).map(r => ({ ...r }));
+    return letto;
   }
   if(PERSONAL_KEYS.includes(key)){
     const { data, error } = await Cloud.client
@@ -455,8 +523,8 @@ async function cloudGet(key){
 async function cloudSet(key, value){
   const tab = SEZIONI_IN_TABELLA[key];
   if(tab){
-    const ok = await tab.scrivi(value, ULTIMA_LETTURA[key] || []);
-    if(ok) ULTIMA_LETTURA[key] = (value || []).map(r => ({ ...r }));
+    const ok = await tab.scrivi(value, ULTIMA_LETTURA[key] ?? (tab.copia ? {} : []));
+    if(ok) ULTIMA_LETTURA[key] = tab.copia ? tab.copia(value) : (value || []).map(r => ({ ...r }));
     return ok;
   }
   if(PERSONAL_KEYS.includes(key)){
