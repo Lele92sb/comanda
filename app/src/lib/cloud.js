@@ -585,10 +585,43 @@ const SEZIONI_IN_TABELLA = {
    Sta qui e non in `state` perche' e' roba del trasporto, non dei dati. */
 const ULTIMA_LETTURA = {};
 
+/* LA TABELLA NON C'E' ANCORA.
+
+   Il codice nuovo e il database non cambiano nello stesso istante: si
+   pubblica l'app, e la migrazione la lancia una persona qualche minuto (o
+   giorno) dopo. In mezzo, l'app chiederebbe funzioni che non esistono e si
+   fermerebbe su «Dati non raggiungibili» — cioe' andrebbe giu' del tutto per
+   una sezione sola.
+
+   PostgREST lo dice chiaramente: PGRST202, «funzione non trovata». Quando
+   succede si torna al blob, che per quella sezione e' ancora la verita'. Cosi'
+   ogni migrazione si puo' lanciare con calma, e l'app funziona prima e dopo.
+
+   E' anche quello che rende SICURO tornare indietro: se una migrazione andasse
+   male, l'app continuerebbe a leggere il blob invece di piantarsi. */
+function tabellaMancante(errore){
+  // Due codici e due frasi, perche' PostgREST li distingue: PGRST202 e' una
+  // FUNZIONE che non c'e', PGRST205 una TABELLA. La prima versione guardava
+  // solo le funzioni, e le due sezioni che interrogano una tabella
+  // direttamente — le impronte delle fatture, i giorni pubblicati — facevano
+  // fermare l'app lo stesso. Con un messaggio che parlava di una tabella,
+  // mentre il codice cercava «function».
+  return !!errore && (
+    errore.code === 'PGRST202' || errore.code === 'PGRST205' || errore.code === '42P01' ||
+    /Could not find the (function|table)|does not exist|schema cache/i.test(errore.message || ''));
+}
+
 async function cloudGet(key){
   const tab = SEZIONI_IN_TABELLA[key];
   if(tab){
-    const letto = await tab.leggi();
+    let letto;
+    try{ letto = await tab.leggi(); }
+    catch(e){
+      if(!tabellaMancante(e)) throw e;
+      console.warn('sezione ancora sul vecchio modello:', key);
+      SEZIONI_IN_TABELLA[key] = null;     // non si riprova a ogni lettura
+      return cloudGet(key);
+    }
     // La copia serve a confrontare il PROSSIMO salvataggio con quello che c'era
     // davvero. Senza, `ULTIMA_LETTURA` punterebbe agli stessi oggetti di
     // `state`: cambiandoli l'app cambierebbe anche il termine di paragone, e il
@@ -625,7 +658,13 @@ async function cloudSet(key, value){
     // meta'. Si segna PRIMA, perche' l'evento puo' arrivare mentre la
     // scrittura e' ancora in volo.
     segnaScritturaMia(key);
-    const ok = await tab.scrivi(value, ULTIMA_LETTURA[key] ?? (tab.copia ? {} : []));
+    let ok;
+    try{ ok = await tab.scrivi(value, ULTIMA_LETTURA[key] ?? (tab.copia ? {} : [])); }
+    catch(e){
+      if(!tabellaMancante(e)) throw e;
+      SEZIONI_IN_TABELLA[key] = null;
+      return cloudSet(key, value);
+    }
     if(ok) ULTIMA_LETTURA[key] = tab.copia ? tab.copia(value) : (value || []).map(r => ({ ...r }));
     return ok;
   }
