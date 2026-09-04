@@ -9,7 +9,7 @@ del personale, assistente AI. Italiano e inglese.
 npm ci          # richiede Node >= 22.6 (i test caricano moduli .ts direttamente)
 npm run dev     # sviluppo, ricarica a caldo — le funzioni server NON girano
 npm run preview # build + wrangler: come in produzione, funzioni server comprese
-npm test        # 246 test
+npm test        # 262 test
 npm run typecheck
 npm run lint:import
 npm run lint:token   # ogni var(--x) esiste davvero in ds/tokens.css
@@ -286,7 +286,17 @@ salvataggio di un collega non lo svuota.** Provato col cursore a metà parola �
 testo, posizione del cursore e fuoco restano dov'erano, e il dato dell'altro
 arriva lo stesso.
 
-I test coprono motore turni, fatture, valuta, costo del lavoro e ambienti. Dell'interfaccia
+I test coprono motore turni, fatture, valuta, costo del lavoro, **il riepilogo
+della generazione** e ambienti.
+
+Quell'ultimo e' nato da un errore: la logica di cosa dire dopo una generazione
+stava dentro , cioe' in un file che ha bisogno del DOM e non puo'
+avere test. Riscrivendola e' rimasta una riga che usava una variabile appena
+eliminata — ReferenceError a meta' funzione, nessun messaggio piu' dopo ogni
+generazione, e l'ha trovato lo chef usando l'app. Adesso **cosa** dire sta in
+ con sedici test, e nel collante resta solo **come**
+dirlo: frasi, plurali, markup. E' il confine da tenere ogni volta che il
+collante comincia a decidere qualcosa invece di limitarsi a disegnarlo. Dell'interfaccia
 coprono **il contrasto**: `banco/contrasto.ts` misura ogni testo della pagina
 nei due temi (bottone «Prova il contrasto» nel banco). Il resto no:
 le due regressioni visive di un design system sono state trovate confrontando
