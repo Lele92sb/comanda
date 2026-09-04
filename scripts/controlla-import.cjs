@@ -51,7 +51,20 @@ let problemi = 0;
 
 /* ========================= 1. SIMBOLI NON IMPORTATI ========================= */
 
-const DA_CONTROLLARE = ['esc', 't', 'lingua', 'toast', 'save', 'state', 'uid', 'Cloud', 'conferma', 'chiediTesto'];
+/* I nomi che, usati in un `.js` senza importarli, sono certamente un errore.
+   NON e' un analizzatore completo, ed e' una scelta: provato a metterci dentro
+   tutti i 167 simboli che il progetto importa da qualche parte, e sono uscite
+   dieci segnalazioni tutte false — `foodCostMedio: medio` e' una chiave,
+   `'puoFareExtra'` sta dentro una stringa, `turnoDef: TURNO_DEF` e' una
+   destrutturazione con rinomina. Distinguerli vorrebbe dire un parser vero;
+   dieci righe rosse sbagliate vogliono dire un controllo che nessuno legge.
+
+   `html`, `css` e gli altri di Lit stanno qui perche' e' costato: riscrivendo
+   il riepilogo del generatore e' rimasta una riga che usava `html` dopo che la
+   variabile era stata eliminata. ReferenceError a meta' funzione, il riepilogo
+   non compariva piu', e nessuno dei cinque controlli lo ha visto. */
+const DA_CONTROLLARE = ['esc', 't', 'lingua', 'toast', 'save', 'state', 'uid', 'Cloud',
+  'conferma', 'chiediTesto', 'html', 'css', 'svg', 'nothing', 'LitElement', 'repeat'];
 
 for (const f of FILE.filter(x => x.endsWith('.js'))) {
   const testo = fs.readFileSync(f, 'utf8');
@@ -68,7 +81,15 @@ for (const f of FILE.filter(x => x.endsWith('.js'))) {
       : new RegExp('(^|[^\\w.$])' + nome + '(\\s*\\(|[^\\w$])').test(corpo);
     if (!usato) continue;
     const importato = new RegExp('import\\s*\\{[^}]*\\b' + nome + '\\b[^}]*\\}').test(testo);
-    const dichiarato = new RegExp('(function|const|let|var)\\s+' + nome + '\\b').test(testo);
+    // Dichiarato vuol dire anche PARAMETRO. `gateRender(lead, html)` riceve un
+    // `html` suo, e senza questa riga il controllo lo dichiarava mancante:
+    // aggiungere un nome alla lista sopra non deve costare una segnalazione
+    // falsa da qualche altra parte, o si smette di leggerle tutte.
+    const dichiarato =
+      new RegExp('(function|const|let|var|class)\\s+' + nome + '\\b').test(testo) ||
+      new RegExp('function[^(]*\\([^)]*\\b' + nome + '\\b[^)]*\\)').test(testo) ||
+      new RegExp('\\([^)]*\\b' + nome + '\\b[^)]*\\)\\s*=>').test(testo) ||
+      new RegExp('\\b' + nome + '\\s*=>').test(testo);
     if (!importato && !dichiarato) {
       console.log('  MANCA "' + nome + '" in ' + normalizza(f).replace('app/src/', ''));
       problemi++;
