@@ -140,6 +140,18 @@ export class Squadra extends LitElement {
       border-radius:var(--radius-md);padding:12px;color:var(--copper-light);
       margin:var(--space-3) 0 var(--space-1);
     }
+    /* Il link su una riga sua, col bottone accanto: sta dentro il riquadro del
+       codice, dove chi lo ha appena generato sta gia' guardando. */
+    .fila-invito{display:flex;gap:var(--space-2);align-items:center;margin-top:var(--space-2);}
+    input.link{
+      box-sizing:border-box;flex:1;min-width:0;
+      background:var(--bg-elev2);border:1px solid var(--line-strong);color:var(--paper);
+      padding:8px 10px;border-radius:var(--radius-sm);
+      font-family:var(--font-body);font-size:var(--text-sm);
+      text-overflow:ellipsis;
+    }
+    input.link:focus{outline:var(--fuoco);outline-offset:var(--fuoco-stacco);}
+
     .invito{
       background:var(--bg-elev2);border-radius:var(--radius-md);
       padding:var(--space-3);margin-bottom:var(--space-2);
@@ -167,6 +179,20 @@ export class Squadra extends LitElement {
 
   private get opzioniDurata(): Opzione[] {
     return this.durate.map(d => ({ valore: d.valore, etichetta: d.etichetta }));
+  }
+
+  /* Il link che porta dritto al campo del codice, gia' compilato.
+
+     Il codice sta nel FRAMMENTO (#invito=) e non nella query (?invito=): il
+     frammento non parte con la richiesta HTTP, quindi non finisce nei log del
+     server ne' nell'intestazione Referer verso terzi. E' un codice che da'
+     accesso a una cucina, e va trattato come tale.
+
+     L'indirizzo se lo chiede al browser invece di riceverlo da fuori: cosi'
+     vale uguale in prova e in produzione, e non c'e' un dominio scritto a mano
+     da ricordarsi di cambiare il giorno del trasloco. */
+  private linkInvito(codice: string): string {
+    return location.origin + location.pathname + '#invito=' + encodeURIComponent(codice);
   }
 
   private membro(m: MembroVista): TemplateResult {
@@ -270,7 +296,21 @@ export class Squadra extends LitElement {
 
         ${this.codiceNuovo ? html`
           <div class="codice">${this.codiceNuovo}</div>
-          <p class="nota">${t('Annotalo ora: lo trovi anche nell\'elenco qui sotto, ma è più comodo dettarlo subito.')}</p>` : nothing}
+          <!-- IL LINK E' LA COSA CHE SI MANDA DAVVERO. Dettare otto caratteri
+               al telefono e' il passaggio in cui si perde per strada meta'
+               della gente, e questo e' l'unico posto dell'app in cui qualcuno
+               si iscrive: chi riceve il link tocca e trova il codice gia'
+               scritto. Il codice resta sopra, grande, perche' a voce serve
+               ancora. -->
+          <div class="fila-invito">
+            <input type="text" readonly class="link" .value=${this.linkInvito(this.codiceNuovo)}
+                   aria-label=${t('Link d\'invito')}
+                   @focus=${(e: Event) => (e.target as HTMLInputElement).select()}>
+            <cmd-bottone misura="piccolo"
+                         @click=${() => this.manda('invito-copia', { link: this.linkInvito(this.codiceNuovo) })}
+            >${t('Copia')}</cmd-bottone>
+          </div>
+          <p class="nota">${t('Mandalo a chi deve entrare: tocca il link e il codice è già scritto. Il codice qui sopra serve se glielo detti a voce.')}</p>` : nothing}
 
         ${this.inviti.length ? html`
           <p class="nota" style="margin-top:var(--space-4)">${t('Codici ancora validi')}</p>

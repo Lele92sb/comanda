@@ -132,17 +132,28 @@ export class Cucine extends LitElement {
     cucine: { type: Array },
     errore: { type: String },
     inCorso: { type: Boolean },
+    /**
+     * Il codice gia' scritto nel campo, quando si arriva da un link d'invito.
+     *
+     * Chi riceve un invito su WhatsApp non deve ricopiare otto caratteri a
+     * mano da un messaggio: e' il punto in cui si perde per strada meta' della
+     * gente, ed e' l'unico passaggio dell'app dove qualcuno si iscrive.
+     * Il campo resta modificabile: dal link puo' arrivare storto.
+     */
+    codiceIniziale: { type: String },
   };
 
   declare cucine: CucinaVista[];
   declare errore: string;
   declare inCorso: boolean;
+  declare codiceIniziale: string;
 
   constructor() {
     super();
     this.cucine = [];
     this.errore = '';
     this.inCorso = false;
+    this.codiceIniziale = '';
   }
 
   static override styles = css`
@@ -216,7 +227,11 @@ export class Cucine extends LitElement {
       <cmd-riquadro titolo=${t('Entra con un codice d\'invito')}
                     sottotitolo=${t('Te lo dà chi gestisce la cucina.')}>
         <cmd-campo etichetta=${t('Codice')}>
-          <input type="text" id="c-codice" placeholder="ABCD2345" autocomplete="off">
+          <!-- Si passa come PROPRIETA' e non come attributo: arrivando da un
+               link il codice c'e' gia', e chi lo ha ricevuto storto deve
+               comunque poterlo correggere a mano. -->
+          <input type="text" id="c-codice" placeholder="ABCD2345" autocomplete="off"
+                 .value=${this.codiceIniziale}>
         </cmd-campo>
         <cmd-campo etichetta=${t('Come ti chiamano')}
                    aiuto=${t('Serve a chi gestisce la cucina per riconoscerti nell\'elenco di chi ha accesso.')}>

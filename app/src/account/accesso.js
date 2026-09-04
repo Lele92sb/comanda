@@ -101,6 +101,29 @@ export function screenSignIn(mode){
   });
 }
 
+/* IL CODICE D'INVITO PUO' ARRIVARE DALL'INDIRIZZO.
+
+   Chi riceve un invito su WhatsApp non deve ricopiare otto caratteri a mano da
+   un messaggio: e' il punto dove si perde per strada meta' della gente, ed e'
+   l'unico passaggio dell'app in cui qualcuno si iscrive.
+
+   Sta nel FRAMMENTO (#invito=ABCD2345) e non nella query (?invito=): il
+   frammento non parte con la richiesta HTTP, quindi il codice non finisce nei
+   log del server ne' nell'intestazione Referer verso terzi. E' un codice che
+   da' accesso a una cucina, e va trattato come tale.
+
+   Si toglie dall'indirizzo appena letto, cosi' non resta nella cronologia del
+   telefono ne' in un segnalibro fatto per sbaglio. */
+function codiceDalLink(){
+  try{
+    const f = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+    const codice = (f.get('invito') || '').trim().toUpperCase();
+    if(!codice) return '';
+    history.replaceState(null, '', location.pathname + location.search);
+    return codice;
+  }catch(e){ return ''; }
+}
+
 function screenKitchens(){
   const vista = montaNelVaro('cmd-cucine',
     Cloud.memberships.length ? 'Scegli la cucina' : 'Nessuna cucina, ancora');
@@ -113,6 +136,7 @@ function screenKitchens(){
     ruolo: nomeRuolo(m.role),
     soloLettura: m.role === 'viewer',
   }));
+  vista.codiceIniziale = codiceDalLink();
   vista.errore = '';
   vista.inCorso = false;
 
@@ -396,6 +420,22 @@ function collegaSquadra(v){
   v.addEventListener('invito-revoca', async e => {
     await dopo(()=> Cloud.revokeInvite(e.detail.codice), 'Codice annullato');
     openTeam();
+  });
+
+  /* Copiare il link. `navigator.clipboard` non c'e' sempre — vuole una pagina
+     sicura, e alcuni browser lo negano se la richiesta non parte da un gesto —
+     quindi il ripiego: si seleziona il campo e si dice di copiare a mano.
+     Un bottone che non fa niente e non lo dice e' peggio di un bottone che non
+     c'e'. */
+  v.addEventListener('invito-copia', async e => {
+    try{
+      await navigator.clipboard.writeText(e.detail.link);
+      toast(t('Link copiato'));
+    }catch(err){
+      const campo = v.renderRoot.querySelector('input.link');
+      if(campo){ campo.focus(); campo.select(); }
+      toast(t('Copialo a mano: è selezionato'));
+    }
   });
 }
 
