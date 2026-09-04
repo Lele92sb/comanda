@@ -242,8 +242,19 @@ export function migrateData(){
     });
   });
 
-  if(!state.staffingNeeds) state.staffingNeeds = {};
-  SERVICES().forEach(sv=>{ if(!state.staffingNeeds[sv]) state.staffingNeeds[sv]=[]; });
+  if(!state.staffingNeeds || Array.isArray(state.staffingNeeds)) state.staffingNeeds = {};
+  // `Array.isArray` e non `!...`: il motore fa `(staffingNeeds[sv] || []).forEach`
+  // in dieci punti, e quel `|| []` protegge da null ma NON da un oggetto — che
+  // passa il controllo e poi esplode su `.forEach`. È successo: l'errore uccide
+  // il generatore, cioè la funzione principale dell'app, e da lì in poi la
+  // schermata resta com'era senza dire niente.
+  //
+  // Si rimedia QUI e non nei dieci punti: la forma dei dati si stabilisce una
+  // volta, all'ingresso. Dieci difese sono dieci cose da ricordarsi la prossima
+  // volta che si scrive `staffingNeeds[qualcosa]`.
+  SERVICES().forEach(sv=>{
+    if(!Array.isArray(state.staffingNeeds[sv])) state.staffingNeeds[sv] = [];
+  });
 }
 
 /* ============================= FINESTRE DI DIALOGO =============================

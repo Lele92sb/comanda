@@ -9,17 +9,26 @@ del personale, assistente AI. Italiano e inglese.
 npm ci          # richiede Node >= 22.6 (i test caricano moduli .ts direttamente)
 npm run dev     # sviluppo, ricarica a caldo — le funzioni server NON girano
 npm run preview # build + wrangler: come in produzione, funzioni server comprese
-npm test        # 233 test
+npm test        # 246 test
 npm run typecheck
 npm run lint:import
+npm run lint:token   # ogni var(--x) esiste davvero in ds/tokens.css
 npm run lint:lingue  # quanto coprono i dizionari (non blocca)
 ```
 
 `npm run preview` legge `.dev.vars` (non versionato: copia `.dev.vars.example`).
 Serve solo per le funzioni server — AI e raccolta errori.
 
-**Prima di ogni push**, gli stessi quattro controlli della pipeline:
-`npm test && npm run typecheck && npm run lint:import && npm run build`
+**Prima di ogni push**, gli stessi cinque controlli della pipeline:
+`npm test && npm run typecheck && npm run lint:import && npm run lint:token && npm run build`
+
+**Un token che non esiste non lo segnala nessuno.** `var(--sfondo-rilievo)`
+non è un errore per `tsc` (non guarda dentro un template `css``), non lo è per
+la build (lo copia), non lo è per il browser (applica il valore iniziale e va
+avanti). Resta una schermata che si disegna, senza errori, con le barre
+invisibili e le parole attaccate. È successo scrivendo `<cmd-costo-servizio>`:
+dieci token immaginati, tutti plausibili, nessuno esistente. Da lì
+`lint:token`.
 
 **La build va guardata, non solo lanciata.** `tsc` non controlla i `.js`, e il
 controllo degli import non vede i nomi doppi: una funzione importata che si
@@ -105,6 +114,7 @@ interfaccia pubblica:
 | `<cmd-comanda>` | la carta strappata: piatti, sub-ricette, menu |
 | `<cmd-vuoto>` | il primo passo, non un vicolo cieco |
 | `<cmd-ricerca>` | cercare in un elenco: accenti, parole fuori ordine, conteggio |
+| `<cmd-costo-servizio>` | quanto costa il periodo, e quanto incassare per pagarlo |
 
 Le decisioni visive stanno tutte in `ds/tokens.css`: se stai per scrivere
 `#b06b34` o `12px` dentro un componente, o il token esiste già o va aggiunto lì.
@@ -157,7 +167,7 @@ uno per commit — il messaggio di ognuno spiega cosa e perché.
 | 5 | notifiche | fatto |
 | 13 | iscrizione con QR e link | fatto |
 | 10 | modifiche in tempo reale | fatto — ha richiesto di spezzare il modello dati, vedi `supabase/PIANO-modello-dati.md` |
-| 3 | studio dei concorrenti | fatto — vedi `CONCORRENTI.md` |
+| 3 | studio dei concorrenti | fatto — vedi `CONCORRENTI.md`, e la sua prima raccomandazione è costruita |
 
 **Il tempo reale sui DATI della cucina non è banale, e la ragione è precisa.**
 
@@ -215,7 +225,16 @@ Cercare una stringa dentro il pacchetto costruito **non è una prova**: nel
 pacchetto ci sono entrambe le configurazioni e una sola viene scelta. Si
 esegue il codice e si guarda cosa fa.
 
-I test coprono motore turni, fatture, valuta e ambienti. Dell'interfaccia
+**Le protezioni si provano da sole.** `supabase/prove-permessi.sql` impersona
+sei persone su tre cucine con impostazioni opposte — titolare, chi può
+modificare con e senza costi, sola lettura, chi gestisce le richieste, un
+estraneo — e verifica 51 cose in un secondo. Non legge le policy: le ESEGUE,
+con `set role authenticated` e il gettone di quella persona, cioè la strada che
+farebbe chi provasse ad aggirarle. Va rilanciato ogni volta che si tocca una
+policy. Nasce da un buco vero, passato perché «avevo provato solo i due
+estremi».
+
+I test coprono motore turni, fatture, valuta, costo del lavoro e ambienti. Dell'interfaccia
 coprono **il contrasto**: `banco/contrasto.ts` misura ogni testo della pagina
 nei due temi (bottone «Prova il contrasto» nel banco). Il resto no:
 le due regressioni visive di un design system sono state trovate confrontando

@@ -43,19 +43,25 @@ questo lo sanno fare i costing tool seri ma non i gestionali generalisti.
 
 ## Cosa hanno loro, e vale la pena — migliorato
 
-### 1. Il costo del lavoro DENTRO il prospetto (7shifts, HotSchedules)
+### 1. Il costo del lavoro DENTRO il prospetto (7shifts, HotSchedules) — **FATTO**
 
-Loro mostrano quanto costa il turno mentre lo costruisci. Comanda conta le
-**ore**, non i **soldi**: sa dirti che Marco fa 44 ore, non che quel prospetto
-costa 3.200 €.
+Loro mostrano quanto costa il turno mentre lo costruisci. Comanda contava le
+**ore**, non i **soldi**: sapeva dirti che Marco fa 44 ore, non che quel
+prospetto costa 3.200 €.
 
-**Migliorato:** Comanda è l'unica che ha anche il food cost. Può dire una cosa
-che nessun altro può dire — **quanto costa il servizio di sabato, cucina e
-personale insieme**, e quanto deve incassare per pagarselo. Gli altri hanno
-metà del conto e lo sanno.
+**Fatto, e migliorato.** Sotto il prospetto c'è «Quanto costa questo periodo»,
+e la riga grossa non è il costo: è **l'incasso che serve a pagarlo**. Se il
+personale costa 812 € non basta incassarne 812 — di ogni euro che entra, al 30%
+di food cost, 30 centesimi se ne vanno in merce, e ne servono 1.160. È il conto
+che gli altri non possono fare: hanno metà delle due metà.
 
-*Costo:* una tariffa oraria per persona (già c'è il campo ore contrattuali) e
-un riquadro nel prospetto. Piccolo.
+Un dettaglio che vale più della formula: **se manca la tariffa di qualcuno il
+riquadro lo dice, per nome.** Un totale più basso del vero, dentro un riquadro
+che si chiama «quanto costa», non lo mette in dubbio nessuno.
+
+E la tariffa oraria vuole **due** permessi, non uno: è un dato della persona ed
+è un dato economico. Chi vede i costi ma non le persone ha comunque il totale
+del periodo — lo somma il database e ne esce solo la somma.
 
 ### 2. Il divario fra costo teorico e costo reale (tutti quelli del food cost)
 
@@ -112,12 +118,15 @@ POS diventa possibile con i dati che già raccoglie.
 
 ## Se dovessi scegliere uno solo
 
-**Il numero 1: il costo del servizio, cucina e personale insieme.**
+Era **il numero 1: il costo del servizio, cucina e personale insieme** — ed è
+fatto (settembre 2026). Piccolo, con dati che c'erano già, e dice una cosa che
+**nessun concorrente può dire**, perché nessuno ha tutte e due le metà. È la
+risposta alla domanda che uno chef si fa davvero il lunedì mattina, e che fino
+a ieri si dava con un foglio di carta: *sabato ho guadagnato o no?*
 
-È piccolo, usa dati che ci sono già, e dice una cosa che **nessun concorrente
-può dire** — perché nessuno ha tutte e due le metà. È anche la risposta alla
-domanda che uno chef si fa davvero il lunedì mattina, e che oggi si risponde
-con un foglio di carta: *sabato ho guadagnato o no?*
+**Il prossimo, quando si vorrà:** il numero 2, lo scostamento fra costo teorico
+e costo reale. Le fatture entrano già da sole, quindi il consumo reale è a
+portata; manca il pezzo delle vendite — un POS, o i coperti inseriti a mano.
 
 ---
 
