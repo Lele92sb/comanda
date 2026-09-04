@@ -316,7 +316,76 @@ function localSet(key, value){
   catch(e){ console.error('scrittura locale fallita', key, e); return false; }
 }
 
+/* ============================================================================
+   LE SEZIONI CHE HANNO GIA' UNA TABELLA VERA.
+
+   Il passaggio dai blob JSON alle tabelle si fa UNA SEZIONE ALLA VOLTA, e
+   questo elenco dice a che punto siamo. Il resto dell'app non se ne accorge:
+   chiede `state.ingredients` e riceve un array, esattamente come prima.
+
+   Il piano completo, e la ragione per cui i dati riservati stanno in una
+   tabella SEPARATA invece che in una colonna nascosta, sta in
+   supabase/PIANO-modello-dati.md.
+   ============================================================================ */
+const SEZIONI_IN_TABELLA = {
+  ingredients: {
+    async leggi(){
+      const { data, error } = await Cloud.client.rpc('leggi_ingredienti',
+        { p_kitchen: Cloud.kitchen.id });
+      if(error) throw error;
+      // `yieldPct` e `price` arrivano come numeri: l'app li ha sempre trattati
+      // come stringhe o numeri indifferentemente (`parseFloat` dappertutto),
+      // quindi non c'e' niente da convertire.
+      return data || [];
+    },
+    /* Scrive SOLO quello che e' cambiato.
+       E' il punto di tutto questo lavoro: prima ogni salvataggio riscriveva
+       l'elenco intero — a 5.000 ingredienti, 620 KB per cambiare un prezzo.
+       Qui si confronta con quello che c'era e si toccano le righe che
+       differiscono, di solito una. */
+    async scrivi(nuovi, precedenti){
+      const prima = new Map((precedenti || []).map(i => [i.id, i]));
+      const dopo  = new Map((nuovi || []).map(i => [i.id, i]));
+
+      const uguali = (a, b) => a && b
+        && a.name === b.name && a.unit === b.unit
+        && String(a.price ?? '') === String(b.price ?? '')
+        && String(a.supplier ?? '') === String(b.supplier ?? '')
+        && String(a.yieldPct ?? '') === String(b.yieldPct ?? '')
+        && !!a.yieldEstimated === !!b.yieldEstimated;
+
+      const cambiati = [...dopo.values()].filter(i => !uguali(i, prima.get(i.id)));
+      if(cambiati.length){
+        // UNA chiamata sola, anche per cinquanta. Importando una fattura ne
+        // nascono anche cinquanta insieme, e cinquanta chiamate in fila su un
+        // telefono col wifi che balla sono venti secondi di schermata ferma.
+        const { error } = await Cloud.client.rpc('salva_ingredienti', {
+          p_kitchen: Cloud.kitchen.id, p_righe: cambiati,
+        });
+        if(error) throw error;
+      }
+      for(const id of prima.keys()){
+        if(dopo.has(id)) continue;
+        const { error } = await Cloud.client.from('ingredienti')
+          .delete().eq('kitchen_id', Cloud.kitchen.id).eq('id', id);
+        if(error) throw error;
+      }
+      return true;
+    },
+  },
+};
+
+/* L'ultima lettura, per sezione: serve a `scrivi` per sapere cos'e' cambiato.
+   Sta qui e non in `state` perche' e' roba del trasporto, non dei dati. */
+const ULTIMA_LETTURA = {};
+
 async function cloudGet(key){
+  const tab = SEZIONI_IN_TABELLA[key];
+  if(tab){
+    const righe = await tab.leggi();
+    ULTIMA_LETTURA[key] = righe.map(r => ({ ...r }));
+    return righe;
+  }
   if(PERSONAL_KEYS.includes(key)){
     const { data, error } = await Cloud.client
       .from('user_data').select('value')
@@ -338,6 +407,12 @@ async function cloudGet(key){
 }
 
 async function cloudSet(key, value){
+  const tab = SEZIONI_IN_TABELLA[key];
+  if(tab){
+    const ok = await tab.scrivi(value, ULTIMA_LETTURA[key] || []);
+    if(ok) ULTIMA_LETTURA[key] = (value || []).map(r => ({ ...r }));
+    return ok;
+  }
   if(PERSONAL_KEYS.includes(key)){
     const { error } = await Cloud.client.from('user_data').upsert(
       { user_id: Cloud.user.id, key, value, updated_at: new Date().toISOString() },

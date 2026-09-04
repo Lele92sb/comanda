@@ -132,3 +132,19 @@ Arriva alla fine, e a quel punto è quasi gratis: `alter publication
 supabase_realtime add table ...` sulle tabelle che non hanno niente da
 nascondere a chi le può leggere — che dopo questo lavoro sono tutte, perché
 quello che va nascosto sta in una tabella diversa.
+
+## Nota su `schema.sql`
+
+Finché questo lavoro è in corso, le tabelle nuove stanno **solo nelle
+migrazioni numerate**, e `schema.sql` descrive ancora il modello a blob.
+Riallinearlo a ogni fetta vorrebbe dire tenerlo coerente con qualcosa che sta
+cambiando sotto, e una fonte di verità che dice una cosa a metà è peggio di una
+che dice apertamente «guarda le migrazioni».
+
+Si riallinea **alla fine**, quando tutte le sezioni sono passate: a quel punto
+`schema.sql` torna a essere quello che serve per far nascere una cucina nuova,
+e le migrazioni tornano a essere solo la storia di come ci si è arrivati.
+
+Oggi non ci sono progetti Supabase da creare da zero — c'è solo quello di
+prova, e la produzione non esiste ancora — quindi il disallineamento non fa
+danno a nessuno.
