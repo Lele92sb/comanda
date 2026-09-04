@@ -303,9 +303,13 @@ async function generateRandomShifts(){
   // a riepilogo chiuso: e' l'unica cosa che chiede una decisione oggi, e per
   // questo va davanti a tutto, col «!» che il componente legge come «rosso».
   logEl.innerHTML = html;
-  logEl.classList.add('hidden');
 
   const nScoperti = shortfalls.reduce((n2,x)=> n2 + (x.missing||1), 0);
+  // Il dettaglio si apre insieme al riepilogo: sono la stessa cosa vista da
+  // due distanze, e tenerli separati vuol dire due stati da tenere allineati.
+  const nQuoteDaDecidere = (quotaNonSpesa || [])
+    .filter(q => q.motivo !== 'settimana incompleta').length;
+  logEl.classList.toggle('hidden', nScoperti === 0 && nQuoteDaDecidere === 0);
   const voci = [];
   if(nScoperti) voci.push(`!${nScoperti} post${nScoperti>1?'i scoperti':'o scoperto'}`);
   if(extras.length) voci.push(`${extras.length} extra`);
@@ -317,10 +321,31 @@ async function generateRandomShifts(){
   if(riass){
     riass.voci = voci;
     riass.conDettagli = Boolean(html);
-    riass.aperto = false;
+    // SI APRE DA SOLO QUANDO C'E' UN BUCO DA COPRIRE.
+    //
+    // «Una riga e il resto dietro un clic» vale quando e' andato tutto bene:
+    // li' il riquadro chiuso e' un riassunto. Con dei posti scoperti no —
+    // quella e' l'unica cosa che chiede una decisione oggi, e chiederla dietro
+    // un pulsante vuol dire che il messaggio in basso resta l'unica cosa che
+    // si vede, e quello passa in tre secondi e non si clicca.
+    // Si apre anche quando qualcuno chiude la settimana sotto le sue ore: e'
+    // esattamente la domanda che si fa chi guarda («perche' Marco fa 32 ore e
+    // non 40?»), e la risposta e' li' dentro, scritta per nome. Non si apre
+    // per le settimane tagliate dal bordo del periodo: quelle si sistemano da
+    // sole generando il resto, e aprire ogni volta vorrebbe dire un riquadro
+    // sempre aperto, cioe' di nuovo cinque riquadri invadenti.
+    const quoteDaDecidere = (quotaNonSpesa || [])
+      .filter(q => q.motivo !== 'settimana incompleta').length;
+    riass.aperto = nScoperti > 0 || quoteDaDecidere > 0;
   }
 
-  toast(shortfalls.length ? 'Turni generati — alcune postazioni restano scoperte, vedi dettagli' : (extras.length ? 'Turni generati — con alcuni turni extra' : 'Turni generati — fabbisogno coperto'));
+  // Il messaggio che passa dice COSA e' successo, non «vedi i dettagli»: i
+  // dettagli sono aperti li' sopra e restano, questo passa in tre secondi. Un
+  // messaggio che manda da un'altra parte e poi sparisce manda nel vuoto.
+  toast(shortfalls.length
+    ? t('Turni generati — restano {n} posti scoperti', { n: nScoperti })
+    : (extras.length ? t('Turni generati — con alcuni turni extra')
+                     : t('Turni generati — fabbisogno coperto')));
 }
 /* IL BLOCCO, SCRITTO DOVE SI PREME.
 

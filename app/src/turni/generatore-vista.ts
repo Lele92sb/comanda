@@ -29,6 +29,14 @@ export class Eccedenza extends LitElement {
     giorni: { type: Array },
     giorniPossibili: { type: Array },
     soloLettura: { type: Boolean, reflect: true, attribute: 'solo-lettura' },
+    /* Aperto o chiuso, RICORDATO QUI e non dentro <cmd-riquadro>.
+       Il riquadro nasce chiuso, ed e' giusto: da chiuso il sottotitolo dice
+       gia' tutto. Ma lo stato dell'apertura viveva solo dentro di lui, e
+       bastava un ridisegno di questa vista — un salvataggio, il tempo reale,
+       un cambio di periodo — per rimetterlo com'era nato. Chi aveva appena
+       scelto «scelgo io i giorni» vedeva la fila dei giorni sparire un istante
+       dopo averla aperta, e sembrava che i giorni non ci fossero. */
+    aperto: { type: Boolean, state: true },
   };
 
   declare modo: ModoEccedenza;
@@ -36,6 +44,7 @@ export class Eccedenza extends LitElement {
   declare giorni: string[];
   declare giorniPossibili: string[];
   declare soloLettura: boolean;
+  declare aperto: boolean;
 
   constructor() {
     super();
@@ -43,6 +52,13 @@ export class Eccedenza extends LitElement {
     this.giorni = [];
     this.giorniPossibili = [];
     this.soloLettura = false;
+    this.aperto = false;
+  }
+
+  /* Scegliendo «scelgo io i giorni» il riquadro si apre da solo: la scelta sta
+     dentro, e una domanda fatta a sportello chiuso non e' una domanda. */
+  override willUpdate(cambiate: Map<string, unknown>): void {
+    if (cambiate.has('modo') && this.modo === 'giorni') this.aperto = true;
   }
 
   static override styles = css`
@@ -77,7 +93,8 @@ export class Eccedenza extends LitElement {
       { id: 'lascia', etichetta: t('restano in tasca') },
     ];
     return html`
-      <cmd-riquadro comprimibile
+      <cmd-riquadro comprimibile ?aperto=${this.aperto}
+                    @cmd-apertura=${(e: CustomEvent<{ aperto: boolean }>) => { this.aperto = e.detail.aperto; }}
                     titolo=${t('Le ore che avanzano')}
                     sottotitolo=${this.sommario}>
         <p class="nota">${t('Quando il fabbisogno non chiede tutti i turni di una persona, quelle ore le paghi lo stesso. Qui decidi se collocarle, dove, o lasciarle stare.')}</p>
@@ -90,6 +107,8 @@ export class Eccedenza extends LitElement {
 
         ${this.modo === 'giorni' ? html`
           <p class="nota">${t('I giorni non sono interruttori: si accodano. L\'app scorre la fila dall\'alto finché le ore ci stanno, e il numero dice a che punto sta ciascuno.')}</p>
+          ${this.giorniPossibili.length ? nothing : html`
+            <p class="nota">${t('Non c’è nessun giorno fra cui scegliere. Succede se il periodo mostrato è vuoto: cambia periodo e i giorni compaiono.')}</p>`}
           <div class="chips">
             ${this.giorniPossibili.map(g => {
               const i = this.giorni.indexOf(g);

@@ -86,6 +86,7 @@ import '../ds/ricerca.ts';
 import '../ds/qr.ts';
 import '../ds/notifiche-vista.ts';
 import '../turni/costo-vista.ts';
+import '../turni/generatore-vista.ts';
 import type { RigaCostoGiorno } from '../turni/costo-vista.ts';
 import type { InvitoVista, MembroVista } from '../account/squadra-vista.ts';
 
@@ -386,6 +387,9 @@ const COSTO_GIORNI: RigaCostoGiorno[] = [
    non deve sembrare un giorno economico. */
 const COSTO_GIORNI_PARZIALE: RigaCostoGiorno[] = COSTO_GIORNI.map(g =>
   g.etichetta === 'ven 6' ? { ...g, costo: '€ 96,00', quota: 0.34, completo: false } : g);
+
+/* Gli stessi sette nomi che il generatore passa a <cmd-eccedenza>. */
+const GIORNI_SETT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
 
 const GRUPPI: Gruppo[] = [
   {
@@ -1229,6 +1233,68 @@ const GRUPPI: Gruppo[] = [
         titolo: 'Vuoto, per chi non puo\u2019 impostarle',
         nota: 'Lo stesso vuoto, ma senza mandare a fare una cosa che non si puo\u2019 fare: chi ha sola lettura non va invitato ad aprire la Brigata.',
         contenuto: () => html`<cmd-costo-servizio vuoto soloLettura></cmd-costo-servizio>`,
+      },
+    ],
+  },
+  {
+    nome: 'cmd-eccedenza e cmd-riepilogo — intorno al generatore',
+    casi: [
+      {
+        id: 'eccedenza-auto',
+        titolo: 'Le ore che avanzano: le colloca l\u2019app',
+        nota: 'Il riquadro e\u2019 comprimibile e PARTE CHIUSO, quindi il sottotitolo deve bastare da solo: chiuderlo dev\u2019essere riassumere, non nascondere. Aprilo per vedere le tre scelte.',
+        contenuto: () => html`
+          <cmd-eccedenza modo="auto" .giorniPossibili=${GIORNI_SETT}></cmd-eccedenza>`,
+      },
+      {
+        id: 'eccedenza-giorni',
+        titolo: 'Scelgo io i giorni, e l\u2019ordine e\u2019 il dato',
+        nota: 'I giorni non sono interruttori: si accodano, e il numero dice a che punto della fila sta ciascuno. Senza quel numero, «Ven e Sab accesi» non direbbe quale dei due viene prima quando avanza una sola giornata. Se qui sotto i giorni NON compaiono, e\u2019 che `giorniPossibili` e\u2019 arrivato vuoto: e\u2019 il caso accanto.',
+        contenuto: () => html`
+          <cmd-eccedenza modo="giorni" .giorni=${['Ven', 'Sab']}
+                         .giorniPossibili=${GIORNI_SETT}></cmd-eccedenza>`,
+      },
+      {
+        id: 'eccedenza-giorni-vuoti',
+        titolo: 'Scelgo io i giorni, ma la fila dei giorni e\u2019 vuota',
+        nota: 'Lo stato che ha fatto dire «sotto non appaiono piu\u2019 i giorni». Il componente disegna quello che gli passano: se `giorniPossibili` e\u2019 vuoto non c\u2019e\u2019 niente da premere, e la schermata non lo spiega. Chi lo guarda pensa che sia rotta la scelta, non che manchi un dato.',
+        contenuto: () => html`
+          <cmd-eccedenza modo="giorni" .giorni=${[]} .giorniPossibili=${[]}></cmd-eccedenza>`,
+      },
+      {
+        id: 'eccedenza-lettura',
+        titolo: 'Chi puo\u2019 solo guardare',
+        contenuto: () => html`
+          <cmd-eccedenza modo="giorni" .giorni=${['Sab']}
+                         .giorniPossibili=${GIORNI_SETT} solo-lettura></cmd-eccedenza>`,
+      },
+      {
+        id: 'riepilogo-tutto-bene',
+        titolo: 'Generato, e non c\u2019e\u2019 niente da dire',
+        nota: 'Una riga sola. Prima erano cinque riquadri uno sotto l\u2019altro — parole dello chef: «sono molto invadenti e per vedere i turni bisogna scorrere troppo».',
+        contenuto: () => html`<cmd-riepilogo .voci=${[]}></cmd-riepilogo>`,
+      },
+      {
+        id: 'riepilogo-scoperti',
+        titolo: 'Con dei posti scoperti: il rosso resta anche da chiuso',
+        nota: 'Un posto scoperto e\u2019 l\u2019unica cosa che chiede una decisione oggi, quindi si legge senza aprire niente. Il pulsante «Dettagli» apre il resto — ed e\u2019 QUESTO che si clicca, non il messaggio che passa in basso.',
+        contenuto: () => html`
+          <cmd-riepilogo .voci=${['!3 posti scoperti', '2 extra', '4 ore collocate']}
+                         conDettagli></cmd-riepilogo>`,
+      },
+      {
+        id: 'riepilogo-aperto',
+        titolo: 'Con i dettagli aperti',
+        nota: 'Premuto «Dettagli», il pulsante diventa «Nascondi». Il dettaglio vero sta nel riquadro sotto, che nel banco non c\u2019e\u2019 perche\u2019 e\u2019 HTML costruito dal generatore.',
+        contenuto: () => html`
+          <cmd-riepilogo .voci=${['!3 posti scoperti', '2 extra']} conDettagli aperto></cmd-riepilogo>`,
+      },
+      {
+        id: 'riepilogo-senza-dettagli',
+        titolo: 'Qualcosa da dire, ma niente da aprire',
+        nota: 'Senza dettagli il pulsante non c\u2019e\u2019: un pulsante che apre il vuoto e\u2019 peggio di nessun pulsante.',
+        contenuto: () => html`
+          <cmd-riepilogo .voci=${['5 ore collocate']}></cmd-riepilogo>`,
       },
     ],
   },
