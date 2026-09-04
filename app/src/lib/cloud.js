@@ -334,6 +334,12 @@ function localSet(key, value){
    tutto a ogni giro. */
 const CAMPI_INGREDIENTE = ['name', 'unit', 'price', 'supplier', 'yieldPct', 'yieldEstimated'];
 
+/* Per una persona si guardano anche `stations` e `weeklyQuota`, che sono
+   liste: il confronto passa dal JSON, che per liste corte come queste e'
+   esatto e costa niente. */
+const CAMPI_PERSONA = ['name', 'role', 'hours', 'phone', 'email', 'puoFareExtra', 'userId',
+                       'stations', 'weeklyQuota'];
+
 const SEZIONI_IN_TABELLA = {
   ingredients: {
     async leggi(){
@@ -373,6 +379,40 @@ const SEZIONI_IN_TABELLA = {
 
       for(const id of daTogliere){
         const { error } = await Cloud.client.from('ingredienti')
+          .delete().eq('kitchen_id', Cloud.kitchen.id).eq('id', id);
+        if(error) throw error;
+      }
+      return true;
+    },
+  },
+
+  staff: {
+    async leggi(){
+      const { data, error } = await Cloud.client.rpc('leggi_persone',
+        { p_kitchen: Cloud.kitchen.id });
+      if(error) throw error;
+      return data || [];
+    },
+    async scrivi(nuovi, precedenti){
+      const { daScrivere, daTogliere } = differenze(nuovi, precedenti, CAMPI_PERSONA);
+
+      if(daScrivere.length){
+        const { error } = await Cloud.client.rpc('salva_persone', {
+          p_kitchen: Cloud.kitchen.id,
+          p_righe: daScrivere.map(p => ({
+            id: p.id, name: p.name || '', role: p.role || null,
+            stations: p.stations || [], weeklyQuota: p.weeklyQuota || [],
+            puoFareExtra: p.puoFareExtra !== false,
+            phone: p.phone || null, email: p.email || null,
+            hours: p.hours === '' || p.hours == null ? null : parseFloat(p.hours),
+            userId: p.userId || null,
+          })),
+        });
+        if(error) throw error;
+      }
+
+      for(const id of daTogliere){
+        const { error } = await Cloud.client.from('persone')
           .delete().eq('kitchen_id', Cloud.kitchen.id).eq('id', id);
         if(error) throw error;
       }

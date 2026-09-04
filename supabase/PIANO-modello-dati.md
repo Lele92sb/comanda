@@ -133,6 +133,30 @@ supabase_realtime add table ...` sulle tabelle che non hanno niente da
 nascondere a chi le può leggere — che dopo questo lavoro sono tutte, perché
 quello che va nascosto sta in una tabella diversa.
 
+## Prove dovute, per ruolo
+
+CLAUDE.md dice che **le protezioni si provano su OGNI ruolo**, e che un buco è
+già sfuggito una volta perché erano stati provati solo i due estremi. Queste
+prove richiedono un secondo account e non si possono fare da soli.
+
+Da rifare **a ogni fetta**, perché ogni fetta sposta una riga di taglio:
+
+| ruolo | ingredienti | brigata | turni |
+|---|---|---|---|
+| anonimo (non entrato) | ✅ non riceve niente | | |
+| titolare | ✅ vede tutto | | |
+| può modificare, **con** costi | da provare | | |
+| può modificare, **senza** costi | **da provare: niente prezzo, niente fornitore** | | |
+| sola lettura | **da provare** | | |
+
+Come si prova, in cinque minuti: profilo → «Chi ha accesso» → genera un codice
+per «può modificare», spegni «Prezzi e food cost», entra col secondo account e
+apri Ingredienti. Devono comparire i nomi **senza** prezzo e **senza**
+fornitore.
+
+Se compaiono i prezzi, il difetto sta in `vede_costi()` — una funzione sola,
+che vale anche per tutte le fette successive.
+
 ## Nota su `schema.sql`
 
 Finché questo lavoro è in corso, le tabelle nuove stanno **solo nelle
