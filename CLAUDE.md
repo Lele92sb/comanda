@@ -225,7 +225,8 @@ Cercare una stringa dentro il pacchetto costruito **non è una prova**: nel
 pacchetto ci sono entrambe le configurazioni e una sola viene scelta. Si
 esegue il codice e si guarda cosa fa.
 
-**Le protezioni si provano da sole.** `supabase/prove-permessi.sql` impersona
+**Le protezioni si provano da sole, e il 4 settembre 2026 sono passate tutte
+e 51.** `supabase/prove-permessi.sql` impersona
 sei persone su tre cucine con impostazioni opposte — titolare, chi può
 modificare con e senza costi, sola lettura, chi gestisce le richieste, un
 estraneo — e verifica 51 cose in un secondo. Non legge le policy: le ESEGUE,
@@ -233,6 +234,26 @@ con `set role authenticated` e il gettone di quella persona, cioè la strada che
 farebbe chi provasse ad aggirarle. Va rilanciato ogni volta che si tocca una
 policy. Nasce da un buco vero, passato perché «avevo provato solo i due
 estremi».
+
+Le tre righe che vale la pena rileggere quando si tocca qualcosa: un estraneo
+non vede i turni pubblicati di una cucina non sua (quella policy si appoggia a
+un `exists` su `giorni_pubblicati`, e finché non è stato provato era solo un
+ragionamento); chi può modificare non riesce a darsi i costi da solo; e chi
+vede i costi ma non le persone non legge la tariffa oraria ma legge il totale
+del servizio — che è l'intera ragione per cui la tariffa vuole due permessi.
+
+**Il tempo reale, misurato** (4 settembre 2026, due finestre sulla stessa
+cucina): dal click su «Salva» alla comparsa nell'altra finestra, **860 ms**.
+Scomposto: il salvataggio è UNA chiamata da 650 ms, l'evento di Realtime
+arriva in **55 ms**, poi mezzo secondo di attesa voluta e la rilettura. La
+prima consegna dopo che il canale si è appena iscritto è più lenta — quasi
+cinque secondi — e non è un difetto da inseguire: succede una volta sola,
+all'apertura.
+
+E la trappola che conta è evitata: **mentre si scrive in un campo, il
+salvataggio di un collega non lo svuota.** Provato col cursore a metà parola —
+testo, posizione del cursore e fuoco restano dov'erano, e il dato dell'altro
+arriva lo stesso.
 
 I test coprono motore turni, fatture, valuta, costo del lavoro e ambienti. Dell'interfaccia
 coprono **il contrasto**: `banco/contrasto.ts` misura ogni testo della pagina
