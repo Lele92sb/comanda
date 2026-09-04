@@ -133,6 +133,20 @@ supabase_realtime add table ...` sulle tabelle che non hanno niente da
 nascondere a chi le può leggere — che dopo questo lavoro sono tutte, perché
 quello che va nascosto sta in una tabella diversa.
 
+## Fatto
+
+| fetta | migrazione | cosa |
+|---|---|---|
+| 1 | `02` | ingredienti + costi separati |
+| 2 | `03` | brigata + dati personali separati |
+| 3 | `04` | turni + giorni pubblicati |
+| 4 | `05` | sub-ricette, piatti + costi separati, menu |
+| 5 | `06` | fornitori, fatture, importazioni |
+| 6 | `07` | partite, servizi, tipi di turno, fabbisogno, ore, impostazioni |
+| — | `08` | il tempo reale su tutte e diciotto le tabelle |
+
+Restano blob `knowledge` e `chatHistory`, apposta.
+
 ## Prove dovute, per ruolo
 
 CLAUDE.md dice che **le protezioni si provano su OGNI ruolo**, e che un buco è
@@ -143,11 +157,11 @@ Da rifare **a ogni fetta**, perché ogni fetta sposta una riga di taglio:
 
 | ruolo | ingredienti | brigata | turni |
 |---|---|---|---|
-| anonimo (non entrato) | ✅ non riceve niente | | |
-| titolare | ✅ vede tutto | | |
-| può modificare, **con** costi | da provare | | |
-| può modificare, **senza** costi | **da provare: niente prezzo, niente fornitore** | | |
-| sola lettura | **da provare** | | |
+| anonimo (non entrato) | ✅ non riceve niente | ✅ | ✅ |
+| titolare | ✅ vede tutto | ✅ vede tutto | ✅ vede tutto |
+| può modificare, **con** costi | da provare | da provare | da provare |
+| può modificare, **senza** costi | **da provare: niente prezzo, niente fornitore** | — | — |
+| sola lettura | **da provare** | **niente telefono né email** | **solo i giorni pubblicati** |
 
 Come si prova, in cinque minuti: profilo → «Chi ha accesso» → genera un codice
 per «può modificare», spegni «Prezzi e food cost», entra col secondo account e

@@ -1,4 +1,24 @@
 -- ============================================================================
+-- ATTENZIONE, LEGGI PRIMA DI USARE QUESTO FILE.
+--
+-- Il modello dati è cambiato: le venti sezioni non sono più blob JSON dentro
+-- `kitchen_data`, ma TABELLE VERE. Le trovi in supabase/migrazioni/, numerate
+-- da 02 a 08, e il perché sta in supabase/PIANO-modello-dati.md.
+--
+-- Per far nascere una cucina nuova servono, IN QUEST'ORDINE:
+--   1. questo file          (account, cucine, membri, permessi, richieste)
+--   2. le migrazioni 01→08  (le tabelle dei dati, e il tempo reale)
+--
+-- Di `kitchen_data` restano solo `knowledge` e `chatHistory`, che sono un
+-- testo e una conversazione e non hanno niente da guadagnare a essere spezzati.
+--
+-- Questo file NON è ancora stato riscritto per inglobare le tabelle nuove, ed
+-- è una scelta: riscriverlo adesso vorrebbe dire due posti che descrivono la
+-- stessa cosa, e quando divergono non si sa più quale sia la verità. Si
+-- riscrive quando le migrazioni saranno state applicate anche in produzione.
+-- ============================================================================
+
+-- ============================================================================
 -- Comanda — schema del database (Supabase / Postgres)
 --
 -- Da eseguire UNA VOLTA nel SQL Editor del progetto Supabase.
