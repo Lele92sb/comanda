@@ -3,6 +3,13 @@
 App gestionale per chef: ricettario con food cost, brigata, turni, richieste
 del personale, assistente AI. Italiano e inglese.
 
+**Prima cosa da leggere: `STATO.md`.** Questo file dice come funziona il
+codice; `STATO.md` dice cosa è in aria adesso e cosa aspetta lo chef. I due
+hanno durate diverse apposta: qui si scrive solo ciò che non va mai più
+riscoperto, là ciò che si cancella appena è chiuso. Il resto — cosa è stato
+fatto e perché — sta nei messaggi di commit, che in questo repo sono lunghi
+apposta: sono il vero passaggio di consegne fra una sessione e la successiva.
+
 ## Come si lavora
 
 ```bash

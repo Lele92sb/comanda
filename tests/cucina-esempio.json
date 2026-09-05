@@ -1,0 +1,582 @@
+{
+ "staff": [
+  {
+   "id": "p01",
+   "name": "Chef",
+   "stations": [],
+   "weeklyQuota": [
+    {
+     "codes": [
+      "R"
+     ],
+     "count": 2
+    },
+    {
+     "codes": [
+      "P"
+     ],
+     "count": 5
+    }
+   ],
+   "puoFareExtra": false,
+   "hours": 40
+  },
+  {
+   "id": "p02",
+   "name": "Sous",
+   "stations": [],
+   "weeklyQuota": [
+    {
+     "codes": [
+      "R"
+     ],
+     "count": 2
+    },
+    {
+     "codes": [
+      "S",
+      "P"
+     ],
+     "count": 5
+    }
+   ],
+   "puoFareExtra": false,
+   "hours": 40
+  },
+  {
+   "id": "p03",
+   "name": "Primi 1",
+   "stations": [
+    "primi",
+    "pass"
+   ],
+   "weeklyQuota": [
+    {
+     "codes": [
+      "R"
+     ],
+     "count": 2
+    },
+    {
+     "codes": [
+      "SP"
+     ],
+     "count": 3
+    },
+    {
+     "codes": [
+      "S",
+      "P"
+     ],
+     "count": 2
+    }
+   ],
+   "puoFareExtra": true,
+   "hours": 49
+  },
+  {
+   "id": "p04",
+   "name": "Primi 2",
+   "stations": [
+    "primi"
+   ],
+   "weeklyQuota": [
+    {
+     "codes": [
+      "R"
+     ],
+     "count": 2
+    },
+    {
+     "codes": [
+      "SP"
+     ],
+     "count": 3
+    },
+    {
+     "codes": [
+      "P",
+      "S"
+     ],
+     "count": 2
+    }
+   ],
+   "puoFareExtra": true,
+   "hours": 49
+  },
+  {
+   "id": "p05",
+   "name": "Secondi 1",
+   "stations": [
+    "secondi"
+   ],
+   "weeklyQuota": [
+    {
+     "codes": [
+      "R"
+     ],
+     "count": 2
+    },
+    {
+     "codes": [
+      "SP"
+     ],
+     "count": 3
+    },
+    {
+     "codes": [
+      "P",
+      "S"
+     ],
+     "count": 2
+    }
+   ],
+   "puoFareExtra": true,
+   "hours": 49
+  },
+  {
+   "id": "p06",
+   "name": "Secondi 2",
+   "stations": [
+    "secondi",
+    "pass"
+   ],
+   "weeklyQuota": [
+    {
+     "codes": [
+      "R"
+     ],
+     "count": 2
+    },
+    {
+     "codes": [
+      "SP"
+     ],
+     "count": 3
+    },
+    {
+     "codes": [
+      "S",
+      "P"
+     ],
+     "count": 2
+    }
+   ],
+   "puoFareExtra": true,
+   "hours": 49
+  },
+  {
+   "id": "p07",
+   "name": "Antipasti 1",
+   "stations": [
+    "antipasti",
+    "pass"
+   ],
+   "weeklyQuota": [
+    {
+     "codes": [
+      "R"
+     ],
+     "count": 2
+    },
+    {
+     "codes": [
+      "SP"
+     ],
+     "count": 3
+    },
+    {
+     "codes": [
+      "P",
+      "S"
+     ],
+     "count": 2
+    }
+   ],
+   "puoFareExtra": true,
+   "hours": 49
+  },
+  {
+   "id": "p08",
+   "name": "Antipasti 2",
+   "stations": [
+    "antipasti"
+   ],
+   "weeklyQuota": [
+    {
+     "codes": [
+      "R"
+     ],
+     "count": 2
+    },
+    {
+     "codes": [
+      "SP"
+     ],
+     "count": 3
+    },
+    {
+     "codes": [
+      "P",
+      "S"
+     ],
+     "count": 2
+    }
+   ],
+   "puoFareExtra": true,
+   "hours": 49
+  },
+  {
+   "id": "p09",
+   "name": "Insalate",
+   "stations": [
+    "insalate"
+   ],
+   "weeklyQuota": [
+    {
+     "codes": [
+      "R"
+     ],
+     "count": 2
+    },
+    {
+     "codes": [
+      "R",
+      "SP"
+     ],
+     "count": 3
+    },
+    {
+     "codes": [
+      "S",
+      "P"
+     ],
+     "count": 2
+    }
+   ],
+   "puoFareExtra": false,
+   "hours": 49
+  },
+  {
+   "id": "p10",
+   "name": "Pass 1",
+   "stations": [
+    "pass"
+   ],
+   "weeklyQuota": [
+    {
+     "codes": [
+      "R"
+     ],
+     "count": 3
+    },
+    {
+     "codes": [
+      "P1"
+     ],
+     "count": 2
+    },
+    {
+     "codes": [
+      "S1"
+     ],
+     "count": 2
+    }
+   ],
+   "puoFareExtra": false,
+   "hours": 28
+  },
+  {
+   "id": "p11",
+   "name": "Pass 2",
+   "stations": [
+    "pass"
+   ],
+   "weeklyQuota": [
+    {
+     "codes": [
+      "R"
+     ],
+     "count": 3
+    },
+    {
+     "codes": [
+      "P2"
+     ],
+     "count": 4
+    }
+   ],
+   "puoFareExtra": false,
+   "hours": 24
+  },
+  {
+   "id": "p12",
+   "name": "Lavaggio 1",
+   "stations": [
+    "lavaggio"
+   ],
+   "weeklyQuota": [
+    {
+     "codes": [
+      "R"
+     ],
+     "count": 2
+    },
+    {
+     "codes": [
+      "SP"
+     ],
+     "count": 3
+    },
+    {
+     "codes": [
+      "P",
+      "S"
+     ],
+     "count": 2
+    }
+   ],
+   "puoFareExtra": false,
+   "hours": 49
+  },
+  {
+   "id": "p13",
+   "name": "Lavaggio 2",
+   "stations": [
+    "lavaggio"
+   ],
+   "weeklyQuota": [
+    {
+     "codes": [
+      "R"
+     ],
+     "count": 2
+    },
+    {
+     "codes": [
+      "SP"
+     ],
+     "count": 3
+    },
+    {
+     "codes": [
+      "P",
+      "S"
+     ],
+     "count": 2
+    }
+   ],
+   "puoFareExtra": false,
+   "hours": 49
+  },
+  {
+   "id": "p14",
+   "name": "Lavaggio 3",
+   "stations": [
+    "lavaggio"
+   ],
+   "weeklyQuota": [
+    {
+     "codes": [
+      "R"
+     ],
+     "count": 2
+    },
+    {
+     "codes": [
+      "SP"
+     ],
+     "count": 3
+    },
+    {
+     "codes": [
+      "P",
+      "S"
+     ],
+     "count": 2
+    }
+   ],
+   "puoFareExtra": false,
+   "hours": 49
+  },
+  {
+   "id": "p15",
+   "name": "Lavaggio 4",
+   "stations": [
+    "lavaggio",
+    "insalate"
+   ],
+   "weeklyQuota": [
+    {
+     "codes": [
+      "R"
+     ],
+     "count": 2
+    },
+    {
+     "codes": [
+      "R",
+      "SP"
+     ],
+     "count": 3
+    },
+    {
+     "codes": [
+      "S",
+      "P"
+     ],
+     "count": 2
+    }
+   ],
+   "puoFareExtra": false,
+   "hours": 49
+  }
+ ],
+ "staffingNeeds": {
+  "cena": [
+   {
+    "count": 1,
+    "stationId": "pass"
+   },
+   {
+    "count": 1,
+    "stationId": "antipasti"
+   },
+   {
+    "count": 1,
+    "stationId": "primi"
+   },
+   {
+    "count": 1,
+    "stationId": "secondi"
+   },
+   {
+    "count": 1,
+    "stationId": "insalate"
+   },
+   {
+    "count": 2,
+    "stationId": "lavaggio"
+   }
+  ],
+  "pranzo": [
+   {
+    "count": 1,
+    "stationId": "pass"
+   },
+   {
+    "count": 1,
+    "stationId": "antipasti"
+   },
+   {
+    "count": 1,
+    "stationId": "primi"
+   },
+   {
+    "count": 1,
+    "stationId": "secondi"
+   },
+   {
+    "count": 1,
+    "stationId": "insalate"
+   },
+   {
+    "count": 2,
+    "stationId": "lavaggio"
+   }
+  ]
+ },
+ "services": [
+  {
+   "id": "pranzo",
+   "name": "Pranzo"
+  },
+  {
+   "id": "cena",
+   "name": "Cena"
+  }
+ ],
+ "shiftTypes": [
+  {
+   "id": "p",
+   "code": "P",
+   "label": "Pranzo",
+   "hours": 8,
+   "services": [
+    "pranzo"
+   ]
+  },
+  {
+   "id": "p2",
+   "code": "P2",
+   "label": "Pranzo02",
+   "hours": 6,
+   "services": [
+    "pranzo"
+   ]
+  },
+  {
+   "id": "s",
+   "code": "S",
+   "label": "Cena",
+   "hours": 8,
+   "services": [
+    "cena"
+   ]
+  },
+  {
+   "id": "sp",
+   "code": "SP",
+   "label": "Spezzato",
+   "hours": 11,
+   "services": [
+    "pranzo",
+    "cena"
+   ]
+  },
+  {
+   "id": "p1",
+   "code": "P1",
+   "label": "Pranzo01",
+   "hours": 7,
+   "services": [
+    "pranzo"
+   ]
+  },
+  {
+   "id": "s1",
+   "code": "S1",
+   "label": "Sera01",
+   "hours": 7,
+   "services": [
+    "cena"
+   ]
+  }
+ ],
+ "stations": [
+  {
+   "id": "pass",
+   "name": "Pass"
+  },
+  {
+   "id": "antipasti",
+   "name": "Antipasti"
+  },
+  {
+   "id": "primi",
+   "name": "Primi"
+  },
+  {
+   "id": "secondi",
+   "name": "Secondi"
+  },
+  {
+   "id": "insalate",
+   "name": "Insalate"
+  },
+  {
+   "id": "lavaggio",
+   "name": "Lavaggio"
+  }
+ ]
+}
