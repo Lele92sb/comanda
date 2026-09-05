@@ -62,4 +62,21 @@ export default [
     files: ['scripts/**/*.cjs'],
     languageOptions: { sourceType: 'commonjs' },
   },
+  {
+    // LE PROVE SUI CLIC girano in Node, ma quello che sta dentro
+    // `page.evaluate()` gira nel BROWSER — stesso file, due mondi. Quindi
+    // servono tutti e due gli elenchi di globali: con i soli globali di Node,
+    // `document` dentro un evaluate verrebbe segnalato come nome che non
+    // esiste, e un controllo che segnala il falso smette di essere letto.
+    files: ['prove/**/*.js', 'playwright.config.js'],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: 'module',
+      globals: { ...globals.node, ...globals.browser },
+    },
+    rules: {
+      'no-undef': 'error',
+      'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none' }],
+    },
+  },
 ];

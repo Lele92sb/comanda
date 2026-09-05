@@ -28,9 +28,16 @@ Aggiornato: 5 settembre 2026.
 
 ## Debiti aperti
 
-- **Nessuna prova automatica sui clic.** Due difetti veri di quest'ultima
-  settimana erano entrambi di comportamento, non di logica — il chip che si
-  accendeva da solo e il riquadro che scriveva in uno stato ormai sostituito —
-  e nessuno dei 283 test poteva vederli: Node non ha una pagina. Li ha trovati
-  lo chef usando l'app. Finché non c'è una prova che apra davvero la schermata
-  e clicchi, quella classe di errori arriva in cucina.
+- **Le prove sui clic girano, ma non entrano in una cucina.** `npm run
+  prova:clic` apre un browser vero sul banco e sulla schermata d'accesso: nove
+  prove, tredici secondi, e sono già nella pipeline. Quello che ancora non
+  tocca è l'app **con dei dati dentro** — generare i turni, salvare, correggere
+  una cella — perché servirebbe un account di prova nel Supabase di test. È il
+  prossimo passo di questo lavoro, non un'idea nuova.
+
+- **Il ramo `console-admin` è fermo e aspetta.** Dieci commit, mai uniti in
+  `staging`: la console dell'amministratore di piattaforma, con il suo SQL. Il
+  motivo per cui è fermo sta scritto nel commit «Le prove che io non ho potuto
+  fare»: quel SQL non l'ha eseguito nessuno, e in fondo a `CONSOLE-ADMIN.md`
+  c'è la sequenza da eseguire a mano, passo per passo, con accanto il
+  risultato atteso. Finché non è passata, quel ramo non si unisce.

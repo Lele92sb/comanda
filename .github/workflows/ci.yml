@@ -48,6 +48,27 @@ jobs:
       # La build fa da controllo strutturale: un import verso un simbolo che
       # non esiste piu' ferma qui il rilascio, non davanti all'utente.
       - run: npm run build
+      # LE PROVE SUI CLIC. Tutto quello che sta sopra gira senza una pagina, e
+      # gli ultimi difetti veri erano tutti di comportamento: il chip che si
+      # accendeva da solo, il riquadro che si richiudeva sotto le mani, il
+      # riepilogo che spariva per un ReferenceError a meta' funzione. Li ha
+      # trovati lo chef usando l'app in cucina. Da qui in poi li trova la
+      # pipeline: si apre un browser vero, si clicca, e se la console scrive un
+      # errore la prova fallisce anche se a schermo sembrava tutto a posto.
+      #
+      # Solo Chromium, e senza le altre due famiglie di browser: l'app si usa
+      # su un telefono in cucina e su un portatile, e tre browser costerebbero
+      # il triplo del tempo per trovare le stesse cose.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run prova:clic
+      # Quando una prova sui clic fallisce, la traccia e' il filmato dei clic
+      # con il DOM a ogni passo: senza, resta solo il nome della prova.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: tracce-delle-prove
+          path: test-results/
+          retention-days: 7
 
   deploy:
     name: Pubblica su Cloudflare Pages

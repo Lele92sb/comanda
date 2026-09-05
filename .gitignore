@@ -13,3 +13,8 @@ dist/
 
 # Copie di lavoro degli agenti: sono repository a se, non contenuto del progetto.
 .claude/worktrees/
+
+# Quello che lasciano le prove sui clic: tracce dei fallimenti e resoconti.
+# Si rigenerano a ogni corsa, e una traccia pesa qualche mega.
+test-results/
+playwright-report/

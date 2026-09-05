@@ -13,14 +13,19 @@
 // di lavorare sull'aspetto senza pestarsi i piedi, e a chi rivede il lavoro di
 // guardare una pagina sola invece di dodici schermate.
 //
-// SARA' ANCHE IL BANCO DI PROVA VISIVO — non lo e' ancora, e vale la pena
-// dirlo invece di lasciarlo intendere. CLAUDE.md dice che i test non coprono
-// l'interfaccia, e che le due regressioni visive di questo progetto sono state
-// trovate confrontando schermate a mano. Ogni caso qui sotto ha un `data-caso`
-// apposta: e' l'appiglio a cui si aggancera' un confronto automatico di
-// schermate, cosi' che un bordo che cambia da solo faccia fallire una prova
-// invece di arrivare in cucina. Manca il pezzo che scatta le foto, e costa
-// una dipendenza vera (un browser senza schermo dentro la pipeline).
+// E' ANCHE IL BANCO DI PROVA AUTOMATICO. `npm run prova:clic` apre questa
+// pagina in un browser vero e cammina su ogni `data-caso`: controlla che
+// disegni qualcosa di alto piu' di zero, nei due temi e a 375px, e fallisce se
+// la console ha scritto un errore — anche uno solo, anche se a schermo sembrava
+// tutto a posto. Le prove stanno in `prove/`.
+//
+// Quindi AGGIUNGERE UN CASO QUI SOTTO NON E' DECORAZIONE: e' l'unico modo che
+// ha la pipeline di aprire quel componente in quello stato. Un componente che
+// non sta nel banco non lo apre nessuno finche' non arriva in cucina.
+//
+// Quello che le prove NON fanno e' il confronto pixel, che pure era l'idea
+// iniziale di questi `data-caso`: fra Windows e Linux i caratteri si disegnano
+// diversi, e un controllo che segnala il falso smette di essere letto.
 //
 // PERCHE' STA IN banco/ E NON IN ds/: il banco mostra anche schermate intere
 // dell'app, quindi importa da turni/. ds/ non puo' farlo — e' la regola che

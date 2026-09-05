@@ -22,13 +22,14 @@ npm run lint:import
 npm run lint:token   # ogni var(--x) esiste davvero in ds/tokens.css
 npm run lint:js      # eslint: il nome che non esiste (no-undef)
 npm run lint:lingue  # quanto coprono i dizionari (non blocca)
+npm run prova:clic   # apre un browser vero e clicca (9 prove, 13 secondi)
 ```
 
 `npm run preview` legge `.dev.vars` (non versionato: copia `.dev.vars.example`).
 Serve solo per le funzioni server — AI e raccolta errori.
 
-**Prima di ogni push**, gli stessi sei controlli della pipeline:
-`npm test && npm run typecheck && npm run lint:import && npm run lint:token && npm run lint:js && npm run build`
+**Prima di ogni push**, gli stessi sette controlli della pipeline:
+`npm test && npm run typecheck && npm run lint:import && npm run lint:token && npm run lint:js && npm run build && npm run prova:clic`
 
 **Il nome che non esiste.** `ReferenceError` non è un errore di sintassi: la
 build passa, `tsc` non guarda i `.js`, e l'errore parte a METÀ FUNZIONE —
@@ -72,6 +73,7 @@ app/src/
   account/           accesso, cucine, ruoli, squadra
   viste/  ui/        dashboard, menu, brigata, benessere, schede
 functions/api/       proxy AI e raccolta errori (girano sul server)
+prove/               le prove sui clic: un browser vero, sul banco e sull'app
 supabase/schema.sql  tabelle, ruoli, permessi — la fonte di verità
 ```
 
@@ -168,7 +170,9 @@ si chiudeva da solo e il cursore usciva dal campo.
 
 Ogni componente nuovo va nel banco (`npm run dev`, poi `/banco.html`), in
 **ogni** stato: acceso, spento, vuoto, in errore, mentre lavora. Uno stato che
-non sta nel banco è uno stato che nessuno guarderà mai.
+non sta nel banco è uno stato che nessuno guarderà mai — e adesso anche uno
+stato che nessun controllo apre: `npm run prova:clic` cammina su tutti i casi
+del banco, quindi un componente che ci sta dentro viene aperto a ogni push.
 
 ## Ambienti
 
@@ -307,14 +311,50 @@ I test coprono motore turni, fatture, valuta, costo del lavoro, **il riepilogo
 della generazione** e ambienti.
 
 Quell'ultimo e' nato da un errore: la logica di cosa dire dopo una generazione
-stava dentro , cioe' in un file che ha bisogno del DOM e non puo'
-avere test. Riscrivendola e' rimasta una riga che usava una variabile appena
+stava dentro `turni/generatore.js`, cioe' in un file che ha bisogno del DOM e
+non puo' avere test. Riscrivendola e' rimasta una riga che usava una variabile appena
 eliminata — ReferenceError a meta' funzione, nessun messaggio piu' dopo ogni
 generazione, e l'ha trovato lo chef usando l'app. Adesso **cosa** dire sta in
- con sedici test, e nel collante resta solo **come**
+`lib/riepilogo-turni.js` con sedici test, e nel collante resta solo **come**
 dirlo: frasi, plurali, markup. E' il confine da tenere ogni volta che il
-collante comincia a decidere qualcosa invece di limitarsi a disegnarlo. Dell'interfaccia
-coprono **il contrasto**: `banco/contrasto.ts` misura ogni testo della pagina
-nei due temi (bottone «Prova il contrasto» nel banco). Il resto no:
-le due regressioni visive di un design system sono state trovate confrontando
-schermate, non dai test.
+collante comincia a decidere qualcosa invece di limitarsi a disegnarlo.
+
+**Node non ha una pagina, e per questo esistono le prove sui clic.** I 283 test
+girano senza browser: tutto quello che sbaglia CLICCANDO gli e' invisibile. Non
+e' un'ipotesi — gli ultimi tre difetti veri erano tutti di quella forma, e li ha
+trovati lo chef usando l'app in cucina: il chip che si accendeva da solo, il
+riquadro che si richiudeva sotto le mani, il riepilogo sparito per un
+`ReferenceError` a meta' funzione.
+
+`npm run prova:clic` apre un browser vero sul banco e sull'app. Tre cose da
+sapere, e sono quelle che rendono queste prove diverse dalle altre:
+
+- **Il guardiano della console** (`prove/prova.js`): ogni prova importa `test`
+  da li' e non da Playwright, cosi' il controllo non si puo' dimenticare.
+  Qualunque errore in console o eccezione non raccolta fa fallire la prova
+  **anche se tutto quello che la prova cercava c'era**. E' la rete che prende i
+  `ReferenceError` a meta' funzione, quelli che lasciano la schermata com'era
+  senza un errore visibile. Provato piantandone uno: lo becca.
+- **Una prova che non ha mai fallito non e' una prova.** Ognuna di quelle in
+  `prove/regressioni.spec.js` e' stata verificata rimettendo il difetto vero e
+  guardandola diventare rossa. La prima versione della prova sul riquadro
+  passava anche col difetto rimesso — controllava il gesto sbagliato — ed e'
+  stata riscritta. Chi ne aggiunge una faccia lo stesso: e' l'unico modo di
+  sapere che serve a qualcosa.
+- **Niente confronto di schermate.** Il banco ha i `data-caso` apposta, ma i
+  caratteri si disegnano diversi fra Windows e Linux e un confronto pixel
+  segnalerebbe differenze che non sono difetti. Vale la regola di sempre: un
+  controllo che segnala il falso smette di essere letto. Quello che si controlla
+  e' piu' grezzo e non sbaglia mai — ogni caso del banco disegna qualcosa di
+  alto piu' di zero, nei due temi e a 375px.
+
+**Il contrasto adesso lo preme la pipeline.** `banco/contrasto.ts` misurava gia'
+ogni testo nei due temi, ma bisognava premere il bottone a mano e leggersi il
+risultato: ora e' una delle nove prove. Il primo giro a mano aveva trovato tre
+difetti veri — l'etichetta neutra bianca su bianco, il testo scuro sul rame
+scuro, i bordi degli avvisi scritti a mano.
+
+Quello che ancora nessun controllo copre: **l'app con dei dati veri dentro**.
+Le prove sui clic girano sul banco e sulla schermata d'accesso, non su una
+cucina con un account — per quello servirebbe un utente di prova nel Supabase di
+test, ed e' il prossimo passo naturale, non un lavoro fatto.
