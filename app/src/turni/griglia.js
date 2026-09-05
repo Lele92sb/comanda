@@ -10,7 +10,6 @@ import { renderDashboard } from '../viste/dashboard.js';
 // da lì: i due moduli si citano a vicenda. È lecito perché nessuno dei due usa
 // l'altro mentre viene caricato — solo dentro funzioni, chiamate dopo. Stessa
 // coppia che griglia.js e dashboard.js formano da sempre due righe più su.
-import { renderCapienza } from './fabbisogno.js';
 import './foglio-turno-vista.ts';
 import './griglia-vista.ts';
 /* ============================= TURNI: griglia =============================

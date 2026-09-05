@@ -11,10 +11,13 @@
     "typecheck": "tsc --noEmit",
     "lint:import": "node scripts/controlla-import.cjs",
     "lint:token": "node scripts/controlla-token.cjs",
+    "lint:js": "eslint app/src tests scripts",
     "icone": "node scripts/genera-icone.cjs",
     "lint:lingue": "node scripts/controlla-lingue.cjs"
   },
   "devDependencies": {
+    "eslint": "^10.10.0",
+    "globals": "^17.12.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "wrangler": "^4.127.0"

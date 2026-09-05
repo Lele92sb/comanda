@@ -1,5 +1,5 @@
 import { afterSignIn, gateEl, gateRender, humanError, renderAccountBar, screenBlocked, screenSignIn } from './account/accesso.js';
-import { esc, loadAll, ricarica, state, toast } from './core/state.js';
+import { esc, loadAll, ricarica, toast } from './core/state.js';
 import { Cloud } from './lib/cloud.js';
 import { initTabs, switchTab } from './ui/tabs.js';
 import { ascolta } from './lib/tempo-reale.js';

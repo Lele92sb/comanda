@@ -68,6 +68,15 @@ async function generateRandomShifts(){
   // prima infatti usciva sbagliato in tutti i modi possibili.
   const dates = settimaneIntere(daSalvare);
   const constraints = constraintsFromRequests();
+  /* SI CONTANO QUI, e non piu' giu'.
+     Piu' avanti a `constraints` si aggiungono i giorni gia' scritti a mano e
+     gli impegni in altre cucine: contarli dopo voleva dire dire allo chef «N
+     giorni vincolati da richieste approvate» comprendendo anche quelli, cioe'
+     un numero piu' alto del vero su una frase che nomina le richieste. C'era
+     perfino un contatore, `giorniFissati`, che serviva a distinguerli e che
+     non leggeva nessuno: l'ha trovato eslint. */
+  const nRichieste = Object.values(constraints).reduce((n2,g)=>n2+Object.keys(g).length, 0);
+  const nPersoneRichieste = Object.keys(constraints).length;
   // I giorni fuori dal periodo che hai chiesto, ma dentro le settimane che il
   // motore deve completare: se hanno gia' dei turni NON si rifanno, si prendono
   // com'erano. Diventano vincoli fissi esattamente come una richiesta
@@ -103,7 +112,6 @@ async function generateRandomShifts(){
     return false;
   });
 
-  let giorniFissati = 0;
   daGenerare.forEach(d=>{
     if(bordi.has(d)) return;
     state.staff.forEach(p=>{
@@ -113,13 +121,8 @@ async function generateRandomShifts(){
       // Una richiesta approvata batte tutto: se c'e' gia', non la si tocca.
       if(constraints[p.id][d]) return;
       constraints[p.id][d] = { blocked: cella.code, fissa: cella };
-      giorniFissati++;
     });
   });
-  // Contate prima di aggiungere gli impegni altrove: sono due cose diverse e
-  // vanno spiegate separatamente a chi legge il riepilogo.
-  const nRichieste = Object.values(constraints).reduce((n,g)=>n+Object.keys(g).length, 0);
-  const nPersoneRichieste = Object.keys(constraints).length;
 
   // Chi lavora anche in un'altra cucina non puo' essere in due posti lo stesso
   // giorno: gli impegni altrove valgono come un vincolo assoluto, esattamente
@@ -228,7 +231,7 @@ async function generateRandomShifts(){
   const riass = montaRiepilogo();
   if(riass){
     riass.voci = voci;
-    riass.conDettagli = Boolean(grave.length || righe.length);
+    riass.conDettagli = Boolean(F.gravi.length || F.righe.length);
     // RESTA CHIUSO, SEMPRE: il numero dei posti scoperti si legge gia' nella
     // riga qui sopra, in rosso, senza aprire niente.
     riass.aperto = false;
@@ -388,20 +391,30 @@ document.getElementById('period-today').addEventListener('click', ()=>{ setPerio
 export function renderEccedenza(){
   const el = document.getElementById('eccedenza-panel');
   if(!el) return;
-  const cfg = state.eccedenzaOre || (state.eccedenzaOre = {modo:'auto', giorni:[]});
+  /* LO STATO SI RILEGGE AL MOMENTO DEL CLIC, non si tiene in tasca.
+     Gli ascoltatori nascono UNA VOLTA SOLA, la prima volta che si disegna il
+     riquadro. Se catturano l'oggetto di allora, scrivono li' per sempre — e
+     `state.eccedenzaOre` viene SOSTITUITO ogni volta che i dati arrivano dal
+     cloud, non modificato. Da quel momento il clic funziona benissimo: cambia
+     un oggetto che non e' piu' quello dell'app, e a schermo non succede niente.
+     Costava «scelgo io i giorni» che non apriva la lista dei giorni: la scelta
+     non arrivava mai. */
+  const ora = () => state.eccedenzaOre || (state.eccedenzaOre = {modo:'auto', giorni:[]});
+  const cfg = ora();
   if(!vistaEccedenza || !vistaEccedenza.isConnected){
     vistaEccedenza = document.createElement('cmd-eccedenza');
     vistaEccedenza.giorniPossibili = DAYS;
     vistaEccedenza.addEventListener('eccedenza-modo', e => {
-      cfg.modo = e.detail.modo; save('eccedenzaOre'); renderEccedenza();
+      ora().modo = e.detail.modo; save('eccedenzaOre'); renderEccedenza();
     });
     // Non e' un interruttore: i giorni si ACCODANO, e l'ordine e' il dato.
     // Premendo un giorno gia' in fila lo si toglie; premendone uno nuovo va in
     // fondo. L'app poi scorre la fila dall'alto finche' le ore ci stanno.
     vistaEccedenza.addEventListener('eccedenza-giorno', e => {
-      cfg.giorni = cfg.giorni || [];
-      const i2 = cfg.giorni.indexOf(e.detail.giorno);
-      if(i2 >= 0) cfg.giorni.splice(i2, 1); else cfg.giorni.push(e.detail.giorno);
+      const c = ora();
+      c.giorni = c.giorni || [];
+      const i2 = c.giorni.indexOf(e.detail.giorno);
+      if(i2 >= 0) c.giorni.splice(i2, 1); else c.giorni.push(e.detail.giorno);
       save('eccedenzaOre'); renderEccedenza();
     });
     el.replaceChildren(vistaEccedenza);

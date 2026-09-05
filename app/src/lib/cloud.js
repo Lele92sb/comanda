@@ -353,13 +353,10 @@ function localSet(key, value){
    «tutti»: le righe che tornano dal database si portano dietro roba che il
    client non ha (`aggiornato_il`), e confrontarla farebbe risultare cambiato
    tutto a ogni giro. */
-const CAMPI_INGREDIENTE = ['name', 'unit', 'price', 'supplier', 'yieldPct', 'yieldEstimated'];
 
 /* Per una persona si guardano anche `stations` e `weeklyQuota`, che sono
    liste: il confronto passa dal JSON, che per liste corte come queste e'
    esatto e costa niente. */
-const CAMPI_PERSONA = ['name', 'role', 'hours', 'phone', 'email', 'puoFareExtra', 'userId',
-                       'stations', 'weeklyQuota'];
 
 /* UNA SEZIONE-ELENCO, descritta invece che scritta.
 

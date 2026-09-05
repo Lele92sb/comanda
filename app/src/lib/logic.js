@@ -357,14 +357,6 @@ function shuffleArray(arr, rand){ rand = rand || Math.random; for(let i=arr.leng
 
 function buildStaffPools(staffList, rand, giorni, cfg, oreGiaFatte){
   const pools = {};
-  const quanti = (giorni && giorni > 0) ? giorni : 7;
-  const oreDi = c => (cfg && cfg.turnoDef && cfg.turnoDef[c] && cfg.turnoDef[c].hours) || 0;
-  // Le ore di una casella: se puo' diventare piu' codici si prende la media,
-  // perche' quale sara' lo decide il giro dei giorni e qui non si sa ancora.
-  const oreSlot = slot => {
-    const h = (slot.codes||[]).map(oreDi);
-    return h.length ? h.reduce((a,b)=>a+b,0)/h.length : 0;
-  };
   staffList.forEach(s=>{
     let slots = [];
     (s.weeklyQuota||[]).forEach(g=>{

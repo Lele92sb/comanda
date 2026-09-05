@@ -13,14 +13,24 @@ npm test        # 275 test
 npm run typecheck
 npm run lint:import
 npm run lint:token   # ogni var(--x) esiste davvero in ds/tokens.css
+npm run lint:js      # eslint: il nome che non esiste (no-undef)
 npm run lint:lingue  # quanto coprono i dizionari (non blocca)
 ```
 
 `npm run preview` legge `.dev.vars` (non versionato: copia `.dev.vars.example`).
 Serve solo per le funzioni server — AI e raccolta errori.
 
-**Prima di ogni push**, gli stessi cinque controlli della pipeline:
-`npm test && npm run typecheck && npm run lint:import && npm run lint:token && npm run build`
+**Prima di ogni push**, gli stessi sei controlli della pipeline:
+`npm test && npm run typecheck && npm run lint:import && npm run lint:token && npm run lint:js && npm run build`
+
+**Il nome che non esiste.** `ReferenceError` non è un errore di sintassi: la
+build passa, `tsc` non guarda i `.js`, e l'errore parte a METÀ FUNZIONE —
+da lì in poi non gira più niente e la schermata resta com'era, senza un
+errore visibile. È successo due volte in due giorni (`html`, poi `grave`),
+tutte e due riscrivendo un blocco e lasciando una riga che usava una variabile
+appena eliminata. Da lì `eslint` con `no-undef`: alla prima passata ha trovato
+anche `READONLY_ALLOWED`, sparita in una riscrittura, che teneva rotta da
+settimane la guardia della sola lettura.
 
 **Un token che non esiste non lo segnala nessuno.** `var(--sfondo-rilievo)`
 non è un errore per `tsc` (non guarda dentro un template `css``), non lo è per
@@ -213,16 +223,16 @@ voce «Modello dati» qui sotto, e che regalerebbe il tempo reale come effetto
 collaterale.
 
 **Le migrazioni creano le tabelle, NON ci travasano i dati.** Per una cucina
-nuova va bene. Per una che i dati ce li aveva e'' successo questo, il 4
-settembre 2026 su DeRoma: la tabella nasce vuota, l''app smette di ripiegare sul
-blob (ripiega solo se la tabella NON ESISTE, non se e'' vuota), e la cucina
+nuova va bene. Per una che i dati ce li aveva e' successo questo, il 4
+settembre 2026 su DeRoma: la tabella nasce vuota, l'app smette di ripiegare sul
+blob (ripiega solo se la tabella NON ESISTE, non se e' vuota), e la cucina
 appare vuota — 289 ingredienti e quindici persone spariti dallo schermo senza
 un errore. Chi la usa pensa di dover ricominciare e ricrea qualcosa a mano, e
-da li'' le due copie divergono. Il blob resta intero, ma nessuno lo sa.
+da li' le due copie divergono. Il blob resta intero, ma nessuno lo sa.
 
-La riparazione e'' la migrazione `10-travaso-dal-blob.sql`, che prima CONFRONTA
-e non tocca niente, e travasa solo dove la tabella e'' vuota se non le si dice
-altro. Il blob non si cancella: e'' l''unica copia di prima.
+La riparazione e' la migrazione `10-travaso-dal-blob.sql`, che prima CONFRONTA
+e non tocca niente, e travasa solo dove la tabella e' vuota se non le si dice
+altro. Il blob non si cancella: e' l'unica copia di prima.
 
 Le migrazioni da applicare a mano stanno in `supabase/migrazioni/`, numerate.
 `schema.sql` resta la fonte di verità per una cucina nuova; le migrazioni

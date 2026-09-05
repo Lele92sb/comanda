@@ -15,10 +15,6 @@ export function gateRender(lead, html){
   gateErr.classList.add('hidden');
   gateEl.classList.add('show');
 }
-function gateError(msg){
-  gateErr.textContent = msg;
-  gateErr.classList.remove('hidden');
-}
 // Gli errori tecnici di Supabase sono in inglese: in cucina non servono a nessuno.
 export function humanError(e){
   const m = (e && e.message) || '';
@@ -271,6 +267,27 @@ export function renderAccountBar(){
   // Il nome scelto, se c'e': l'email e' lunga e non dice niente a colpo d'occhio.
   document.getElementById('ab-email').textContent = Cloud.myDisplayName || Cloud.user.email;
 }
+
+/* DOVE ANCHE CHI HA SOLA LETTURA PUÒ PREMERE.
+   La guardia qui sotto ferma tutto ciò che assomiglia a una modifica; questi
+   sono i posti dove non lo è. Navigare, cambiare periodo, cercare, chiedere
+   all'assistente, scaricarsi un backup: nessuna di queste cose tocca i dati
+   della cucina.
+
+   QUESTA COSTANTE ERA SPARITA, e con lei la guardia. Il riferimento è rimasto,
+   quindi da allora `readonlyGuard` moriva sulla prima riga utile con un
+   ReferenceError e non fermava più niente. Non era un buco di sicurezza — a
+   difendere ci sono le policy, ed è provato — ma chi ha sola lettura poteva
+   premere, vedere la schermata cambiare, e scoprire solo dopo che il
+   salvataggio non era andato. L'ha trovata `eslint` alla prima passata. */
+const READONLY_ALLOWED = [
+  '#tabs', 'nav.subtabs',            // le schede e le sotto-schede
+  '.period-bar',                     // settimana/mese, avanti, indietro, oggi
+  '#account-bar', '.overlay',        // profilo, cucine, finestre
+  '#btn-export',                     // il backup si scarica, non si scrive
+  'cmd-ricerca',                     // cercare non è modificare
+  'cmd-chat', 'cmd-conoscenza',      // l'assistente: domande, non scritture
+].join(', ');
 
 function readonlyGuard(e){
   if(!Cloud.enabled || Cloud.canWrite()) return;

@@ -296,11 +296,19 @@ for (const f of FILE) {
    ============================================================================ */
 for (const f of FILE) {
   const testo = fs.readFileSync(f, 'utf8');
+  // I COMMENTI NON CONTANO COME USI. `renderCapienza` era importata in
+  // griglia.js e mai chiamata, ma una riga di commento la nominava — e tanto
+  // bastava a far credere a questo controllo che servisse ancora. Un commento
+  // che parla di un simbolo non lo sta usando: l'ha trovata `eslint`, che
+  // guarda il codice e non le parole.
+  const vivo = testo.replace(/\/\*[\s\S]*?\*\//g, ' ')
+                    .replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
   for (const m of testo.matchAll(/^import\s*\{([^}]+)\}\s*from/gm)) {
     for (const pezzo of m[1].split(',')) {
       const nome = pezzo.split(' as ').pop().replace(/\btype\b/, '').trim();
       if (!nome) continue;
-      // Quante volte compare in tutto il file, meno la riga dell'import.
+      // Quante volte compare nel CODICE (commenti esclusi): la riga
+      // dell'import e' un import, non un uso, e sparisce con i commenti.
       // NIENTE `\b`: non vale per le lettere accentate, e la prima versione di
       // questo controllo ha dichiarato morta `èRigaDiServizio` che era usata
       // due righe sotto — davanti alla `è` c'era una parentesi, e per `\b` una
@@ -310,7 +318,7 @@ for (const f of FILE) {
       // identificatore, accenti compresi.
       const bordo = '[A-Za-z0-9_$\\u00C0-\\u024F]';
       const scappato = nome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const usi = (testo.match(
+      const usi = (vivo.match(
         new RegExp('(?<!' + bordo + ')' + scappato + '(?!' + bordo + ')', 'g')) || []).length - 1;
       if (usi > 0) continue;
       console.log('  MORTO    ' + normalizza(f).replace('app/src/', '') +

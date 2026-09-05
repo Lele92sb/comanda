@@ -71,7 +71,6 @@ const NAV = [
     {id:'quote',      label:frase('Quote per persona'), render:()=>renderQuotas()},
   ]},
 ];
-const TABS = NAV;
 
 function puoVedere(voce){
   if(!Cloud.enabled) return true;
