@@ -348,14 +348,19 @@ sapere, e sono quelle che rendono queste prove diverse dalle altre:
   e' piu' grezzo e non sbaglia mai — ogni caso del banco disegna qualcosa di
   alto piu' di zero, nei due temi e a 375px.
 
-**Quanto costano, misurato e non stimato** (run #101, 5 settembre 2026): il
-lavoro «Esegui i test» è passato da ~55 secondi a **1m 04s**, e quello era il
-giro con la cache VUOTA — Chromium scaricato da zero. Le nove prove in sé ne
-prendono **11,7**. Il browser sta in cache (`~/.cache/ms-playwright`, chiave sul
-`package-lock.json`, così aggiornare Playwright la invalida da sola), e senza
-quella cache ogni pubblicazione se lo riscaricherebbe: non si vedrebbe come un
-errore, si vedrebbe come lentezza — ed è l'unico modo in cui questo lavoro può
-guastarsi davvero, perché controlli lenti prima o poi qualcuno li salta.
+**Quanto costano, misurato e non stimato** (5 settembre 2026, due run di
+seguito). Il lavoro «Esegui i test» durava ~55 secondi. Col browser scaricato
+da zero — run #101, cache vuota — è passato a **1m 04s**; col browser in cache
+— run #102 — è tornato a **56s**, pur eseguendo dentro di sé 12,3 secondi di
+prove. A regime il costo sta dentro la variabilità del runner.
+
+Quel «a regime» dipende tutto dalla cache (`~/.cache/ms-playwright`, chiave sul
+`package-lock.json`, così aggiornare Playwright la invalida da sola). Senza,
+ogni pubblicazione si riscaricherebbe Chromium: non si vedrebbe come un errore,
+si vedrebbe come lentezza — ed è l'unico modo in cui questo lavoro può
+guastarsi davvero, perché controlli lenti prima o poi qualcuno li salta. Se un
+giorno la pipeline ricomincia a durare un minuto e mezzo, la prima cosa da
+guardare è se quella cache sta ancora prendendo.
 
 **Il contrasto adesso lo preme la pipeline.** `banco/contrasto.ts` misurava gia'
 ogni testo nei due temi, ma bisognava premere il bottone a mano e leggersi il
