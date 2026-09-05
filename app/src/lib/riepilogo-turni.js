@@ -118,7 +118,20 @@ export function riepilogoGenerazione(esito = {}, ctx = {}) {
 
   const r = {
     scoperti,
-    extra: { totale: extras.length, per: perTesta(extras, 'staffName') },
+    // Gli extra si dividono in due, e vanno detti separati: chiamare qualcuno
+    // da casa nel suo riposo e allungare di tre ore chi e' gia' in cucina sono
+    // due cose diverse — la prima si chiede al telefono, la seconda si dice a
+    // fine servizio. Metterle nella stessa riga fa sembrare che siano state
+    // scomodate piu' persone di quante ne siano state scomodate.
+    extra: {
+      totale: extras.filter(e => !e.allungato).length,
+      per: perTesta(extras.filter(e => !e.allungato), 'staffName'),
+    },
+    allungati: {
+      totale: extras.filter(e => e.allungato).length,
+      per: perTesta(extras.filter(e => e.allungato), 'staffName'),
+      ore: extras.filter(e => e.allungato).reduce((n, e) => n + (e.oreInPiu || 0), 0),
+    },
     eccedenze: {
       totale: eccedenzeCollocate.length,
       per: perTesta(eccedenzeCollocate, 'staffName'),
@@ -142,7 +155,7 @@ export function riepilogoGenerazione(esito = {}, ctx = {}) {
   // «Tutto bene» vuol dire che non c'è NIENTE da dire, non solo che il
   // fabbisogno è coperto: con due turni extra il fabbisogno è coperto, ma
   // qualcuno sta lavorando oltre la sua quota e va detto.
-  r.tuttoBene = !r.scoperti.totale && !r.extra.totale && !r.eccedenze.totale
+  r.tuttoBene = !r.scoperti.totale && !r.extra.totale && !r.allungati.totale && !r.eccedenze.totale
     && !r.senzaPartita.length && !r.quota.nonChiesta.totale && !r.quota.aCavallo.totale
     && !r.settimaneSalte.length && !r.altrove.giorni;
 
@@ -226,6 +239,16 @@ export function frasiRiepilogo(R, ctx = {}) {
       ' — ' + chi(R.extra.per));
   }
 
+  if (R.allungati.totale) {
+    // Il numero che conta e' le ORE, non i turni: allungare non aggiunge una
+    // persona in cucina, aggiunge un pezzo di giornata a chi c'e' gia'.
+    righe.push((R.allungati.totale === 1
+      ? t('1 turno allungato per coprire un buco (+{ore}h)', { ore: R.allungati.ore })
+      : t('{n} turni allungati per coprire dei buchi (+{ore}h in tutto)',
+          { n: R.allungati.totale, ore: R.allungati.ore })) +
+      ' — ' + chi(R.allungati.per));
+  }
+
   if (R.eccedenze.totale) {
     // Restano distinte dagli extra: un extra costa in più, un'eccedenza è
     // dentro la quota ed è già pagata. Sommarle farebbe credere allo chef di
@@ -292,6 +315,7 @@ export function frasiRiepilogo(R, ctx = {}) {
       ? t('1 posto scoperto') : t('{n} posti scoperti', { n: R.scoperti.totale })));
   }
   if (R.extra.totale) voci.push(t('{n} extra', { n: R.extra.totale }));
+  if (R.allungati.totale) voci.push(t('{n} allungati', { n: R.allungati.totale }));
   if (R.eccedenze.totale) {
     voci.push(R.eccedenze.totale === 1
       ? t('1 ora collocata') : t('{n} ore collocate', { n: R.eccedenze.totale }));

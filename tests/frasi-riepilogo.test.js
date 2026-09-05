@@ -168,3 +168,25 @@ test('un motivo che non conosciamo non fa sparire la riga', () => {
   const f = frasi({ quotaNonSpesa: [{ staffName: 'Ana', turni: 3, motivo: 'qualcosa di nuovo' }] });
   assert.match(f.righe[0], /^3 turni di quota non assegnati perché il fabbisogno non li chiedeva — Ana \(3\)$/);
 });
+
+test('allungare un turno non è chiamare qualcuno da casa: due righe diverse', () => {
+  // Sono due cose che si fanno in due modi: la prima si chiede al telefono, la
+  // seconda si dice a fine servizio. Nella stessa riga farebbero sembrare che
+  // siano state scomodate più persone di quante ne sono state scomodate.
+  const f = frasi({ extras: [
+    { staffName: 'Ana' },                                   // chiamata da casa
+    { staffName: 'Valerio', allungato: true, oreInPiu: 3 }, // era già lì
+  ]});
+  assert.equal(f.righe.length, 2);
+  assert.match(f.righe.find(r => /extra oltre quota/.test(r)), /^1 turno extra oltre quota — Ana/);
+  assert.match(f.righe.find(r => /allungato/.test(r)), /^1 turno allungato per coprire un buco \(\+3h\) — Valerio/);
+  assert.deepEqual(f.voci, ['1 extra', '1 allungati']);
+});
+
+test('le ore in più degli allungamenti si sommano, perché è quello il costo', () => {
+  const f = frasi({ extras: [
+    { staffName: 'Valerio', allungato: true, oreInPiu: 3 },
+    { staffName: 'Nisan',   allungato: true, oreInPiu: 3 },
+  ]});
+  assert.match(f.righe[0], /^2 turni allungati per coprire dei buchi \(\+6h in tutto\)/);
+});

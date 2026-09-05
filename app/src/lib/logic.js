@@ -1032,6 +1032,165 @@ function pianificaSettimana(staffList, staffingNeeds, ctx){
   return piano;
 }
 
+// ============================================================================
+// ALLUNGARE UN TURNO PER LIBERARE QUALCUNO.
+//
+// La mossa che uno chef fa senza pensarci, e che al motore mancava. Parole
+// dello chef, sul caso vero di giovedì 10:
+//
+//   «manca una persona al pass a cena, ma se avesse fatto fare a Valerio un
+//    turno extra, quindi invece di P faceva SP, ecco lì che essendoci lui
+//    Lorenc poteva mettersi al pass e il turno era coperto»
+//
+// Valerio sa fare SOLO i Primi, quindi al Pass non ci può andare. Ma se allunga
+// il pranzo a spezzato copre i Primi anche a cena — e Lorenc, che i Primi li
+// stava presidiando ma sa fare anche il Pass, si sposta.
+//
+// PERCHÉ IL MOTORE NON CI ARRIVAVA. Non è un difetto di valutazione: non aveva
+// proprio quella mossa. Ne conosce due — dare un turno a chi è a RIPOSO, e
+// SCAMBIARE due celle fra due persone — e nessuna delle due cambia il CODICE di
+// un turno che c'è già. Uno scambio fra Valerio e Lorenc non serve a niente:
+// sposta il problema, non lo risolve.
+//
+// SI FA ALLA FINE, a prospetto finito. Durante il giro dei giorni non si può:
+// per sapere che spostando Lorenc non si apre un buco altrove bisogna vedere
+// tutta la settimana già scritta.
+//
+// COSTA UN TURNO OLTRE QUOTA a chi allunga, quindi si chiede solo a chi ha
+// lasciato accesi i turni extra — esattamente come per un extra normale. Chi ha
+// detto di no non viene chiamato lo stesso da una porta di servizio.
+// ============================================================================
+function allungaPerLiberare(newShifts, shortfalls, staffList, cfg, constraints, extras){
+  if(!shortfalls.length) return 0;
+  const { codeToServices } = cfg;
+  let riparati = 0;
+
+  // Il codice che copre esattamente i servizi che questa persona fa già PIÙ
+  // quello scoperto. «Esattamente»: un codice che ne copre anche un terzo la
+  // manderebbe dove non serve, e sarebbe una sovracopertura pagata.
+  const codiceCheAggiunge = (serviziAttuali, servizioInPiu, staffId, day) => {
+    const voluti = new Set([...serviziAttuali, servizioInPiu]);
+    return Object.keys(codeToServices).find(c => {
+      if(SPECIAL_CODES[c]) return false;
+      const suoi = codeToServices[c] || [];
+      return suoi.length === voluti.size
+        && suoi.every(v => voluti.has(v))
+        && codeAllowed(constraints, staffId, day, c, codeToServices);
+    }) || null;
+  };
+
+  /* LE ORE CHE QUESTA PERSONA STA GIÀ FACENDO nel periodo. Servono perché
+     allungare non è gratis: da `P` a `SP` sono tre ore in più, e darle a chi
+     capita porta qualcuno molto oltre il contratto.
+     Misurato sulla cucina vera prima di questo controllo: gli scoperti
+     scendevano da 4,00 a 2,33 — bene — ma lo scarto dalle ore contrattuali
+     saliva da 6,6 a 16,7, cioè quasi il triplo. Coprire un buco sfondando una
+     busta paga non è coprire un buco: è spostarlo. */
+  const giorniDi = id => Object.keys(newShifts[id] || {});
+  const oreFatteDa = id => giorniDi(id).reduce((n, d) =>
+    n + (((cfg.turnoDef[(newShifts[id][d] || {}).code] || {}).hours) || 0), 0);
+  const tettoDi = (s, id) => {
+    const contratto = parseFloat(s.hours);
+    if(!(contratto > 0)) return Infinity;          // senza contratto non c'è tetto
+    return contratto * Math.max(1, giorniDi(id).length / 7);
+  };
+
+  /* Chi quel giorno lavora già, ma non in quel servizio, e può allungare il
+     turno per coprirlo. È il pezzo comune alle due mosse.
+
+     SI SCEGLIE CHI HA PIÙ MARGINE SUL CONTRATTO, e chi non ne ha si prende
+     solo se non c'è nessun altro: il tetto delle ore è una preferenza forte,
+     non un divieto — la stessa regola che il motore usa già per gli extra,
+     perché una scopertura falsa manda a cercare un problema che non esiste. */
+  const chiPuoAllungare = (day, servizio, partita, escluso) => {
+    const possibili = [];
+    for(const x of staffList){
+      if(escluso && x.id === escluso) continue;
+      if(!puoFareExtra(x)) continue;
+      if(!(x.stations || []).includes(partita)) continue;
+      const cella = newShifts[x.id] && newShifts[x.id][day];
+      if(!cella || !cella.code) continue;
+      const suoi = serviziDelCodice(cella.code, cfg) || [];
+      if(!suoi.length || suoi.includes(servizio)) continue;  // già lì: niente da allungare
+      const nuovo = codiceCheAggiunge(suoi, servizio, x.id, day);
+      if(!nuovo) continue;
+      const inPiu = (((cfg.turnoDef[nuovo] || {}).hours) || 0)
+                  - (((cfg.turnoDef[cella.code] || {}).hours) || 0);
+      const dopo = oreFatteDa(x.id) + inPiu;
+      possibili.push({ x, nuovo, sfora: dopo > tettoDi(x, x.id), margine: tettoDi(x, x.id) - dopo });
+    }
+    if(!possibili.length) return null;
+    // Prima chi resta dentro il contratto, e fra questi chi ha più margine.
+    possibili.sort((a, b) => (a.sfora === b.sfora) ? b.margine - a.margine : (a.sfora ? 1 : -1));
+    return possibili[0];
+  };
+
+  const allunga = (chi, nuovoCodice, day, servizio, partita) => {
+    const cella = newShifts[chi.id][day];
+    const inPiu = (((cfg.turnoDef[nuovoCodice] || {}).hours) || 0)
+                - (((cfg.turnoDef[cella.code] || {}).hours) || 0);
+    cella.code = nuovoCodice;
+    cella.extra = true;                 // è lavoro oltre la quota, e va detto
+    cella.origine = 'copertura';
+    assegnaStazione(cella, servizio, partita, cfg);
+    // `allungato` distingue questo da un extra normale, e non e' pignoleria:
+    // chiamare qualcuno da casa nel suo giorno di riposo e allungare di tre ore
+    // chi e' gia' in cucina sono due cose diverse da spiegare e da pagare.
+    extras.push({ day, staffId: chi.id, staffName: chi.name,
+                  stationId: partita, service: servizio, code: nuovoCodice,
+                  allungato: true, oreInPiu: inPiu });
+  };
+
+  for(const sf of shortfalls){
+    let restano = sf.missing || 1;
+    while(restano > 0){
+      // PRIMA LA MOSSA SEMPLICE: qualcuno che lavora già quel giorno in un
+      // altro servizio, sa fare proprio la partita scoperta, e allungando il
+      // turno la copre. Nessuno si sposta, e costa un turno oltre quota a uno
+      // solo. Va provata per prima: la catena qui sotto muove due persone per
+      // ottenere lo stesso risultato.
+      const diretta = chiPuoAllungare(sf.day, sf.service, sf.stationId, null);
+      if(diretta){
+        allunga(diretta.x, diretta.nuovo, sf.day, sf.service, sf.stationId);
+        restano--; riparati++;
+        continue;
+      }
+
+      // Y: quel giorno lavora nel servizio scoperto, ma su un'ALTRA partita, e
+      // la partita scoperta la sa fare. È lui che si sposta.
+      const y = staffList.find(cand => {
+        const cella = newShifts[cand.id] && newShifts[cand.id][sf.day];
+        if(!cella || !cella.code) return false;
+        if(!(serviziDelCodice(cella.code, cfg) || []).includes(sf.service)) return false;
+        const sua = stazioneDi(cella, sf.service);
+        if(!sua || sua === sf.stationId) return false;
+        return (cand.stations || []).includes(sf.stationId);
+      });
+      if(!y) break;
+
+      const partitaDiY = stazioneDi(newShifts[y.id][sf.day], sf.service);
+
+      // X: sa fare la partita che Y sta per lasciare, e allungando la copre.
+      // È il caso dello chef: Valerio sa fare solo i Primi, quindi al Pass non
+      // ci può andare — ma può tenere i Primi a cena e mandarci Lorenc.
+      const mossa = chiPuoAllungare(sf.day, sf.service, partitaDiY, y.id);
+      if(!mossa) break;
+
+      allunga(mossa.x, mossa.nuovo, sf.day, sf.service, partitaDiY);
+      assegnaStazione(newShifts[y.id][sf.day], sf.service, sf.stationId, cfg);
+      restano--; riparati++;
+    }
+    sf.missing = restano;
+  }
+
+  // Le scoperture chiuse spariscono dall'elenco: lasciarle a zero vorrebbe dire
+  // un riepilogo che annuncia buchi che non ci sono più.
+  for(let i = shortfalls.length - 1; i >= 0; i--){
+    if((shortfalls[i].missing || 0) <= 0) shortfalls.splice(i, 1);
+  }
+  return riparati;
+}
+
 function computeShifts(staffList, staffingNeeds, options){
   options = options || {};
   const cfg = options.config || buildShiftConfig(null, null);
@@ -2451,6 +2610,12 @@ function computeShifts(staffList, staffingNeeds, options){
       origine: origineFlag[s.id][day] || 'copertura',
     }, cfg));
   });
+  // ULTIMA MOSSA PRIMA DI ARRENDERSI: allungare un turno per liberare qualcuno
+  // che sa fare la partita scoperta. Si fa qui perché serve il prospetto
+  // finito — per sapere che spostando Lorenc non si apre un buco altrove
+  // bisogna vedere tutta la settimana già scritta.
+  allungaPerLiberare(newShifts, shortfalls, staffList, cfg, constraints, extras);
+
   // Chi il generatore non ha potuto pianificare, e perché. Va detto nel
   // riepilogo: senza, resta da intuire da una fila di R nella griglia.
   const nonPianificabili = staffList

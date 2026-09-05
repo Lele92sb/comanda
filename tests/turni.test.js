@@ -2834,3 +2834,92 @@ test('una settimana dentro un mese esce come una settimana da sola', () => {
       `settimana del ${w[0]} dentro il mese: ${JSON.stringify(m2)}`);
   });
 });
+
+// ============================================================================
+// ALLUNGARE UN TURNO PER LIBERARE QUALCUNO.
+//
+// Il caso, visto in cucina e descritto dallo chef parola per parola: giovedì
+// manca uno al Pass a cena. Valerio quel giorno fa P (pranzo) ai Primi e sa
+// fare SOLO i Primi. Lorenc fa S (cena) ai Primi, ma sa fare anche il Pass.
+//
+// La mossa che uno chef fa senza pensarci: Valerio da P a SP — lo spezzato
+// copre pranzo E cena — così ai Primi a cena c'è lui, e Lorenc si sposta al
+// Pass. Buco chiuso, nessuno chiamato da casa.
+//
+// Il motore non ci arrivava, e non per un difetto: non aveva proprio quella
+// mossa. Sa assegnare un turno a chi è a RIPOSO, e sa SCAMBIARE due celle fra
+// due persone. Non sapeva ALLUNGARE un turno che c'è già.
+// ============================================================================
+test('allunga un turno per liberare chi sa fare la partita scoperta', () => {
+  // Valerio sa fare solo i Primi. Lorenc sa fare Primi e Pass.
+  const staff = [
+    { id:'v', name:'Valerio', stations:['primi'],
+      weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}] },
+    { id:'l', name:'Lorenc', stations:['primi','pass'],
+      weeklyQuota:[{count:5,codes:['S']},{count:2,codes:['R']}] },
+  ];
+  // A cena servono tutti e due i posti; a pranzo solo i Primi.
+  const needs = {
+    colazione: [],
+    pranzo: [{stationId:'primi', count:1}],
+    cena:   [{stationId:'primi', count:1}, {stationId:'pass', count:1}],
+  };
+  const dates = weekDates(new Date(2026, 8, 7));
+  const { newShifts, shortfalls } = computeShiftsForDates(staff, needs,
+    { config: BASE, dates, seed: 'valerio-lorenc' });
+
+  // Con le quote così, a cena il Pass si copre SOLO se Valerio allunga a SP e
+  // Lorenc si sposta: sono due persone e tre posti-servizio al giorno.
+  const scoperti = shortfalls.reduce((n, x) => n + (x.missing || 1), 0);
+  assert.equal(scoperti, 0,
+    `restano ${scoperti} posti scoperti: il motore non ha allungato nessun turno`);
+
+  // E nessuno deve finire su una partita che non sa fare.
+  noQualificationViolations(staff, newShifts, BASE);
+});
+
+test('la catena: chi allunga non sa fare la partita scoperta, ma libera chi la sa fare', () => {
+  // Il caso dello chef, per intero. A cena servono due persone ai Primi e una
+  // al Pass, ma a cena ci sono solo Lorenc e Uddin: tre posti, due persone.
+  //
+  // Il Pass lo sa fare SOLO Lorenc. Se ci va lui, manca un Primi; se resta ai
+  // Primi, manca il Pass. Da soli non se ne esce.
+  //
+  // La via è Valerio, che a pranzo fa i Primi e i Primi li sa fare: allunga a
+  // spezzato, copre i Primi anche a cena, e Lorenc si sposta al Pass. Valerio
+  // al Pass non ci potrebbe mai andare — non lo sa fare — ed è esattamente il
+  // punto: chi allunga non è chi copre il buco.
+  const staff = [
+    { id:'v', name:'Valerio', stations:['primi'],
+      weeklyQuota:[{count:5,codes:['P']},{count:2,codes:['R']}] },
+    { id:'l', name:'Lorenc', stations:['pass','primi'],
+      weeklyQuota:[{count:5,codes:['S']},{count:2,codes:['R']}] },
+    { id:'u', name:'Uddin', stations:['primi'],
+      weeklyQuota:[{count:5,codes:['S']},{count:2,codes:['R']}] },
+  ];
+  const needs = {
+    colazione: [],
+    pranzo: [{stationId:'primi', count:1}],
+    cena:   [{stationId:'primi', count:2}, {stationId:'pass', count:1}],
+  };
+  const dates = weekDates(new Date(2026, 8, 7));
+  const { newShifts, shortfalls } = computeShiftsForDates(staff, needs,
+    { config: BASE, dates, seed: 'catena' });
+
+  const scoperti = shortfalls.reduce((n, x) => n + (x.missing || 1), 0);
+  assert.equal(scoperti, 0, `restano ${scoperti} posti scoperti`);
+
+  // La prova che la catena è avvenuta davvero: in ogni giorno coperto, a cena
+  // il Pass è di Lorenc e ai Primi c'è anche qualcuno che a pranzo lavorava.
+  const unGiorno = dates.find(d => {
+    const c = newShifts['v'][d];
+    return c && (BASE.codeToServices[c.code] || []).includes('cena');
+  });
+  assert.ok(unGiorno, 'Valerio non ha mai allungato il turno a cena');
+  assert.equal(newShifts['v'][unGiorno].stations.cena, 'primi',
+    'Valerio deve coprire i Primi, non il Pass che non sa fare');
+  assert.equal(newShifts['l'][unGiorno].stations.cena, 'pass',
+    'liberato dai Primi, Lorenc deve essere andato al Pass');
+
+  noQualificationViolations(staff, newShifts, BASE);
+});
