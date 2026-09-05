@@ -2,6 +2,123 @@
 
 Tutte le modifiche rilevanti all'app, versione per versione.
 
+## [1.6.0] — Il motore impara il mestiere, l'app diventa a componenti, i dati vanno in tabelle
+
+Il rilascio più grosso finora: centotrentotto modifiche fra il 28 agosto e il 5
+settembre 2026. Tre cose grandi — il generatore dei turni, che prima faceva un
+prospetto e adesso ne ragiona uno; l'interfaccia, riscritta a componenti; e il
+modo in cui i dati stanno nel database, cambiato dalle fondamenta.
+
+### Il generatore non fa più il conto a mente dello chef
+
+Prima assegnava turni; adesso tiene insieme le cose che uno chef tiene insieme
+quando compila il prospetto la domenica sera.
+
+- **Le ore di contratto contano.** Cinque giorni a testa non vuol dire ore
+  uguali: c'era chi ne faceva 52 e chi 43. Ora il motore lo sa quanto dura ogni
+  turno, e chi ha quaranta ore in busta paga non ne lavora trentadue.
+- **Chi ha detto di no ai turni extra non viene chiamato.** È un interruttore
+  sulla scheda della persona, e il motore lo rispetta anche quando gli costa un
+  posto scoperto: dirlo è meglio che scavalcarlo in silenzio.
+- **Lo spezzato copre due partite.** Poteva stare ai primi a pranzo e al pass a
+  cena, ma la cella sapeva dire una partita sola per giornata.
+- **La mano da un'altra partita.** Chi sta alle insalate e dà una mano al
+  lavaggio adesso lo si può scrivere, e il prospetto ne tiene conto.
+- **I riposi non cadono sempre negli stessi giorni.** Alessio riposava lunedì,
+  martedì e mercoledì quaranta volte su quaranta.
+- **Venti bozze, si mostra la migliore.** Il generatore non produce più il primo
+  prospetto valido: ne prova venti e sceglie.
+- **Allunga un turno per coprire un buco.** Se manca una persona al pass e chi
+  sa farlo è impegnato ai primi, il motore allunga il turno di chi resta ai
+  primi e sposta l'altro al pass — la mossa che lo chef faceva a mano e che al
+  motore mancava. Costa ore, e le dice.
+- Il fabbisogno dice 1 e adesso è 1: non metteva due persone dove ne serviva
+  una per poi non averne altrove.
+- Le ore che avanzano dal contratto si possono collocare dove il servizio preme,
+  sui giorni scelti o su tutti.
+
+### Dopo la generazione, si legge cosa è successo
+
+- Una riga per fatto — posti scoperti, turni extra, allungamenti, quote non
+  spese — e il dettaglio resta **chiuso**: si apre chi vuole leggerlo.
+- Ogni motivo ha la sua frase, perché portano a fare cose diverse: «non restava
+  un giorno libero» non è «il fabbisogno non li chiedeva».
+- La risposta alla domanda vera: *si poteva fare di meglio?* Se venti prospetti
+  sono equivalenti, lo dice.
+
+### Il mese, non solo la settimana
+
+- Si genera e si guarda un mese intero, con la settimana che resta
+  lunedì-domenica anche quando il mese la taglia a metà.
+- La settimana intera sta su un telefono senza scorrere; per vedere i turni si
+  scorreva mezza pagina, adesso no (da 2471 pixel a 981).
+
+### Impostazioni cucina
+
+Cinque cose che si impostano una volta — servizi, tipi di turno, partite,
+fabbisogno, quote per persona — raccolte in un posto solo invece che sparse.
+I servizi e i tipi di turno sono tuoi: «aperitivo» o «brunch» si aggiungono.
+
+### L'app è fatta di componenti
+
+Quattordici pezzi riusabili (`<cmd-bottone>`, `<cmd-scheda>`, `<cmd-scelta>`…)
+al posto dell'HTML costruito come stringa. Non è una questione estetica: la
+vecchia schermata si ridisegnava intera a ogni modifica, e il selettore del
+colore si chiudeva da solo mentre lo usavi, il cursore usciva dal campo. Ogni
+componente si apre da solo nel banco di prova, in ogni stato.
+
+- Le tendine di sistema sono sparite: la nostra sa cercare.
+- Le finestre di dialogo usano l'elemento del browser: Esc funziona, il fuoco
+  resta dentro.
+- Chi gestisce sta al computer, e il computer aveva due terzi di schermo vuoti.
+
+### I sedici punti usciti dalla prova in cucina
+
+Tutti e sedici fatti. I più visibili: **chiaro e scuro**; **spagnolo** oltre a
+italiano e inglese (587 frasi × 3); **valute**, e i prezzi smettono di essere
+scritti in inglese; caratteri più grandi e leggibili; il **menu sempre
+visibile**; la **ricerca** in sei elenchi, uguale dappertutto; si vede che ha
+**salvato**; la **dashboard** dice cosa fare, non solo cosa c'è; le
+**notifiche** dicono cosa è successo da quando non guardavi; l'invito con
+**link e QR** — si gira lo schermo e l'altro è dentro; un permesso separato per
+chi gestisce le richieste altrui.
+
+### I dati in tabelle vere, e le modifiche in tempo reale
+
+Le sezioni della cucina non sono più un blocco unico di dati: sono tabelle con
+colonne. Si scrive solo quello che cambia, e la riservatezza sta nella **forma**
+dei dati — quello che una persona non deve vedere sta in una tabella che quella
+persona non legge, non in un riquadro nascosto.
+
+- **Le modifiche di un collega compaiono da sole**, misurate in 860 ms dal suo
+  Salva al tuo schermo. E mentre scrivi in un campo, il salvataggio di un altro
+  non te lo svuota: testo, cursore e fuoco restano dov'erano.
+- Le foto delle ricette non pesano più su ogni lettura.
+- Per chi aveva già dei dati c'è una migrazione che prima **confronta e non
+  tocca niente**, poi travasa.
+
+### Quanto costa il servizio
+
+Costo del lavoro di un periodo, con la tariffa oraria a persona, e l'incasso
+che serve per pagarlo dato il food cost. Vuole due permessi insieme — vedere i
+costi *e* vedere i dati personali — perché la tariffa di una persona è la sua
+busta paga.
+
+### Le protezioni si provano da sole
+
+Cinquantun prove che impersonano sei persone su tre cucine con impostazioni
+opposte e verificano in un secondo chi può leggere e scrivere cosa. Non leggono
+le regole: le **eseguono**, dalla stessa strada che farebbe chi provasse ad
+aggirarle. Passate tutte.
+
+### Gli strumenti che trovano gli errori prima dello chef
+
+Tre difetti sono arrivati fino in cucina perché nessun controllo poteva
+vederli: un nome che non esiste (`ReferenceError` a metà funzione: la schermata
+resta com'era, senza errori), un colore che non esiste (le barre diventano
+invisibili), un import morto (le frecce spostavano una settimana senza nome).
+Adesso ci sono sei controlli che girano prima di ogni pubblicazione, e 283 test.
+
 ## [1.5.0] — Chi vede cosa, e turni da pubblicare
 
 ### Riservatezza imposta dal database

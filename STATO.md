@@ -28,11 +28,6 @@ Aggiornato: 5 settembre 2026.
 
 ## Debiti aperti
 
-- **Il CHANGELOG è fermo alla 1.5.0 del 28 agosto, e da allora ci sono 138
-  commit**: modello dati a tabelle, costo del lavoro, tempo reale, prove sui
-  permessi, riepilogo della generazione, motore che allunga. Il registro dei
-  rilasci ha smesso di essere scritto proprio mentre succedevano le cose più
-  grosse. Va rifatto come 1.6.0.
 - **Nessuna prova automatica sui clic.** Due difetti veri di quest'ultima
   settimana erano entrambi di comportamento, non di logica — il chip che si
   accendeva da solo e il riquadro che scriveva in uno stato ormai sostituito —

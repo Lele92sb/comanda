@@ -193,7 +193,7 @@ uno per commit — il messaggio di ognuno spiega cosa e perché.
 | 15 | tutto nel profilo | fatto |
 | 1 | menu sempre visibile | fatto |
 | 14 | valute | fatto |
-| 2 | spagnolo | fatto — 519 frasi × 3 lingue |
+| 2 | spagnolo | fatto — 587 frasi × 3 lingue |
 | 4 | blocchi sugli stati impossibili | fatto |
 | 7 | si vede che ha salvato | fatto |
 | 6 | ricerca in sei elenchi | fatto |
