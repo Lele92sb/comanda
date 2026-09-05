@@ -59,6 +59,21 @@ jobs:
       # Solo Chromium, e senza le altre due famiglie di browser: l'app si usa
       # su un telefono in cucina e su un portatile, e tre browser costerebbero
       # il triplo del tempo per trovare le stesse cose.
+      #
+      # IL BROWSER STA IN CACHE, e non e' un dettaglio di comodita': sono
+      # centocinquanta mega, e una pipeline lenta e' una pipeline che prima o
+      # poi qualcuno salta. La chiave e' il package-lock, perche' e' li' che
+      # cambia la versione di @playwright/test — e ogni versione vuole il suo
+      # browser, quindi aggiornare la libreria invalida la cache da sola.
+      - name: Cache del browser
+        id: cache-browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      # Il comando resta uno solo: con la cache piena vede che il browser c'e'
+      # gia' e salta il download da se', e `--with-deps` mette comunque le
+      # librerie di sistema, che nella cache non ci stanno.
       - run: npx playwright install --with-deps chromium
       - run: npm run prova:clic
       # Quando una prova sui clic fallisce, la traccia e' il filmato dei clic
