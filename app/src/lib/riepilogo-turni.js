@@ -74,17 +74,31 @@ export function riepilogoGenerazione(esito = {}, ctx = {}) {
       .sort((a, b) => b.n - a.n || String(a.nome).localeCompare(String(b.nome), 'it'));
   };
 
-  // ---- Le quote rimaste in tasca, per DUE motivi diversi --------------------
-  // Confonderli costa tempo a chi legge: «il fabbisogno non li chiedeva» è una
-  // decisione da prendere, «la settimana è tagliata dal periodo» si sistema da
-  // sé generando il resto. Lo chef aveva letto «43 turni non assegnati» su un
-  // mese e aveva dovuto chiedere se erano i giorni mancanti: erano quelli.
-  const aCavallo = quotaNonSpesa.filter(q => q.motivo === 'settimana incompleta');
-  const nonChiesta = quotaNonSpesa.filter(q => q.motivo !== 'settimana incompleta');
+  // ---- Le quote rimaste in tasca, UNA RIGA PER MOTIVO -----------------------
+  // Il motore distingue già cinque ragioni diverse per cui una quota resta in
+  // tasca, e qui venivano appiattite in una frase sola — «il fabbisogno non li
+  // chiedeva» — che ne descriveva UNA. Per chi legge è peggio di niente: lo
+  // chef ha visto «Alessio (1), il fabbisogno non li chiedeva» quando la verità
+  // era che Alessio aveva chiesto quattro riposi, uno più di quelli che gli
+  // spettavano, e non restava un giorno su cui metterlo. Cercare un difetto nel
+  // fabbisogno, che è a posto, costa una serata.
+  //
+  // Le ragioni non sono equivalenti: una si sistema generando il resto del
+  // mese, una guardando le richieste approvate, una alzando il fabbisogno. Se
+  // la frase non le distingue, non aiutano a fare niente.
   const somma = g => g.reduce((n, q) => n + (q.turni || 0), 0);
   const elenco = g => g
     .map(q => ({ nome: q.staffName, n: q.turni || 0 }))
     .sort((a, b) => b.n - a.n || String(a.nome).localeCompare(String(b.nome), 'it'));
+  const perMotivo = [...new Set(quotaNonSpesa.map(q => q.motivo || 'sconosciuto'))]
+    .map(motivo => {
+      const suoi = quotaNonSpesa.filter(q => (q.motivo || 'sconosciuto') === motivo);
+      return { motivo, totale: somma(suoi), per: elenco(suoi) };
+    })
+    .filter(g => g.totale > 0)
+    .sort((a, b) => b.totale - a.totale);
+  const aCavallo = quotaNonSpesa.filter(q => q.motivo === 'settimana incompleta');
+  const nonChiesta = quotaNonSpesa.filter(q => q.motivo !== 'settimana incompleta');
 
   // ---- Chi lavora in un'altra cucina ---------------------------------------
   const giorniAltrove = Object.values(altrove)
@@ -112,6 +126,10 @@ export function riepilogoGenerazione(esito = {}, ctx = {}) {
     },
     senzaPartita: nonPianificabili.map(x => x.staffName),
     quota: {
+      // `perMotivo` è quello che si legge; gli altri due restano perché la riga
+      // corta in cima somma tutto e il caso «settimana tagliata» non è un
+      // problema da risolvere, mentre gli altri sì.
+      perMotivo,
       nonChiesta: { totale: somma(nonChiesta), per: elenco(nonChiesta) },
       aCavallo: { totale: somma(aCavallo) },
     },
@@ -226,17 +244,10 @@ export function frasiRiepilogo(R, ctx = {}) {
       { chi: R.senzaPartita.map(esc).join(', ') }));
   }
 
-  if (R.quota.nonChiesta.totale) {
-    righe.push(t('{n} turni di quota non assegnati, il fabbisogno non li chiedeva — {chi}',
-      { n: R.quota.nonChiesta.totale, chi: chiN(R.quota.nonChiesta.per) }));
-  }
-
-  if (R.quota.aCavallo.totale) {
-    // Questa NON è una cosa da sistemare, ed è l'unica riga che ha bisogno di
-    // dirlo: lo chef aveva letto «43 turni non assegnati» su un mese e aveva
-    // dovuto chiedere se erano i giorni mancanti. Erano quelli.
-    righe.push(t('{n} turni appartengono a settimane che il periodo taglia: si assegnano generando anche i giorni mancanti',
-      { n: R.quota.aCavallo.totale }));
+  for (const g of (R.quota.perMotivo || [])) {
+    const quanti = g.totale === 1
+      ? t('1 turno di quota non assegnato') : t('{n} turni di quota non assegnati', { n: g.totale });
+    righe.push(quanti + ' ' + spiegaMotivo(g.motivo, t) + ' — ' + chiN(g.per));
   }
 
   if (R.settimaneSalte.length) {
@@ -292,6 +303,29 @@ export function frasiRiepilogo(R, ctx = {}) {
   if (inTasca) voci.push(t('{n} turni non assegnati', { n: inTasca }));
 
   return { gravi, righe, voci };
+}
+
+/* PERCHÉ una quota è rimasta in tasca, detto in modo che si sappia cosa fare.
+   Sono le ragioni che il motore annota mentre prova, non un'ipotesi fatta dopo:
+   una si sistema generando il resto del mese, una guardando le richieste
+   approvate, una alzando il fabbisogno, e una non si sistema affatto perché è
+   una scelta («restano in tasca»). Dirle tutte con la stessa frase manda a
+   cercare il problema sbagliato. */
+function spiegaMotivo(motivo, t) {
+  switch (motivo) {
+    case 'settimana incompleta':
+      return t('perché appartengono a settimane che il periodo taglia: si assegnano generando anche i giorni mancanti');
+    case 'nessun giorno ammissibile':
+      return t('perché non restava un giorno libero: ferie, riposi o richieste approvate occupavano il resto della settimana');
+    case 'ore contrattuali raggiunte':
+      return t('perché le ore di contratto erano già raggiunte');
+    case 'le giornate erano già coperte':
+      return t('perché il fabbisogno era già coperto in tutte le giornate possibili');
+    case 'collocazione non attiva':
+      return t('perché «le ore che avanzano» è impostato su «restano in tasca»');
+    default:
+      return t('perché il fabbisogno non li chiedeva');
+  }
 }
 
 /* I segnaposto {cosi}. Quando `t` non c'è — nei test, o prima che la lingua sia

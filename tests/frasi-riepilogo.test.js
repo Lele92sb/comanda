@@ -72,16 +72,17 @@ test('una persona vincolata è «persona», due sono «persone»', () => {
   assert.match(due.righe[0], /su 2 persone — tutte rispettate$/);
 });
 
-test('la riga corta somma i due motivi delle quote in tasca in un numero solo', () => {
+test('la riga corta somma tutte le quote in tasca in un numero solo', () => {
   const f = frasi({ quotaNonSpesa: [
-    { staffName: 'Ana', turni: 2, motivo: 'non serviva' },
+    { staffName: 'Ana', turni: 2, motivo: 'le giornate erano già coperte' },
     { staffName: 'Bo',  turni: 4, motivo: 'settimana incompleta' },
   ]});
   assert.deepEqual(f.voci, ['6 turni non assegnati']);
-  // ...ma il dettaglio li tiene separati, perché sono due cose diverse
+  // ...ma il dettaglio le tiene separate per motivo, perché portano a fare
+  // cose diverse: una si sistema generando il resto del mese, l'altra no.
   assert.equal(f.righe.length, 2);
-  assert.match(f.righe[0], /^2 turni di quota non assegnati, il fabbisogno non li chiedeva/);
-  assert.match(f.righe[1], /^4 turni appartengono a settimane che il periodo taglia/);
+  assert.match(f.righe[0], /^4 turni di quota non assegnati perché appartengono a settimane che il periodo taglia/);
+  assert.match(f.righe[1], /^2 turni di quota non assegnati perché il fabbisogno era già coperto/);
 });
 
 test('la risposta a «si poteva fare di meglio»', () => {
@@ -124,4 +125,46 @@ test('il markup si può spegnere: le stesse frasi, pulite', () => {
 
   const senza = frasi(buco(2));
   assert.doesNotMatch(senza.gravi[0], /[<>]/);
+});
+
+test('una quota sola non è «1 turni»', () => {
+  // Il difetto che lo chef ha letto a schermo: «1 turni di quota non
+  // assegnati». Avevo scritto il plurale senza il singolare, e i test non
+  // l'hanno preso perché non avevo scritto QUESTO caso.
+  const f = frasi({ quotaNonSpesa: [{ staffName: 'Alessio', turni: 1, motivo: 'nessun giorno ammissibile' }] });
+  assert.match(f.righe[0], /^1 turno di quota non assegnato /);
+  assert.doesNotMatch(f.righe[0], /1 turni/);
+});
+
+test('ogni motivo ha la sua frase, perché portano a fare cose diverse', () => {
+  // Appiattirli in «il fabbisogno non li chiedeva» manda a cercare il problema
+  // sbagliato: lo chef ha letto quella frase su Alessio, che invece aveva
+  // chiesto quattro riposi e non aveva più un giorno libero.
+  const casi = [
+    ['nessun giorno ammissibile',        /non restava un giorno libero/],
+    ['ore contrattuali raggiunte',       /ore di contratto erano già raggiunte/],
+    ['le giornate erano già coperte',    /fabbisogno era già coperto/],
+    ['collocazione non attiva',          /restano in tasca/],
+    ['settimana incompleta',             /settimane che il periodo taglia/],
+  ];
+  for (const [motivo, atteso] of casi) {
+    const f = frasi({ quotaNonSpesa: [{ staffName: 'Ana', turni: 2, motivo }] });
+    assert.match(f.righe[0], atteso, 'motivo: ' + motivo);
+  }
+});
+
+test('motivi diversi fanno righe diverse, e la riga corta li somma', () => {
+  const f = frasi({ quotaNonSpesa: [
+    { staffName: 'Alessio', turni: 1, motivo: 'nessun giorno ammissibile' },
+    { staffName: 'Bo',      turni: 4, motivo: 'settimana incompleta' },
+  ]});
+  assert.equal(f.righe.length, 2);
+  assert.deepEqual(f.voci, ['5 turni non assegnati']);
+  // la più grossa per prima: chi legge vede il numero che conta in cima
+  assert.match(f.righe[0], /^4 turni/);
+});
+
+test('un motivo che non conosciamo non fa sparire la riga', () => {
+  const f = frasi({ quotaNonSpesa: [{ staffName: 'Ana', turni: 3, motivo: 'qualcosa di nuovo' }] });
+  assert.match(f.righe[0], /^3 turni di quota non assegnati perché il fabbisogno non li chiedeva — Ana \(3\)$/);
 });
