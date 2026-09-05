@@ -22,7 +22,7 @@ npm run lint:import
 npm run lint:token   # ogni var(--x) esiste davvero in ds/tokens.css
 npm run lint:js      # eslint: il nome che non esiste (no-undef)
 npm run lint:lingue  # quanto coprono i dizionari (non blocca)
-npm run prova:clic   # apre un browser vero e clicca (9 prove, 13 secondi)
+npm run prova:clic   # apre un browser vero e clicca (9 prove, 12 secondi)
 ```
 
 `npm run preview` legge `.dev.vars` (non versionato: copia `.dev.vars.example`).
@@ -347,6 +347,15 @@ sapere, e sono quelle che rendono queste prove diverse dalle altre:
   controllo che segnala il falso smette di essere letto. Quello che si controlla
   e' piu' grezzo e non sbaglia mai — ogni caso del banco disegna qualcosa di
   alto piu' di zero, nei due temi e a 375px.
+
+**Quanto costano, misurato e non stimato** (run #101, 5 settembre 2026): il
+lavoro «Esegui i test» è passato da ~55 secondi a **1m 04s**, e quello era il
+giro con la cache VUOTA — Chromium scaricato da zero. Le nove prove in sé ne
+prendono **11,7**. Il browser sta in cache (`~/.cache/ms-playwright`, chiave sul
+`package-lock.json`, così aggiornare Playwright la invalida da sola), e senza
+quella cache ogni pubblicazione se lo riscaricherebbe: non si vedrebbe come un
+errore, si vedrebbe come lentezza — ed è l'unico modo in cui questo lavoro può
+guastarsi davvero, perché controlli lenti prima o poi qualcuno li salta.
 
 **Il contrasto adesso lo preme la pipeline.** `banco/contrasto.ts` misurava gia'
 ogni testo nei due temi, ma bisognava premere il bottone a mano e leggersi il

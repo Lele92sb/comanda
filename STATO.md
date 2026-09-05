@@ -30,7 +30,8 @@ Aggiornato: 5 settembre 2026.
 
 - **Le prove sui clic girano, ma non entrano in una cucina.** `npm run
   prova:clic` apre un browser vero sul banco e sulla schermata d'accesso: nove
-  prove, tredici secondi, e sono già nella pipeline. Quello che ancora non
+  prove, dodici secondi, e sono già nella pipeline (che è passata da ~55s a
+  1m04s col primo giro a cache vuota). Quello che ancora non
   tocca è l'app **con dei dati dentro** — generare i turni, salvare, correggere
   una cella — perché servirebbe un account di prova nel Supabase di test. È il
   prossimo passo di questo lavoro, non un'idea nuova.
